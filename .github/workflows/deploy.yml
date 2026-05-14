@@ -1,0 +1,39 @@
+name: Deploy to LWS
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: FTP Deploy → LWS
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # pour la détection des fichiers modifiés
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USER }}
+          password: ${{ secrets.FTP_PASS }}
+          port: 21
+          protocol: ftps          # FTPS (FTP sécurisé) — recommandé LWS
+          local-dir: ./           # racine du repo
+          server-dir: ${{ secrets.FTP_PATH }}   # ex: /www/ov-gestion/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            .github/**
+            config/config.php
+            uploads/photos/**
+            uploads/documents/**
+            *.log
+          dangerous-clean-slate: false   # ne supprime pas les fichiers absents du repo
+          log-level: standard

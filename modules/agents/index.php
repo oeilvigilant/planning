@@ -1,0 +1,163 @@
+<?php
+require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/functions.php';
+requireLogin();
+requirePerm('agents', 'view');
+
+$pageTitle    = 'Liste des agents';
+$currentModule = 'agents';
+require_once __DIR__ . '/../../includes/header.php';
+
+$db = getDB();
+
+$search = trim($_GET['q'] ?? '');
+$filtre = $_GET['filtre'] ?? 'tous';
+
+$where  = ['1=1'];
+$params = [];
+
+if ($search !== '') {
+    $where[]  = "(a.nom LIKE ? OR a.prenom LIKE ? OR a.matricule LIKE ? OR a.num_autorisation_cnaps LIKE ?)";
+    $s = "%$search%";
+    $params = array_merge($params, [$s,$s,$s,$s]);
+}
+if ($filtre === 'actif')   { $where[] = 'a.actif = 1'; }
+if ($filtre === 'inactif') { $where[] = 'a.actif = 0'; }
+
+$sql = "SELECT a.*,
+        (SELECT COUNT(*) FROM agent_documents d WHERE d.agent_id = a.id) as nb_docs
+        FROM agents a
+        WHERE " . implode(' AND ', $where) . "
+        ORDER BY a.nom, a.prenom";
+$stmt = $db->prepare($sql);
+$stmt->execute($params);
+$agents = $stmt->fetchAll();
+
+$total   = $db->query("SELECT COUNT(*) FROM agents")->fetchColumn();
+$actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn();
+?>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex gap-2">
+        <div class="stat-card py-2 px-3" style="gap:0.6rem">
+            <div class="stat-icon gold" style="width:36px;height:36px;font-size:1rem"><i class="fa fa-users"></i></div>
+            <div><div class="stat-value" style="font-size:1.25rem"><?= $total ?></div><div class="stat-label">Total</div></div>
+        </div>
+        <div class="stat-card py-2 px-3" style="gap:0.6rem">
+            <div class="stat-icon green" style="width:36px;height:36px;font-size:1rem"><i class="fa fa-circle-check"></i></div>
+            <div><div class="stat-value" style="font-size:1.25rem"><?= $actifs ?></div><div class="stat-label">Actifs</div></div>
+        </div>
+    </div>
+    <?php if (canDo('agents','create')): ?>
+    <a href="add.php" class="btn-ov-primary btn">
+        <i class="fa fa-user-plus me-1"></i> Nouvel agent
+    </a>
+    <?php endif; ?>
+</div>
+
+<div class="ov-card">
+    <div class="ov-card-header">
+        <h2 class="ov-card-title"><i class="fa fa-user-shield me-2" style="color:var(--ov-gold)"></i>Agents de sécurité</h2>
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <!-- Filtres -->
+            <div class="btn-group btn-group-sm">
+                <?php foreach (['tous'=>'Tous','actif'=>'Actifs','inactif'=>'Inactifs'] as $k=>$v): ?>
+                <a href="?filtre=<?= $k ?>&q=<?= urlencode($search) ?>"
+                   class="btn <?= $filtre===$k ? 'btn-dark' : 'btn-outline-secondary' ?>" style="font-size:0.78rem"><?= $v ?></a>
+                <?php endforeach; ?>
+            </div>
+            <!-- Recherche -->
+            <form method="GET" class="d-flex gap-1">
+                <input type="hidden" name="filtre" value="<?= h($filtre) ?>">
+                <input type="text" name="q" value="<?= h($search) ?>" class="form-control form-control-sm" placeholder="Nom, matricule, CNAPS..." style="width:200px">
+                <button class="btn btn-sm btn-ov-primary"><i class="fa fa-search"></i></button>
+            </form>
+        </div>
+    </div>
+    <div class="ov-card-body p-0">
+        <?php if (empty($agents)): ?>
+        <div class="text-center py-5 text-muted">
+            <i class="fa fa-user-slash fa-3x mb-3 opacity-25"></i>
+            <p>Aucun agent trouvé</p>
+        </div>
+        <?php else: ?>
+        <div class="table-responsive">
+        <table class="ov-table">
+            <thead>
+                <tr>
+                    <th>Matricule</th>
+                    <th>Agent</th>
+                    <th>Poste</th>
+                    <th>Contrat</th>
+                    <th>N° CNAPS</th>
+                    <th>Exp. CNAPS</th>
+                    <th>Docs</th>
+                    <th>Statut</th>
+                    <th style="width:110px">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($agents as $a): ?>
+            <tr>
+                <td><code class="text-dark fw-bold"><?= h($a['matricule'] ?? '—') ?></code></td>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <?php if ($a['photo']): ?>
+                        <img src="<?= UPLOAD_URL ?>/<?= h($a['photo']) ?>" class="rounded-circle" style="width:34px;height:34px;object-fit:cover">
+                        <?php else: ?>
+                        <div style="width:34px;height:34px;border-radius:50%;background:rgba(201,168,76,0.15);display:flex;align-items:center;justify-content:center;color:var(--ov-gold);font-weight:700;font-size:0.8rem;flex-shrink:0">
+                            <?= strtoupper(substr($a['prenom'],0,1).substr($a['nom'],0,1)) ?>
+                        </div>
+                        <?php endif; ?>
+                        <div>
+                            <div class="fw-600"><?= h($a['prenom'].' '.$a['nom']) ?></div>
+                            <div style="font-size:0.75rem;color:#9ca3af"><?= h($a['email'] ?? '') ?></div>
+                        </div>
+                    </div>
+                </td>
+                <td><?= h($a['poste'] ?? '—') ?></td>
+                <td>
+                    <?php if ($a['type_contrat']): ?>
+                    <span class="badge-ov badge-<?= strtolower(str_replace(' ','',($a['type_contrat']))) ?>" style="background:rgba(201,168,76,0.1);color:var(--ov-gold-dark);padding:2px 8px;border-radius:20px;font-size:0.72rem;font-weight:600">
+                        <?= h($a['type_contrat']) ?>
+                    </span>
+                    <?php else: ?>—<?php endif; ?>
+                </td>
+                <td><?= h($a['num_autorisation_cnaps'] ?? '—') ?></td>
+                <td>
+                    <?php if ($a['date_expiration_cnaps']): ?>
+                        <?php $exp = strtotime($a['date_expiration_cnaps']); $soon = $exp < strtotime('+30 days'); ?>
+                        <span class="<?= $soon ? 'text-danger fw-bold' : '' ?>"><?= formatDate($a['date_expiration_cnaps']) ?></span>
+                        <?php if ($soon): ?><i class="fa fa-triangle-exclamation text-warning ms-1" title="Expire bientôt"></i><?php endif; ?>
+                    <?php else: ?>—<?php endif; ?>
+                </td>
+                <td>
+                    <span class="badge-ov" style="background:rgba(99,102,241,0.1);color:#4f46e5;padding:2px 8px;border-radius:20px;font-size:0.72rem">
+                        <i class="fa fa-paperclip"></i> <?= $a['nb_docs'] ?>
+                    </span>
+                </td>
+                <td>
+                    <span class="badge-ov badge-<?= $a['actif'] ? 'actif' : 'inactif' ?>">
+                        <?= $a['actif'] ? 'Actif' : 'Inactif' ?>
+                    </span>
+                </td>
+                <td>
+                    <div class="d-flex gap-1">
+                        <a href="view.php?id=<?= $a['id'] ?>" class="btn-sm-icon view" title="Voir fiche"><i class="fa fa-eye"></i></a>
+                        <?php if (canDo('agents','edit')): ?>
+                        <a href="edit.php?id=<?= $a['id'] ?>" class="btn-sm-icon edit" title="Modifier"><i class="fa fa-pen"></i></a>
+                        <?php endif; ?>
+                        <a href="carte.php?id=<?= $a['id'] ?>" class="btn-sm-icon print" title="Carte agent"><i class="fa fa-id-card"></i></a>
+                        <a href="export_pdf.php?id=<?= $a['id'] ?>" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="Export PDF"><i class="fa fa-file-pdf"></i></a>
+                    </div>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php include __DIR__ . '/../../includes/footer.php'; ?>

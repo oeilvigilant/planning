@@ -1,0 +1,31 @@
+# Configuration sensible (DB credentials, secrets)
+config/config.php
+
+# Uploads utilisateurs (photos, documents agents)
+uploads/photos/*
+uploads/documents/*
+uploads/logos/*
+!uploads/photos/.gitkeep
+!uploads/documents/.gitkeep
+!uploads/logos/.gitkeep
+
+# Logs
+*.log
+error_log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Composer (inclus pour hébergement mutualisé sans CLI Composer)
+# vendor/ → on garde vendor/ car LWS ne dispose pas forcément de Composer
+
+# Fichiers temporaires
+*.tmp
+*.bak

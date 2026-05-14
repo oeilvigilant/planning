@@ -1,0 +1,320 @@
+<?php
+require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/functions.php';
+requireLogin();
+requirePerm('parametres', 'view');
+
+$db = getDB();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'save_entreprise') {
+        $champs = ['entreprise_nom','entreprise_dirigeant','entreprise_adresse','entreprise_cp',
+                   'entreprise_ville','entreprise_siret','entreprise_tel','entreprise_email'];
+        foreach ($champs as $c) setParam($c, $_POST[$c] ?? '');
+
+        // Logo upload
+        if (!empty($_FILES['logo']['name'])) {
+            $ext = strtolower(pathinfo($_FILES['logo']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg','jpeg','png','svg'])) {
+                $nom = 'logo_custom.' . $ext;
+                move_uploaded_file($_FILES['logo']['tmp_name'], APP_ROOT . '/assets/img/' . $nom);
+                setParam('logo_principal', $nom);
+            }
+        }
+        flash('success','Informations entreprise sauvegardées.');
+        header('Location: index.php'); exit;
+    }
+
+    if ($action === 'save_taux') {
+        $types = ['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'];
+        foreach ($types as $t) {
+            $taux = (float)($_POST['taux_'.$t] ?? 0);
+            $db->prepare("UPDATE taux_horaires SET taux=? WHERE type_heure=?")->execute([$taux,$t]);
+        }
+        flash('success','Taux horaires mis à jour.');
+        header('Location: index.php'); exit;
+    }
+
+    if ($action === 'save_planning') {
+        setParam('nuit_debut', $_POST['nuit_debut'] ?? '21:00');
+        setParam('nuit_fin',   $_POST['nuit_fin']   ?? '06:00');
+        setParam('token_expiration_jours', (string)max(1,(int)($_POST['token_expiration_jours']??7)));
+        flash('success','Paramètres planning sauvegardés.');
+        header('Location: index.php'); exit;
+    }
+
+    if ($action === 'add_ferie') {
+        $date = $_POST['ferie_date'] ?? '';
+        $nom  = $_POST['ferie_nom']  ?? '';
+        if ($date && $nom) {
+            try {
+                $db->prepare("INSERT INTO jours_feries (date, nom, recurrent, annee) VALUES (?,?,?,?)")
+                   ->execute([$date, $nom, isset($_POST['ferie_recurrent'])?1:0, date('Y',strtotime($date))]);
+                flash('success','Jour férié ajouté.');
+            } catch (Exception $e) { flash('danger','Date déjà existante.'); }
+        }
+        header('Location: index.php#feries'); exit;
+    }
+
+    if ($action === 'del_ferie') {
+        $id = (int)($_POST['ferie_id'] ?? 0);
+        if ($id) $db->prepare("DELETE FROM jours_feries WHERE id=?")->execute([$id]);
+        header('Location: index.php#feries'); exit;
+    }
+
+    if ($action === 'save_carte') {
+        $champs = $_POST['champ'] ?? [];
+        foreach ($champs as $champId => $d) {
+            $db->prepare("UPDATE carte_champs SET actif=?, ordre=?, face=? WHERE id=?")
+               ->execute([isset($d['actif'])?1:0, (int)$d['ordre'], $d['face'], (int)$champId]);
+        }
+        flash('success','Champs carte agent mis à jour.');
+        header('Location: index.php#carte'); exit;
+    }
+
+    if ($action === 'save_pdf') {
+        $champs = $_POST['champ'] ?? [];
+        foreach ($champs as $champId => $d) {
+            $db->prepare("UPDATE pdf_champs SET actif=?, ordre=? WHERE id=?")
+               ->execute([isset($d['actif'])?1:0, (int)$d['ordre'], (int)$champId]);
+        }
+        flash('success','Champs PDF comptable mis à jour.');
+        header('Location: index.php#pdf'); exit;
+    }
+}
+
+$pageTitle    = 'Paramètres';
+$currentModule = 'parametres';
+require_once __DIR__ . '/../../includes/header.php';
+
+$params = getAllParams();
+$taux   = $db->query("SELECT * FROM taux_horaires ORDER BY ordre")->fetchAll();
+$feries = $db->query("SELECT * FROM jours_feries ORDER BY date")->fetchAll();
+$carteChamps = $db->query("SELECT * FROM carte_champs ORDER BY face, ordre")->fetchAll();
+$pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll();
+?>
+
+<ul class="nav nav-tabs mb-4" style="border-bottom:2px solid #e5e7eb">
+  <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-entreprise">Entreprise</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-taux">Taux horaires</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-planning">Planning</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-feries" id="tab-feries-link">Jours fériés</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-carte">Carte agent</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-pdf">PDF comptable</a></li>
+</ul>
+
+<div class="tab-content">
+
+<!-- ENTREPRISE -->
+<div class="tab-pane fade show active" id="tab-entreprise">
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-building me-2" style="color:var(--ov-gold)"></i>Informations entreprise</h2></div>
+  <div class="ov-card-body">
+    <form method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="action" value="save_entreprise">
+    <div class="row g-3">
+      <div class="col-md-6"><label class="form-label">Nom de l'entreprise</label>
+        <input type="text" name="entreprise_nom" class="form-control" value="<?= h($params['entreprise_nom']??'') ?>"></div>
+      <div class="col-md-6"><label class="form-label">Nom du dirigeant</label>
+        <input type="text" name="entreprise_dirigeant" class="form-control" value="<?= h($params['entreprise_dirigeant']??'') ?>"></div>
+      <div class="col-12"><label class="form-label">Adresse</label>
+        <input type="text" name="entreprise_adresse" class="form-control" value="<?= h($params['entreprise_adresse']??'') ?>"></div>
+      <div class="col-md-3"><label class="form-label">Code postal</label>
+        <input type="text" name="entreprise_cp" class="form-control" value="<?= h($params['entreprise_cp']??'') ?>"></div>
+      <div class="col-md-5"><label class="form-label">Ville</label>
+        <input type="text" name="entreprise_ville" class="form-control" value="<?= h($params['entreprise_ville']??'') ?>"></div>
+      <div class="col-md-4"><label class="form-label">N° SIRET</label>
+        <input type="text" name="entreprise_siret" class="form-control" value="<?= h($params['entreprise_siret']??'') ?>"></div>
+      <div class="col-md-4"><label class="form-label">Téléphone</label>
+        <input type="text" name="entreprise_tel" class="form-control" value="<?= h($params['entreprise_tel']??'') ?>"></div>
+      <div class="col-md-4"><label class="form-label">Email</label>
+        <input type="email" name="entreprise_email" class="form-control" value="<?= h($params['entreprise_email']??'') ?>"></div>
+      <div class="col-md-4">
+        <label class="form-label">Logo</label>
+        <div class="d-flex align-items-center gap-3 mb-2">
+          <img src="<?= APP_URL ?>/assets/img/<?= h($params['logo_principal']??'logo.png') ?>" style="height:40px" onerror="this.src='<?= APP_URL ?>/assets/img/logo.png'">
+          <span style="font-size:0.78rem;color:#9ca3af">Logo actuel</span>
+        </div>
+        <input type="file" name="logo" class="form-control form-control-sm" accept="image/*">
+      </div>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+  </div>
+</div>
+</div>
+
+<!-- TAUX -->
+<div class="tab-pane fade" id="tab-taux">
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-euro-sign me-2" style="color:var(--ov-gold)"></i>Taux horaires (€/heure)</h2></div>
+  <div class="ov-card-body">
+    <form method="POST">
+    <input type="hidden" name="action" value="save_taux">
+    <div class="row g-3">
+      <?php foreach ($taux as $t): ?>
+      <div class="col-md-4">
+        <label class="form-label"><?= h($t['label']) ?></label>
+        <div class="input-group">
+          <input type="number" name="taux_<?= h($t['type_heure']) ?>" class="form-control" step="0.01" min="0" value="<?= h($t['taux']) ?>">
+          <span class="input-group-text">€/h</span>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder les taux</button></div>
+    </form>
+  </div>
+</div>
+</div>
+
+<!-- PLANNING -->
+<div class="tab-pane fade" id="tab-planning">
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-moon me-2" style="color:var(--ov-gold)"></i>Paramètres planning</h2></div>
+  <div class="ov-card-body">
+    <form method="POST">
+    <input type="hidden" name="action" value="save_planning">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Début heures de nuit</label>
+        <input type="time" name="nuit_debut" class="form-control" value="<?= h($params['nuit_debut']??'21:00') ?>">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Fin heures de nuit</label>
+        <input type="time" name="nuit_fin" class="form-control" value="<?= h($params['nuit_fin']??'06:00') ?>">
+        <div class="form-text">Les heures entre <?= h($params['nuit_debut']??'21:00') ?> et <?= h($params['nuit_fin']??'06:00') ?> sont comptées comme heures de nuit</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Validité lien agent (jours)</label>
+        <input type="number" name="token_expiration_jours" class="form-control" min="1" max="30" value="<?= h($params['token_expiration_jours']??'7') ?>">
+      </div>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+  </div>
+</div>
+</div>
+
+<!-- FERIES -->
+<div class="tab-pane fade" id="tab-feries">
+<div class="ov-card mb-3">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-calendar-xmark me-2" style="color:var(--ov-gold)"></i>Ajouter un jour férié</h2></div>
+  <div class="ov-card-body">
+    <form method="POST" class="row g-3 align-items-end">
+    <input type="hidden" name="action" value="add_ferie">
+    <div class="col-md-3"><label class="form-label">Date</label>
+      <input type="date" name="ferie_date" class="form-control" required></div>
+    <div class="col-md-5"><label class="form-label">Nom du jour férié</label>
+      <input type="text" name="ferie_nom" class="form-control" required placeholder="Ex: Fête nationale"></div>
+    <div class="col-md-2 d-flex align-items-center gap-2" style="margin-top:1.75rem">
+      <input type="checkbox" name="ferie_recurrent" class="form-check-input" id="recurrent">
+      <label class="form-check-label" for="recurrent">Récurrent</label>
+    </div>
+    <div class="col-md-2"><button type="submit" class="btn btn-ov-primary w-100"><i class="fa fa-plus me-1"></i>Ajouter</button></div>
+    </form>
+  </div>
+</div>
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-list me-2" style="color:var(--ov-gold)"></i>Liste des jours fériés</h2></div>
+  <div class="ov-card-body p-0">
+    <table class="ov-table">
+      <thead><tr><th>Date</th><th>Nom</th><th>Année</th><th>Récurrent</th><th>Action</th></tr></thead>
+      <tbody>
+      <?php foreach ($feries as $f): ?>
+      <tr>
+        <td><?= formatDate($f['date']) ?></td>
+        <td><?= h($f['nom']) ?></td>
+        <td><?= $f['annee'] ?: '—' ?></td>
+        <td><?= $f['recurrent'] ? '<span style="color:#16a34a"><i class="fa fa-check"></i></span>' : '<span style="color:#d1d5db"><i class="fa fa-minus"></i></span>' ?></td>
+        <td>
+          <form method="POST" style="display:inline">
+            <input type="hidden" name="action" value="del_ferie">
+            <input type="hidden" name="ferie_id" value="<?= $f['id'] ?>">
+            <button class="btn-sm-icon delete" data-confirm="Supprimer ce jour férié ?"><i class="fa fa-trash"></i></button>
+          </form>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+<!-- CARTE AGENT -->
+<div class="tab-pane fade" id="tab-carte">
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-id-card me-2" style="color:var(--ov-gold)"></i>Champs carte agent (85×54mm)</h2></div>
+  <div class="ov-card-body">
+    <form method="POST">
+    <input type="hidden" name="action" value="save_carte">
+    <div class="table-responsive">
+    <table class="ov-table">
+      <thead><tr><th>Actif</th><th>Champ</th><th>Face</th><th>Ordre</th></tr></thead>
+      <tbody>
+      <?php foreach ($carteChamps as $c): ?>
+      <tr>
+        <td><input type="checkbox" name="champ[<?= $c['id'] ?>][actif]" <?= $c['actif']?'checked':'' ?> class="form-check-input"></td>
+        <td><?= h($c['label']) ?> <small class="text-muted">(<?= h($c['source']) ?>)</small></td>
+        <td>
+          <select name="champ[<?= $c['id'] ?>][face]" class="form-select form-select-sm" style="width:100px">
+            <option value="recto" <?= $c['face']==='recto'?'selected':'' ?>>Recto</option>
+            <option value="verso" <?= $c['face']==='verso'?'selected':'' ?>>Verso</option>
+          </select>
+        </td>
+        <td><input type="number" name="champ[<?= $c['id'] ?>][ordre]" class="form-control form-control-sm" style="width:70px" value="<?= $c['ordre'] ?>"></td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+  </div>
+</div>
+</div>
+
+<!-- PDF COMPTABLE -->
+<div class="tab-pane fade" id="tab-pdf">
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-file-pdf me-2" style="color:var(--ov-gold)"></i>Champs PDF comptable</h2></div>
+  <div class="ov-card-body">
+    <form method="POST">
+    <input type="hidden" name="action" value="save_pdf">
+    <div class="table-responsive">
+    <table class="ov-table">
+      <thead><tr><th>Actif</th><th>Champ</th><th>Source</th><th>Ordre</th></tr></thead>
+      <tbody>
+      <?php foreach ($pdfChamps as $c): ?>
+      <tr>
+        <td><input type="checkbox" name="champ[<?= $c['id'] ?>][actif]" <?= $c['actif']?'checked':'' ?> class="form-check-input"></td>
+        <td><?= h($c['label']) ?></td>
+        <td><span class="badge-ov" style="background:rgba(107,114,128,0.1);color:#6b7280;padding:2px 8px;border-radius:20px;font-size:0.72rem"><?= h($c['source']) ?></span></td>
+        <td><input type="number" name="champ[<?= $c['id'] ?>][ordre]" class="form-control form-control-sm" style="width:70px" value="<?= $c['ordre'] ?>"></td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+  </div>
+</div>
+</div>
+
+</div><!-- /tab-content -->
+
+<?php if (isset($_GET['tab'])): ?>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const tab = '<?= h($_GET['tab']) ?>';
+    const el = document.querySelector(`[href="#tab-${tab}"]`);
+    if (el) bootstrap.Tab.getOrCreateInstance(el).show();
+});
+</script>
+<?php endif; ?>
+
+<?php include __DIR__ . '/../../includes/footer.php'; ?>

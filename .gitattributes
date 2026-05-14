@@ -1,0 +1,22 @@
+# Normalise les fins de ligne : LF sur le repo, CRLF en local Windows
+* text=auto
+
+# PHP et fichiers texte → LF sur le serveur Linux (LWS)
+*.php text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+*.sql text eol=lf
+*.txt text eol=lf
+
+# Binaires → pas de conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
