@@ -211,6 +211,50 @@ $docsLabels = [
     </div>
   </div>
 
+  <!-- Champs personnalisés -->
+  <?php
+  try {
+      $champsPerso = $db->query("SELECT * FROM agent_champs_perso WHERE actif=1 ORDER BY ordre")->fetchAll();
+      $stmtVP = $db->prepare("SELECT avp.*, acp.label, acp.type FROM agent_valeurs_perso avp JOIN agent_champs_perso acp ON acp.id=avp.champ_id WHERE avp.agent_id=?");
+      $stmtVP->execute([$id]);
+      $valeursPerso = [];
+      foreach ($stmtVP->fetchAll() as $vp) { $valeursPerso[$vp['champ_id']] = $vp; }
+  } catch(Exception $e) { $champsPerso = []; $valeursPerso = []; }
+  if ($champsPerso):
+  ?>
+  <div class="ov-card mb-3">
+    <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-sliders me-2" style="color:var(--ov-gold)"></i>Champs personnalisés</h2></div>
+    <div class="ov-card-body">
+      <div class="row g-2">
+      <?php foreach ($champsPerso as $cp):
+        $vp = $valeursPerso[$cp['id']] ?? null;
+        $val = $vp['valeur'] ?? null;
+        $fic = $vp['fichier'] ?? null;
+      ?>
+      <div class="col-md-6">
+        <div class="p-2 rounded" style="background:#f8f9fa">
+          <div style="font-size:0.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px"><?= h($cp['label']) ?></div>
+          <div style="font-size:0.875rem;color:#1a2332;font-weight:500">
+            <?php if ($cp['type'] === 'file'): ?>
+              <?php if ($fic): ?>
+              <a href="<?= UPLOAD_URL ?>/<?= h($fic) ?>" target="_blank" style="font-size:0.8rem"><i class="fa fa-file me-1"></i>Voir le fichier</a>
+              <?php else: ?>—<?php endif; ?>
+            <?php elseif ($cp['type'] === 'date' && $val): ?>
+              <?= h(date('d/m/Y', strtotime($val))) ?>
+            <?php elseif ($cp['type'] === 'textarea' && $val): ?>
+              <span style="white-space:pre-line;font-size:0.82rem"><?= h($val) ?></span>
+            <?php else: ?>
+              <?= h($val ?: '—') ?>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+      <?php endforeach; ?>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <!-- Pôle Social -->
   <div class="ov-card">
     <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-building-columns me-2" style="color:var(--ov-gold)"></i>Pôle Social</h2></div>

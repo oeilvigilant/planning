@@ -362,6 +362,9 @@ if ($vue === 'semaine') {
         <button class="btn btn-ov-secondary btn-sm" id="btnNewVersion"><i class="fa fa-code-branch me-1"></i>Nouvelle version</button>
         <?php endif; ?>
         <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
+        <?php if (canDo('planning','export')): ?>
+        <button class="btn btn-ov-secondary btn-sm" id="btnExport"><i class="fa fa-file-export me-1"></i>Exporter</button>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -505,9 +508,11 @@ if ($vue === 'semaine') {
     </div>
 
     <?php
-    $jsVue  = 'semaine';
-    $jsMois = $mois;
-    $jsAnnee = $annee;
+    $jsVue       = 'semaine';
+    $jsMois      = $mois;
+    $jsAnnee     = $annee;
+    $jsVersionId = 0;
+    $jsSemaine   = $semaine;
 
 } else {
     // ── Vue mensuelle ─────────────────────────────────────────────────────────
@@ -585,8 +590,7 @@ if ($vue === 'semaine') {
         <?php endif; ?>
         <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
         <?php if ($version && canDo('planning','export')): ?>
-        <a href="export.php?version_id=<?= $version['id'] ?>&format=pdf" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.8rem"><i class="fa fa-file-pdf me-1"></i>PDF</a>
-        <a href="export.php?version_id=<?= $version['id'] ?>&format=excel" class="btn btn-sm" style="background:rgba(34,197,94,0.1);color:#16a34a;border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.8rem"><i class="fa fa-file-excel me-1"></i>Excel</a>
+        <button class="btn btn-ov-secondary btn-sm" id="btnExport"><i class="fa fa-file-export me-1"></i>Exporter</button>
         <?php endif; ?>
       </div>
     </div>
@@ -678,7 +682,8 @@ if ($vue === 'semaine') {
               ?>
               <?php if ($shift): ?>
               <div style="font-size:1.05rem;font-weight:900;color:<?= $shift['color'] ?>;line-height:1.1;padding-top:1px"><?= $shift['code'] ?></div>
-              <div style="font-size:0.58rem;color:<?= $shift['color'] ?>;opacity:0.75"><?= number_format($totH,0) ?>h</div>
+              <div style="font-size:0.52rem;color:<?= $shift['color'] ?>;opacity:0.85;font-weight:600;line-height:1.2"><?= $hDeb ?>→<?= $hFin2 ?></div>
+              <div style="font-size:0.52rem;color:#6b7280;opacity:0.85"><?= number_format($totH,0) ?>h</div>
               <?php else: ?>
               <?php $hasN = ($ligne['min_nuit']+$ligne['min_ferie_nuit']) > 0; ?>
               <div style="font-size:0.6rem;font-weight:700;color:var(--ov-navy);line-height:1.2"><?= substr($hDeb,0,5) ?>→<?= substr($hFin2,0,5) ?><?= $ligne['depasse_minuit']?'<sup>+</sup>':'' ?></div>
@@ -739,9 +744,11 @@ if ($vue === 'semaine') {
     </div>
 
     <?php
-    $jsVue   = 'mois';
-    $jsMois  = $mois;
-    $jsAnnee = $annee;
+    $jsVue       = 'mois';
+    $jsMois      = $mois;
+    $jsAnnee     = $annee;
+    $jsVersionId = $versionId ?? 0;
+    $jsSemaine   = 0;
 }
 ?>
 
@@ -965,6 +972,56 @@ if ($vue === 'semaine') {
   </div>
 </div>
 
+<!-- ═══ MODAL export ══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="border-radius:12px;border:none;box-shadow:0 20px 60px rgba(0,0,0,0.18)">
+      <div class="modal-header" style="background:var(--ov-navy);border-radius:12px 12px 0 0;border:none">
+        <h5 class="modal-title text-white" style="font-size:0.9rem"><i class="fa fa-file-export me-2" style="color:var(--ov-gold)"></i>Exporter le planning</h5>
+        <button type="button" class="btn-close btn-close-white btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:16px">
+        <div class="mb-3">
+          <label class="form-label" style="font-size:0.82rem;font-weight:600">Période</label>
+          <div id="exportPeriodInfo" style="font-size:0.85rem;color:var(--ov-navy);font-weight:700;padding:7px 12px;background:#f8f9fa;border-radius:6px;border-left:3px solid var(--ov-gold)"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" style="font-size:0.82rem;font-weight:600">Agents</label>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="exportAllAgents" checked>
+            <label class="form-check-label" style="font-size:0.82rem" for="exportAllAgents">Tous les agents</label>
+          </div>
+          <div id="exportAgentList" style="display:none;max-height:180px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px">
+            <?php foreach ($allAgents as $ag): ?>
+            <div class="form-check">
+              <input class="form-check-input export-agent-cb" type="checkbox" value="<?= $ag['id'] ?>" id="eag<?= $ag['id'] ?>" checked>
+              <label class="form-check-label" style="font-size:0.8rem" for="eag<?= $ag['id'] ?>"><?= h($ag['prenom'].' '.$ag['nom']) ?><?= $ag['poste'] ? ' <span style="color:#9ca3af;font-size:0.72rem">('.h($ag['poste']).')</span>' : '' ?></label>
+            </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label" style="font-size:0.82rem;font-weight:600">Format</label>
+          <div class="d-flex gap-3">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="exportFormat" id="exportFmtPdf" value="pdf" checked>
+              <label class="form-check-label" style="font-size:0.82rem" for="exportFmtPdf"><i class="fa fa-file-pdf me-1" style="color:#dc2626"></i>PDF (paysage)</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="exportFormat" id="exportFmtExcel" value="excel">
+              <label class="form-check-label" style="font-size:0.82rem" for="exportFmtExcel"><i class="fa fa-file-excel me-1" style="color:#16a34a"></i>Excel / CSV</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0" style="padding:0 16px 14px">
+        <button type="button" class="btn btn-sm btn-ov-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-sm btn-ov-primary" onclick="doExport()"><i class="fa fa-download me-1"></i>Télécharger</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php
 $versionsMapJson = json_encode($versionsMap);
 $extraJs = <<<ENDJS
@@ -976,11 +1033,15 @@ var cellModal        = new bootstrap.Modal(document.getElementById('cellModal'))
 var bulkModal        = new bootstrap.Modal(document.getElementById('bulkModal'));
 var versionModal     = new bootstrap.Modal(document.getElementById('versionModal'));
 var agentFilterModal = new bootstrap.Modal(document.getElementById('agentFilterModal'));
+var exportModal      = new bootstrap.Modal(document.getElementById('exportModal'));
 
-var versionsMap  = {$versionsMapJson};
-var shifts       = {$shiftsJson};
-var currentMois  = {$jsMois};
-var currentAnnee = {$jsAnnee};
+var versionsMap     = {$versionsMapJson};
+var shifts          = {$shiftsJson};
+var currentMois     = {$jsMois};
+var currentAnnee    = {$jsAnnee};
+var exportVersionId = {$jsVersionId};
+var exportSemaine   = {$jsSemaine};
+var exportVue       = '{$jsVue}';
 
 // ── Boutons toolbar ───────────────────────────────────────────────────────────
 var btnAgent = document.getElementById('btnAgentFilter');
@@ -1285,6 +1346,52 @@ window.saveBulk = function() {
 // ── selectAllDow ──────────────────────────────────────────────────────────────
 window.selectAllDow = function(state) {
     document.querySelectorAll('[id^="bdow"]').forEach(function(cb) { cb.checked = state; });
+};
+
+// ── Export modal ──────────────────────────────────────────────────────────────
+var btnExportEl = document.getElementById('btnExport');
+if (btnExportEl) {
+    btnExportEl.addEventListener('click', function() {
+        var infoEl = document.getElementById('exportPeriodInfo');
+        if (exportVue === 'semaine') {
+            infoEl.textContent = 'Semaine ' + exportSemaine + ' (' + currentAnnee + ')';
+        } else {
+            var moisNoms = ['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+            infoEl.textContent = moisNoms[currentMois] + ' ' + currentAnnee;
+        }
+        document.getElementById('exportAllAgents').checked = true;
+        document.getElementById('exportAgentList').style.display = 'none';
+        document.querySelector('input[name="exportFormat"][value="pdf"]').checked = true;
+        exportModal.show();
+    });
+}
+
+var exportAllCb = document.getElementById('exportAllAgents');
+if (exportAllCb) {
+    exportAllCb.addEventListener('change', function() {
+        document.getElementById('exportAgentList').style.display = this.checked ? 'none' : '';
+    });
+}
+
+window.doExport = function() {
+    var format    = document.querySelector('input[name="exportFormat"]:checked').value;
+    var allAgents = document.getElementById('exportAllAgents').checked;
+    var agentIds  = '';
+    if (!allAgents) {
+        var ids = [];
+        document.querySelectorAll('.export-agent-cb:checked').forEach(function(cb) { ids.push(cb.value); });
+        if (!ids.length) { alert('Sélectionnez au moins un agent.'); return; }
+        agentIds = ids.join(',');
+    }
+    var url;
+    if (exportVue === 'semaine') {
+        url = 'export.php?type=week&semaine=' + exportSemaine + '&annee=' + currentAnnee + '&format=' + format;
+    } else {
+        url = 'export.php?version_id=' + exportVersionId + '&format=' + format;
+    }
+    if (agentIds) url += '&agent_ids=' + encodeURIComponent(agentIds);
+    exportModal.hide();
+    window.location.href = url;
 };
 
 }); // end DOMContentLoaded

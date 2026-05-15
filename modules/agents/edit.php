@@ -17,6 +17,14 @@ $docs = $db->prepare("SELECT * FROM agent_documents WHERE agent_id = ? ORDER BY 
 $docs->execute([$id]);
 $documents = $docs->fetchAll();
 
+try {
+    $champsPerso = $db->query("SELECT * FROM agent_champs_perso WHERE actif=1 ORDER BY ordre")->fetchAll();
+    $stmtVP = $db->prepare("SELECT * FROM agent_valeurs_perso WHERE agent_id=?");
+    $stmtVP->execute([$id]);
+    $valeursPerso = [];
+    foreach ($stmtVP->fetchAll() as $vp) { $valeursPerso[$vp['champ_id']] = $vp; }
+} catch(Exception $e) { $champsPerso = []; $valeursPerso = []; }
+
 $errors = [];
 $data   = $agent;
 
@@ -79,6 +87,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $db->prepare("INSERT INTO agent_documents (agent_id,type_document,nom_fichier,chemin,taille) VALUES (?,?,?,?,?)")
                            ->execute([$id,$typeDoc,$_FILES[$typeDoc]['name'],$chemin,$_FILES[$typeDoc]['size']]);
                     }
+                }
+            }
+
+            // Champs personnalisés
+            foreach ($champsPerso as $cp) {
+                if ($cp['type'] === 'file') {
+                    if (!empty($_FILES['cp_'.$cp['id']]['name'])) {
+                        $fic = uploadFichier($_FILES['cp_'.$cp['id']], 'documents', ['pdf','jpg','jpeg','png']);
+                        if ($fic) {
+                            $exCP = $db->prepare("SELECT id FROM agent_valeurs_perso WHERE agent_id=? AND champ_id=?");
+                            $exCP->execute([$id, $cp['id']]);
+                            if ($exCP->fetch()) $db->prepare("UPDATE agent_valeurs_perso SET fichier=?,valeur=NULL WHERE agent_id=? AND champ_id=?")->execute([$fic,$id,$cp['id']]);
+                            else $db->prepare("INSERT INTO agent_valeurs_perso (agent_id,champ_id,fichier) VALUES (?,?,?)")->execute([$id,$cp['id'],$fic]);
+                        }
+                    }
+                } else {
+                    $val = trim($_POST['cp_'.$cp['id']] ?? '');
+                    $exCP = $db->prepare("SELECT id FROM agent_valeurs_perso WHERE agent_id=? AND champ_id=?");
+                    $exCP->execute([$id, $cp['id']]);
+                    if ($exCP->fetch()) $db->prepare("UPDATE agent_valeurs_perso SET valeur=?,fichier=NULL WHERE agent_id=? AND champ_id=?")->execute([$val,$id,$cp['id']]);
+                    elseif ($val !== '') $db->prepare("INSERT INTO agent_valeurs_perso (agent_id,champ_id,valeur) VALUES (?,?,?)")->execute([$id,$cp['id'],$val]);
                 }
             }
 
@@ -356,6 +385,38 @@ $documents = $docs->fetchAll();
       </div>
     </div>
   </div>
+
+  <?php if ($champsPerso): ?>
+  <div class="ov-card mb-3">
+    <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-sliders me-2" style="color:var(--ov-gold)"></i>Champs personnalisés</h2></div>
+    <div class="ov-card-body">
+      <?php foreach ($champsPerso as $cp):
+        $currentVal = $_SERVER['REQUEST_METHOD']==='POST' ? ($_POST['cp_'.$cp['id']]??'') : ($valeursPerso[$cp['id']]['valeur']??'');
+        $currentFic = $valeursPerso[$cp['id']]['fichier'] ?? null;
+      ?>
+      <div class="mb-3">
+        <label class="form-label"><?= h($cp['label']) ?><?= $cp['obligatoire'] ? ' <span class="text-danger">*</span>' : '' ?></label>
+        <?php if ($cp['type'] === 'textarea'): ?>
+        <textarea name="cp_<?= $cp['id'] ?>" class="form-control form-control-sm" rows="3" <?= $cp['obligatoire']?'required':'' ?>><?= h($currentVal) ?></textarea>
+        <?php elseif ($cp['type'] === 'date'): ?>
+        <input type="date" name="cp_<?= $cp['id'] ?>" class="form-control form-control-sm" value="<?= h($currentVal) ?>" <?= $cp['obligatoire']?'required':'' ?>>
+        <?php elseif ($cp['type'] === 'select'): ?>
+        <?php $opts = $cp['options'] ? (json_decode($cp['options'], true) ?: []) : []; ?>
+        <select name="cp_<?= $cp['id'] ?>" class="form-select form-select-sm" <?= $cp['obligatoire']?'required':'' ?>>
+          <option value="">—</option>
+          <?php foreach ($opts as $opt): ?><option value="<?= h($opt) ?>" <?= $currentVal===$opt?'selected':'' ?>><?= h($opt) ?></option><?php endforeach; ?>
+        </select>
+        <?php elseif ($cp['type'] === 'file'): ?>
+        <?php if ($currentFic): ?><div class="mb-1 small"><a href="<?= UPLOAD_URL ?>/<?= h($currentFic) ?>" target="_blank"><i class="fa fa-file me-1"></i>Fichier actuel</a></div><?php endif; ?>
+        <input type="file" name="cp_<?= $cp['id'] ?>" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png">
+        <?php else: ?>
+        <input type="text" name="cp_<?= $cp['id'] ?>" class="form-control form-control-sm" value="<?= h($currentVal) ?>" <?= $cp['obligatoire']?'required':'' ?>>
+        <?php endif; ?>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <div class="d-grid gap-2">
     <button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Enregistrer les modifications</button>

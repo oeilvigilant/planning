@@ -83,6 +83,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         flash('success','Champs PDF comptable mis à jour.');
         header('Location: index.php#pdf'); exit;
     }
+
+    if ($action === 'add_champ_perso') {
+        $label = trim($_POST['cp_label'] ?? '');
+        $type  = in_array($_POST['cp_type']??'', ['text','textarea','date','select','file']) ? $_POST['cp_type'] : 'text';
+        $oblig = isset($_POST['cp_obligatoire']) ? 1 : 0;
+        $opts  = trim($_POST['cp_options'] ?? '');
+        if ($label) {
+            $cle  = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '_', $label));
+            $cle  = trim($cle, '_') ?: 'champ';
+            $base = $cle; $i = 2;
+            $stmtC = $db->prepare("SELECT COUNT(*) FROM agent_champs_perso WHERE cle=?");
+            $stmtC->execute([$cle]);
+            while ($stmtC->fetchColumn() > 0) {
+                $cle = $base.'_'.$i++;
+                $stmtC->execute([$cle]);
+            }
+            $optJson = null;
+            if ($type === 'select' && $opts) {
+                $optArr = array_values(array_filter(array_map('trim', explode("\n", $opts))));
+                if ($optArr) $optJson = json_encode($optArr, JSON_UNESCAPED_UNICODE);
+            }
+            $maxOrdre = (int)$db->query("SELECT COALESCE(MAX(ordre),0) FROM agent_champs_perso")->fetchColumn();
+            $db->prepare("INSERT INTO agent_champs_perso (label,cle,type,options,obligatoire,ordre) VALUES (?,?,?,?,?,?)")
+               ->execute([$label, $cle, $type, $optJson, $oblig, $maxOrdre+1]);
+            flash('success','Champ personnalisé ajouté.');
+        }
+        header('Location: index.php?tab=champs-agents'); exit;
+    }
+
+    if ($action === 'del_champ_perso') {
+        $cpId = (int)($_POST['cp_id'] ?? 0);
+        if ($cpId) {
+            $db->prepare("DELETE FROM agent_valeurs_perso WHERE champ_id=?")->execute([$cpId]);
+            $db->prepare("DELETE FROM agent_champs_perso WHERE id=?")->execute([$cpId]);
+            flash('success','Champ et ses valeurs supprimés.');
+        }
+        header('Location: index.php?tab=champs-agents'); exit;
+    }
+
+    if ($action === 'save_champs_perso') {
+        $champs = $_POST['cp'] ?? [];
+        foreach ($champs as $cpId => $d) {
+            $db->prepare("UPDATE agent_champs_perso SET actif=?,ordre=?,obligatoire=?,label=? WHERE id=?")
+               ->execute([isset($d['actif'])?1:0, (int)($d['ordre']??0), isset($d['obligatoire'])?1:0, trim($d['label']??''), (int)$cpId]);
+        }
+        flash('success','Champs personnalisés mis à jour.');
+        header('Location: index.php?tab=champs-agents'); exit;
+    }
 }
 
 $pageTitle    = 'Paramètres';
@@ -103,6 +151,7 @@ $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll()
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-feries" id="tab-feries-link">Jours fériés</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-carte">Carte agent</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-pdf">PDF comptable</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-champs-agents">Champs agents</a></li>
 </ul>
 
 <div class="tab-content">
@@ -303,6 +352,119 @@ $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll()
     </form>
   </div>
 </div>
+</div>
+
+<!-- CHAMPS AGENTS PERSONNALISÉS -->
+<div class="tab-pane fade" id="tab-champs-agents">
+
+<div class="ov-card mb-3">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-plus-circle me-2" style="color:var(--ov-gold)"></i>Ajouter un champ</h2></div>
+  <div class="ov-card-body">
+    <form method="POST">
+    <input type="hidden" name="action" value="add_champ_perso">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label">Label du champ</label>
+        <input type="text" name="cp_label" class="form-control" required placeholder="Ex : Formation SST, Véhicule...">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Type</label>
+        <select name="cp_type" class="form-select" id="cpTypeSelect">
+          <option value="text">Texte court</option>
+          <option value="textarea">Texte long</option>
+          <option value="date">Date</option>
+          <option value="select">Liste déroulante</option>
+          <option value="file">Fichier / Document</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <div class="form-check" style="margin-top:1.75rem">
+          <input class="form-check-input" type="checkbox" name="cp_obligatoire" id="cpOblig">
+          <label class="form-check-label" for="cpOblig">Obligatoire</label>
+        </div>
+      </div>
+      <div class="col-md-4" id="cpOptionsBlock" style="display:none">
+        <label class="form-label">Options <small class="text-muted">(une par ligne)</small></label>
+        <textarea name="cp_options" class="form-control form-control-sm" rows="3" placeholder="Option A&#10;Option B&#10;Option C"></textarea>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-ov-primary"><i class="fa fa-plus me-1"></i>Ajouter</button>
+      </div>
+    </div>
+    </form>
+  </div>
+</div>
+
+<?php
+try {
+    $champsPerso = $db->query("SELECT * FROM agent_champs_perso ORDER BY ordre, id")->fetchAll();
+} catch(Exception $e) {
+    $champsPerso = null;
+}
+?>
+
+<?php if ($champsPerso === null): ?>
+<div class="alert alert-warning"><i class="fa fa-triangle-exclamation me-1"></i>Les tables ne sont pas encore créées. <a href="<?= APP_URL ?>/migrate_champs_agents.php" target="_blank">Lancer la migration</a></div>
+
+<?php elseif ($champsPerso): ?>
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-sliders me-2" style="color:var(--ov-gold)"></i>Champs existants</h2></div>
+  <div class="ov-card-body">
+    <form method="POST" id="formSaveChamps">
+    <input type="hidden" name="action" value="save_champs_perso">
+    <div class="table-responsive">
+    <table class="ov-table">
+      <thead><tr><th>Actif</th><th>Label</th><th>Type</th><th>Obligatoire</th><th>Ordre</th><th>Supprimer</th></tr></thead>
+      <tbody>
+      <?php foreach ($champsPerso as $cp): ?>
+      <tr>
+        <td><input type="checkbox" name="cp[<?= $cp['id'] ?>][actif]" <?= $cp['actif']?'checked':'' ?> class="form-check-input"></td>
+        <td><input type="text" name="cp[<?= $cp['id'] ?>][label]" class="form-control form-control-sm" value="<?= h($cp['label']) ?>" style="min-width:150px"></td>
+        <td>
+          <span style="background:rgba(107,114,128,0.1);color:#6b7280;padding:2px 8px;border-radius:20px;font-size:0.72rem;display:inline-block">
+            <?= ['text'=>'Texte','textarea'=>'Texte long','date'=>'Date','select'=>'Liste','file'=>'Fichier'][$cp['type']] ?? $cp['type'] ?>
+          </span>
+        </td>
+        <td><input type="checkbox" name="cp[<?= $cp['id'] ?>][obligatoire]" <?= $cp['obligatoire']?'checked':'' ?> class="form-check-input"></td>
+        <td><input type="number" name="cp[<?= $cp['id'] ?>][ordre]" class="form-control form-control-sm" style="width:70px" value="<?= $cp['ordre'] ?>"></td>
+        <td>
+          <button type="submit" form="delChampForm<?= $cp['id'] ?>" class="btn-sm-icon delete"
+            data-confirm="Supprimer «<?= h($cp['label']) ?>» et toutes ses valeurs ?"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+
+    <?php foreach ($champsPerso as $cp): ?>
+    <form id="delChampForm<?= $cp['id'] ?>" method="POST" style="display:none">
+      <input type="hidden" name="action" value="del_champ_perso">
+      <input type="hidden" name="cp_id" value="<?= $cp['id'] ?>">
+    </form>
+    <?php endforeach; ?>
+  </div>
+</div>
+
+<?php else: ?>
+<div class="ov-card">
+  <div class="ov-card-body text-center text-muted py-4">
+    <i class="fa fa-sliders fa-2x mb-2 d-block" style="opacity:0.3"></i>
+    Aucun champ personnalisé. Utilisez le formulaire ci-dessus pour en créer.
+  </div>
+</div>
+<?php endif; ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var cpType = document.getElementById('cpTypeSelect');
+    if (cpType) cpType.addEventListener('change', function() {
+        document.getElementById('cpOptionsBlock').style.display = this.value === 'select' ? '' : 'none';
+    });
+});
+</script>
 </div>
 
 </div><!-- /tab-content -->

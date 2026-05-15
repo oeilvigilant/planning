@@ -57,7 +57,7 @@ function getChampVal(array $a, array $params, string $cle): string {
       <div class="carte-gold-bar"></div>
       <div class="d-flex h-100" style="padding:10px;gap:10px;align-items:flex-start">
         <!-- Photo -->
-        <?php if (in_array('photo', array_column(iterator_to_array($rectoChamps), 'cle'))): ?>
+        <?php if (in_array('photo', array_column(array_values($rectoChamps), 'cle'))): ?>
         <div style="flex-shrink:0">
           <?php if ($a['photo']): ?>
           <img src="<?= UPLOAD_URL ?>/<?= h($a['photo']) ?>" style="width:60px;height:70px;object-fit:cover;border-radius:4px;border:2px solid rgba(201,168,76,0.4)">
@@ -71,7 +71,7 @@ function getChampVal(array $a, array $params, string $cle): string {
         <!-- Infos -->
         <div style="flex:1;color:white;overflow:hidden">
           <!-- Logo -->
-          <?php if (in_array('logo', array_column(iterator_to_array($rectoChamps), 'cle'))): ?>
+          <?php if (in_array('logo', array_column(array_values($rectoChamps), 'cle'))): ?>
           <img src="<?= APP_URL ?>/assets/img/<?= h($params['logo_principal']??'logo.png') ?>" style="height:18px;filter:brightness(0) invert(1);margin-bottom:4px" onerror="this.style.display='none'">
           <?php endif; ?>
 

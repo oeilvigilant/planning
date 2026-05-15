@@ -76,6 +76,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            // Champs personnalisés
+            try {
+                $stmtCP = $db->query("SELECT * FROM agent_champs_perso WHERE actif=1 ORDER BY ordre");
+                foreach ($stmtCP->fetchAll() as $cp) {
+                    if ($cp['type'] === 'file') {
+                        if (!empty($_FILES['cp_'.$cp['id']]['name'])) {
+                            $fic = uploadFichier($_FILES['cp_'.$cp['id']], 'documents', ['pdf','jpg','jpeg','png']);
+                            if ($fic) $db->prepare("INSERT INTO agent_valeurs_perso (agent_id,champ_id,fichier) VALUES (?,?,?)")->execute([$agentId, $cp['id'], $fic]);
+                        }
+                    } else {
+                        $val = trim($_POST['cp_'.$cp['id']] ?? '');
+                        if ($val !== '') $db->prepare("INSERT INTO agent_valeurs_perso (agent_id,champ_id,valeur) VALUES (?,?,?)")->execute([$agentId, $cp['id'], $val]);
+                    }
+                }
+            } catch(Exception $e) {}
+
             flash('success', 'Agent ' . $data['prenom'] . ' ' . $data['nom'] . ' créé avec le matricule <strong>' . $matricule . '</strong>');
             header('Location: view.php?id=' . $agentId);
             exit;
@@ -357,6 +373,39 @@ require_once __DIR__ . '/../../includes/header.php';
       </div>
     </div>
   </div>
+
+  <?php
+  try {
+      $champsPerso = $db->query("SELECT * FROM agent_champs_perso WHERE actif=1 ORDER BY ordre")->fetchAll();
+  } catch(Exception $e) { $champsPerso = []; }
+  if ($champsPerso):
+  ?>
+  <div class="ov-card mb-3">
+    <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-sliders me-2" style="color:var(--ov-gold)"></i>Champs personnalisés</h2></div>
+    <div class="ov-card-body">
+      <?php foreach ($champsPerso as $cp): ?>
+      <div class="mb-3">
+        <label class="form-label"><?= h($cp['label']) ?><?= $cp['obligatoire'] ? ' <span class="text-danger">*</span>' : '' ?></label>
+        <?php if ($cp['type'] === 'textarea'): ?>
+        <textarea name="cp_<?= $cp['id'] ?>" class="form-control form-control-sm" rows="3" <?= $cp['obligatoire']?'required':'' ?>><?= h($data['cp_'.$cp['id']]??'') ?></textarea>
+        <?php elseif ($cp['type'] === 'date'): ?>
+        <input type="date" name="cp_<?= $cp['id'] ?>" class="form-control form-control-sm" value="<?= h($data['cp_'.$cp['id']]??'') ?>" <?= $cp['obligatoire']?'required':'' ?>>
+        <?php elseif ($cp['type'] === 'select'): ?>
+        <?php $opts = $cp['options'] ? (json_decode($cp['options'], true) ?: []) : []; ?>
+        <select name="cp_<?= $cp['id'] ?>" class="form-select form-select-sm" <?= $cp['obligatoire']?'required':'' ?>>
+          <option value="">—</option>
+          <?php foreach ($opts as $opt): ?><option value="<?= h($opt) ?>" <?= ($data['cp_'.$cp['id']]??'')===$opt?'selected':'' ?>><?= h($opt) ?></option><?php endforeach; ?>
+        </select>
+        <?php elseif ($cp['type'] === 'file'): ?>
+        <input type="file" name="cp_<?= $cp['id'] ?>" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png">
+        <?php else: ?>
+        <input type="text" name="cp_<?= $cp['id'] ?>" class="form-control form-control-sm" value="<?= h($data['cp_'.$cp['id']]??'') ?>" <?= $cp['obligatoire']?'required':'' ?>>
+        <?php endif; ?>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <div class="d-grid gap-2">
     <button type="submit" class="btn btn-ov-primary">
