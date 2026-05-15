@@ -17,9 +17,30 @@ if (!$a) { header('Location: index.php'); exit; }
 $params      = getAllParams();
 $champs      = $db->query("SELECT * FROM carte_champs WHERE actif=1 ORDER BY face, ordre")->fetchAll();
 $rectoChamps = array_values(array_filter($champs, fn($c) => $c['face'] === 'recto'));
-$versoChamps = array_values(array_filter($champs, fn($c) => $c['face'] === 'verso'));
 
-function getChampValPdf(array $a, array $params, string $cle): string {
+// Dimensions (mm) — passées depuis carte.php
+$wMm = max(85, min(210, (int)($_GET['w'] ?? 105)));
+$hMm = max(50, min(150, (int)($_GET['h'] ?? 74)));
+
+// Calcul des zones (mm)
+$headerH  = round($hMm * 0.42, 1);   // ~42% pour l'en-tête
+$bodyH    = round($hMm * 0.38, 1);   // ~38% pour le corps
+$footerH  = round($hMm * 0.16, 1);   // ~16% pour le pied
+$barH     = 1.5;                      // mm — barres noires
+$photoW   = round($wMm * 0.155, 1);  // largeur photo
+$photoH   = round($headerH - 4, 1);  // hauteur photo
+$logoColW = round($wMm * 0.22, 1);   // largeur colonne logo
+
+// Font sizes (pt) proportionnels à la largeur
+$fBase    = round($wMm * 0.063, 1);  // ~6.6pt pour 105mm
+$fCompany = round($wMm * 0.17,  1);  // ~17.8pt
+$fAddr    = round($wMm * 0.064, 1);
+$fSub     = round($wMm * 0.046, 1);
+$fField   = round($wMm * 0.066, 1);
+$fCnaps   = round($wMm * 0.049, 1);
+$fLegal   = round($wMm * 0.041, 1);
+
+function getChampValPdf2(array $a, array $params, string $cle): string {
     $agentMap = [
         'prenom_nom'             => trim($a['prenom'].' '.$a['nom']),
         'nom'                    => $a['nom'] ?? '',
@@ -27,6 +48,7 @@ function getChampValPdf(array $a, array $params, string $cle): string {
         'matricule'              => $a['matricule'] ?? '',
         'poste'                  => $a['poste'] ?? '',
         'num_autorisation_cnaps' => $a['num_autorisation_cnaps'] ?? '',
+        'date_naissance'         => !empty($a['date_naissance']) ? date('d/m/Y', strtotime($a['date_naissance'])) : '',
         'date_debut_contrat'     => $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
         'date_expiration_cnaps'  => $a['date_expiration_cnaps'] ? date('d/m/Y', strtotime($a['date_expiration_cnaps'])) : '',
     ];
@@ -39,7 +61,7 @@ function getChampValPdf(array $a, array $params, string $cle): string {
     return $agentMap[$cle] ?? $entMap[$cle] ?? '';
 }
 
-// Photo en base64 pour DomPDF
+// Images en base64
 $photoB64 = '';
 if ($a['photo'] && file_exists(UPLOAD_PATH.'/'.$a['photo'])) {
     $ext  = strtolower(pathinfo($a['photo'], PATHINFO_EXTENSION));
@@ -54,109 +76,322 @@ if (file_exists($logoPath)) {
     $logoB64 = 'data:'.$mime.';base64,'.base64_encode(file_get_contents($logoPath));
 }
 
-$initiales = strtoupper(substr($a['prenom'],0,1).substr($a['nom'],0,1));
+$companyName = $params['entreprise_nom'] ?? 'Oeil Vigilant';
+$companyAddr = strtoupper(trim(($params['entreprise_adresse']??'').' '.($params['entreprise_cp']??'').' '.($params['entreprise_ville']??'')));
+$slogan      = $params['entreprise_slogan'] ?? 'VOTRE SÉCURITÉ, NOTRE PRIORITÉ';
+$cnapsNum    = $a['num_autorisation_cnaps'] ?? '';
+$legalText   = $params['carte_mention_legale'] ?? "L'autorisation d'exercice ne confère aucune prérogative de puissance publique à l'entreprise ou aux personnes qui en bénéficient";
+$mat         = $a['matricule'] ?? '';
+$initiales   = strtoupper(substr($a['prenom'],0,1).substr($a['nom'],0,1));
+
+// Champs du corps (hors photo/logo)
+$bodyFields = [];
+foreach ($rectoChamps as $c) {
+    if (in_array($c['cle'], ['photo','logo'])) continue;
+    $val = getChampValPdf2($a, $params, $c['cle']);
+    if ($val !== '') $bodyFields[] = ['label' => $c['label'], 'value' => $val];
+}
 
 ob_start();
 ?>
-<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Arial, Helvetica, sans-serif; background: white; }
-.page { padding: 15mm; }
-.cards-row { display: table; width: 180mm; border-spacing: 8mm; }
-.card-cell { display: table-cell; vertical-align: top; }
-.carte {
-    width: 85.6mm; height: 53.98mm; border-radius: 5mm;
-    background: linear-gradient(135deg, #0f172a 0%, #1a2332 60%, #0f172a 100%);
-    position: relative; overflow: hidden; page-break-inside: avoid;
+
+@page {
+    size: <?= $wMm ?>mm <?= $hMm ?>mm;
+    margin: 0;
 }
-.gold-bar { height: 3mm; background: linear-gradient(90deg, #c9a84c, #f0d080, #c9a84c); }
-.card-inner { padding: 3mm 3mm 3mm 3mm; display: flex; height: 50.98mm; gap: 2.5mm; }
-.photo-box { flex-shrink: 0; }
-.photo-box img { width: 16mm; height: 19mm; object-fit: cover; border-radius: 1mm; border: 0.5mm solid rgba(201,168,76,0.5); }
-.initiales { width: 16mm; height: 19mm; border-radius: 1mm; background: rgba(201,168,76,0.15); border: 0.5mm solid rgba(201,168,76,0.4); display: flex; align-items: center; justify-content: center; color: #c9a84c; font-weight: 700; font-size: 9pt; }
-.info-box { flex: 1; color: white; overflow: hidden; }
-.logo-img { height: 5mm; margin-bottom: 1mm; filter: brightness(0) invert(1); }
-.field-name { font-size: 5.5pt; font-weight: 700; color: #c9a84c; margin-bottom: 0.8mm; }
-.field-label { font-size: 4.5pt; color: rgba(255,255,255,0.45); display: block; }
-.field-value { font-size: 5pt; color: rgba(255,255,255,0.85); margin-bottom: 1mm; }
-.section-title { font-size: 5.5pt; font-weight: 700; color: #c9a84c; text-transform: uppercase; letter-spacing: 0.5pt; margin-bottom: 2mm; }
-.verso-inner { padding: 3mm; color: white; height: 50.98mm; position: relative; }
-.verso-logo { position: absolute; bottom: 3mm; right: 3mm; opacity: 0.25; }
-.label-title { font-size: 5pt; color: rgba(255,255,255,0.4); margin-bottom: 3mm; font-style: italic; }
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: white;
+    width: <?= $wMm ?>mm;
+    height: <?= $hMm ?>mm;
+    overflow: hidden;
+}
+
+/* ── Carte ── */
+.badge {
+    width: <?= $wMm ?>mm;
+    height: <?= $hMm ?>mm;
+    background: #ffffff;
+    position: relative;
+    overflow: hidden;
+    border: 0.3mm solid #999;
+}
+
+/* Barres noires */
+.bar-top, .bar-bot {
+    width: 100%;
+    height: <?= $barH ?>mm;
+    background: #111111;
+    font-size: 0;
+    line-height: 0;
+}
+
+/* ── En-tête (table 3 colonnes) ── */
+.bc-header {
+    width: 100%;
+    border-collapse: collapse;
+}
+.bc-header td {
+    vertical-align: top;
+    padding: 1.5mm 2mm 1mm 2mm;
+}
+.td-logo {
+    width: <?= $logoColW ?>mm;
+    text-align: left;
+}
+.td-center {
+    text-align: center;
+}
+.td-photo {
+    width: <?= ($photoW + 4) ?>mm;
+    text-align: center;
+}
+
+/* Logo */
+.logo-img {
+    height: <?= round($headerH * 0.45, 1) ?>mm;
+    max-width: <?= ($logoColW - 2) ?>mm;
+}
+.logo-name {
+    font-size: <?= $fSub ?>pt;
+    font-weight: 700;
+    letter-spacing: 0.3pt;
+    color: #111;
+    margin-top: 0.8mm;
+    text-transform: uppercase;
+}
+.logo-slogan {
+    font-size: <?= round($fSub * 0.85, 1) ?>pt;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.2pt;
+    line-height: 1.2;
+}
+
+/* Société centre */
+.company-name {
+    font-family: Georgia, serif;
+    font-size: <?= $fCompany ?>pt;
+    font-weight: 400;
+    letter-spacing: 0.5pt;
+    color: #111;
+    line-height: 1.1;
+}
+.company-addr {
+    font-size: <?= $fAddr ?>pt;
+    color: #333;
+    margin-top: 0.8mm;
+    letter-spacing: 0.2pt;
+}
+
+/* Photo + matricule */
+.photo-img {
+    width: <?= $photoW ?>mm;
+    height: <?= $photoH ?>mm;
+    border: 0.3mm solid #ccc;
+}
+.photo-placeholder {
+    width: <?= $photoW ?>mm;
+    height: <?= $photoH ?>mm;
+    border: 0.3mm solid #ccc;
+    background: #f0f0f0;
+    font-size: <?= round($fBase * 1.5, 1) ?>pt;
+    font-weight: 700;
+    color: #777;
+    text-align: center;
+    line-height: <?= $photoH ?>mm;
+}
+.mat-label {
+    font-size: <?= $fSub ?>pt;
+    font-weight: 700;
+    color: #111;
+    margin-top: 0.5mm;
+    text-align: center;
+}
+
+/* Séparateur */
+.sep {
+    height: 0.3mm;
+    background: #ccc;
+    margin: 0 2mm;
+}
+
+/* ── Corps ── */
+.bc-body {
+    padding: 1.5mm 3.5mm 1mm 3.5mm;
+    position: relative;
+    height: <?= $bodyH ?>mm;
+    overflow: hidden;
+}
+
+/* Filigrane (position absolute) */
+.watermark {
+    position: absolute;
+    top: 1mm;
+    left: 50%;
+    margin-left: -<?= round($wMm * 0.24, 0) ?>mm;
+    width: <?= round($wMm * 0.48, 0) ?>mm;
+    text-align: center;
+    opacity: 0.06;
+}
+.watermark img {
+    width: 100%;
+}
+.wm-text {
+    font-size: <?= round($fBase * 1.3, 1) ?>pt;
+    font-weight: 700;
+    color: #000;
+    letter-spacing: 1pt;
+    text-transform: uppercase;
+    opacity: 0.06;
+    text-align: center;
+    margin-top: -2mm;
+}
+
+/* Champs */
+.bc-field {
+    font-size: <?= $fField ?>pt;
+    color: #111;
+    margin-bottom: 0.9mm;
+    line-height: 1.2;
+}
+.bc-field b { font-weight: 700; }
+
+/* ── Pied de page ── */
+.bc-footer {
+    padding: 1mm 3mm 0.5mm;
+    border-top: 0.2mm solid #e0e0e0;
+    text-align: center;
+    height: <?= $footerH ?>mm;
+    overflow: hidden;
+}
+.cnaps-txt {
+    font-size: <?= $fCnaps ?>pt;
+    color: #333;
+}
+.legal-txt {
+    font-size: <?= $fLegal ?>pt;
+    color: #666;
+    margin-top: 0.5mm;
+    line-height: 1.3;
+}
 </style>
-</head><body>
-<div class="page">
-<div style="display:table;width:100%;margin-bottom:5mm">
-  <div style="display:table-cell;vertical-align:middle">
-    <div style="font-size:11pt;font-weight:700;color:#1a2332">Carte agent — <?= htmlspecialchars($a['prenom'].' '.$a['nom']) ?></div>
-    <div style="font-size:8pt;color:#6b7280">Généré le <?= date('d/m/Y') ?></div>
-  </div>
-</div>
+</head>
+<body>
+<div class="badge">
 
-<table style="border-spacing:8mm;border-collapse:separate">
-<tr>
-<!-- RECTO -->
-<td>
-  <div style="font-size:8pt;font-weight:600;color:#374151;margin-bottom:2mm">Recto</div>
-  <div class="carte">
-    <div class="gold-bar"></div>
-    <div class="card-inner">
-      <?php if (in_array('photo', array_column($rectoChamps, 'cle'))): ?>
-      <div class="photo-box">
-        <?php if ($photoB64): ?>
-        <img src="<?= $photoB64 ?>">
-        <?php else: ?>
-        <div class="initiales"><?= $initiales ?></div>
-        <?php endif; ?>
-      </div>
-      <?php endif; ?>
-      <div class="info-box">
-        <?php if (in_array('logo', array_column($rectoChamps, 'cle')) && $logoB64): ?>
-        <img src="<?= $logoB64 ?>" class="logo-img">
-        <?php endif; ?>
-        <?php foreach ($rectoChamps as $c):
-          if (in_array($c['cle'], ['photo','logo'])) continue;
-          $val = getChampValPdf($a, $params, $c['cle']);
-          if (!$val) continue;
-          $isName = $c['cle'] === 'prenom_nom';
-        ?>
-        <div class="<?= $isName ? 'field-name' : 'field-value' ?>">
-          <?php if (!$isName): ?><span class="field-label"><?= htmlspecialchars($c['label']) ?></span><?php endif; ?>
-          <?= htmlspecialchars($val) ?>
-        </div>
-        <?php endforeach; ?>
-      </div>
-    </div>
-  </div>
-</td>
+  <!-- Barre supérieure -->
+  <div class="bar-top"></div>
 
-<!-- VERSO -->
-<td>
-  <div style="font-size:8pt;font-weight:600;color:#374151;margin-bottom:2mm">Verso</div>
-  <div class="carte">
-    <div class="gold-bar"></div>
-    <div class="verso-inner">
-      <div class="section-title"><?= htmlspecialchars($params['entreprise_nom'] ?? 'Oeil Vigilant') ?></div>
-      <?php foreach ($versoChamps as $c):
-        $val = getChampValPdf($a, $params, $c['cle']);
-        if (!$val) continue;
-      ?>
-      <div class="field-value">
-        <span class="field-label"><?= htmlspecialchars($c['label']) ?></span>
-        <?= htmlspecialchars($val) ?>
-      </div>
-      <?php endforeach; ?>
+  <!-- En-tête -->
+  <table class="bc-header">
+  <tr>
+
+    <!-- Logo gauche -->
+    <td class="td-logo">
       <?php if ($logoB64): ?>
-      <div class="verso-logo"><img src="<?= $logoB64 ?>" style="height:8mm"></div>
+      <img src="<?= $logoB64 ?>" class="logo-img" alt="">
       <?php endif; ?>
+      <div class="logo-name"><?= htmlspecialchars(strtoupper($companyName)) ?></div>
+      <?php if ($slogan): ?>
+      <div class="logo-slogan"><?= htmlspecialchars(strtoupper($slogan)) ?></div>
+      <?php endif; ?>
+    </td>
+
+    <!-- Société centre -->
+    <td class="td-center">
+      <div class="company-name"><?= htmlspecialchars($companyName) ?></div>
+      <?php if ($companyAddr): ?>
+      <div class="company-addr"><?= htmlspecialchars($companyAddr) ?></div>
+      <?php endif; ?>
+    </td>
+
+    <!-- Photo droite -->
+    <td class="td-photo">
+      <?php if ($photoB64): ?>
+      <img src="<?= $photoB64 ?>" class="photo-img" alt="">
+      <?php else: ?>
+      <div class="photo-placeholder"><?= htmlspecialchars($initiales) ?></div>
+      <?php endif; ?>
+      <?php if ($mat): ?>
+      <div class="mat-label">MAT: <?= htmlspecialchars($mat) ?></div>
+      <?php endif; ?>
+    </td>
+
+  </tr>
+  </table>
+
+  <!-- Séparateur -->
+  <div class="sep"></div>
+
+  <!-- Corps -->
+  <div class="bc-body">
+
+    <!-- Filigrane -->
+    <?php if ($logoB64): ?>
+    <div class="watermark">
+      <img src="<?= $logoB64 ?>" alt="">
     </div>
+    <?php endif; ?>
+    <div class="wm-text"><?= htmlspecialchars(strtoupper($companyName)) ?></div>
+
+    <?php foreach ($bodyFields as $f): ?>
+    <div class="bc-field">
+      <b><?= htmlspecialchars($f['label']) ?> :</b>
+      <?= htmlspecialchars($f['value']) ?>
+    </div>
+    <?php endforeach; ?>
+
   </div>
-</td>
-</tr>
-</table>
+
+  <!-- Pied de page -->
+  <?php if ($cnapsNum || $legalText): ?>
+  <div class="bc-footer">
+    <?php if ($cnapsNum): ?>
+    <div class="cnaps-txt">CNAPS : <?= htmlspecialchars($cnapsNum) ?></div>
+    <?php endif; ?>
+    <?php if ($legalText): ?>
+    <div class="legal-txt"><?= htmlspecialchars($legalText) ?></div>
+    <?php endif; ?>
+  </div>
+  <?php endif; ?>
+
+  <!-- Barre inférieure -->
+  <div class="bar-bot"></div>
+
 </div>
-</body></html>
+</body>
+</html>
 <?php
 $html = ob_get_clean();
-renderPdf($html, 'carte_'.strtolower($a['nom']).'_'.strtolower($a['prenom']).'.pdf');
+
+// Rendu DomPDF avec taille personnalisée
+if (file_exists(DOMPDF_AUTOLOAD)) {
+    require_once DOMPDF_AUTOLOAD;
+    $options = new \Dompdf\Options();
+    $options->set('isHtml5ParserEnabled', true);
+    $options->set('isRemoteEnabled', false);   // images base64 uniquement
+    $options->set('defaultFont', 'Arial');
+    $options->set('chroot', APP_ROOT);
+    $dompdf = new \Dompdf\Dompdf($options);
+    $dompdf->loadHtml($html, 'UTF-8');
+    // Taille personnalisée en points (1mm = 2.83465 pt)
+    $mmToPt = 2.83465;
+    $dompdf->setPaper([0, 0, $wMm * $mmToPt, $hMm * $mmToPt]);
+    $dompdf->render();
+    $filename = 'badge_'.strtolower($a['nom']).'_'.strtolower($a['prenom']).'.pdf';
+    $dompdf->stream($filename, ['Attachment' => true]);
+    exit;
+}
+// Fallback navigateur
+header('Content-Type: text/html; charset=utf-8');
+echo $html;
+echo '<script>window.onload=function(){window.print();}</script>';
+exit;

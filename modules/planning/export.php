@@ -27,6 +27,24 @@ if ($agentIds !== '') {
 
 $nomsJs = ['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
 $params = getAllParams();
+
+$shifts = [
+    'J'  => ['label'=>'Journée', 'debut'=>'07:00', 'fin'=>'19:00', 'color'=>'#16a34a'],
+    'N'  => ['label'=>'Nuit',    'debut'=>'19:00', 'fin'=>'07:00', 'color'=>'#4f46e5'],
+    'M'  => ['label'=>'Matin',   'debut'=>'06:00', 'fin'=>'14:00', 'color'=>'#ea580c'],
+    'S'  => ['label'=>'Soir',    'debut'=>'14:00', 'fin'=>'22:00', 'color'=>'#7c3aed'],
+    'NC' => ['label'=>'Nuit C.', 'debut'=>'22:00', 'fin'=>'06:00', 'color'=>'#1d4ed8'],
+];
+
+function detectShiftExport($hDeb, $hFin, $shifts) {
+    foreach ($shifts as $code => $s) {
+        if (substr($s['debut'],0,5) === $hDeb && substr($s['fin'],0,5) === $hFin) {
+            return $code;
+        }
+    }
+    return null;
+}
+
 $planningData = [];
 $feries       = [];
 
@@ -126,7 +144,12 @@ if ($format === 'excel') {
                 $dateStr = $dt->format('Y-m-d');
                 $ligne   = $planningData[$ag['id']][$dateStr] ?? null;
                 if ($ligne) {
-                    $row[] = substr($ligne['heure_debut'],0,5).'→'.substr($ligne['heure_fin'],0,5).($ligne['depasse_minuit']?'+1':'');
+                    $hD = substr($ligne['heure_debut'],0,5);
+                    $hF = substr($ligne['heure_fin'],0,5);
+                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                    $dur  = round($minT/60).'h';
+                    $code = detectShiftExport($hD, $hF, $shifts);
+                    $row[] = ($code ? $code.' ' : '').$hD.'→'.$hF.($ligne['depasse_minuit']?'+1':'').' '.$dur;
                     foreach (['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
                         $totMin[$t] += (int)$ligne['min_'.$t];
                     }
@@ -139,7 +162,12 @@ if ($format === 'excel') {
                 $date  = sprintf('%04d-%02d-%02d', $annee, $mois, $d);
                 $ligne = $planningData[$ag['id']][$date] ?? null;
                 if ($ligne) {
-                    $row[] = substr($ligne['heure_debut'],0,5).'→'.substr($ligne['heure_fin'],0,5).($ligne['depasse_minuit']?'+1':'');
+                    $hD = substr($ligne['heure_debut'],0,5);
+                    $hF = substr($ligne['heure_fin'],0,5);
+                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                    $dur  = round($minT/60).'h';
+                    $code = detectShiftExport($hD, $hF, $shifts);
+                    $row[] = ($code ? $code.' ' : '').$hD.'→'.$hF.($ligne['depasse_minuit']?'+1':'').' '.$dur;
                     foreach (['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
                         $totMin[$t] += (int)$ligne['min_'.$t];
                     }
@@ -173,6 +201,9 @@ td.agent-name { text-align: left; padding-left: 6px; font-weight: 600; }
 .dimanche { background: rgba(239,68,68,0.06); }
 .total-col { font-weight: 700; border-left: 2px solid #e5e7eb; }
 tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
+.shift-code { font-weight: 900; font-size: 7pt; line-height: 1.1; }
+.shift-times { font-size: 5.5pt; line-height: 1.2; }
+.shift-dur { font-size: 5.5pt; color: #6b7280; }
 </style>
 </head><body>';
 
@@ -222,7 +253,18 @@ foreach ($agents as $ag) {
                 $hFin = substr($ligne['heure_fin'],0,5);
                 $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
-                $row .= '<td class="'.$cls.'">'.$hDeb.'<br>'.$hFin.($ligne['depasse_minuit']?'<sup>+1</sup>':'').'</td>';
+                $code  = detectShiftExport($hDeb, $hFin, $shifts);
+                $color = $code ? $shifts[$code]['color'] : '#374151';
+                $dur   = round($minT/60).'h';
+                $hFin2 = $hFin.($ligne['depasse_minuit']?'<sup>+1</sup>':'');
+                $row .= '<td class="'.$cls.'">'
+                    .'<span class="shift-code" style="color:'.$color.'">'
+                    .($code ? $code : $hDeb.'→'.$hFin2)
+                    .'</span>';
+                if ($code) {
+                    $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDeb.'→'.$hFin2.'</span>';
+                }
+                $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
@@ -239,7 +281,18 @@ foreach ($agents as $ag) {
                 $hFin  = substr($ligne['heure_fin'],0,5);
                 $minT  = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
-                $row .= '<td class="'.$cls.'">'.$hDeb.'<br>'.$hFin.($ligne['depasse_minuit']?'<sup>+1</sup>':'').'</td>';
+                $code  = detectShiftExport($hDeb, $hFin, $shifts);
+                $color = $code ? $shifts[$code]['color'] : '#374151';
+                $dur   = round($minT/60).'h';
+                $hFin2 = $hFin.($ligne['depasse_minuit']?'<sup>+1</sup>':'');
+                $row .= '<td class="'.$cls.'">'
+                    .'<span class="shift-code" style="color:'.$color.'">'
+                    .($code ? $code : $hDeb.'→'.$hFin2)
+                    .'</span>';
+                if ($code) {
+                    $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDeb.'→'.$hFin2.'</span>';
+                }
+                $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
