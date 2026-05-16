@@ -25,7 +25,7 @@ jobs:
           port: 21
           protocol: ftp
           local-dir: ./
-          server-dir: /planning/
+          server-dir: /
           exclude: |
             **/.git*
             **/.git*/**
