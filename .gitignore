@@ -1,5 +1,6 @@
 # Configuration sensible (DB credentials, secrets)
 config/config.php
+config/config.lws.php
 
 # Uploads utilisateurs (photos, documents agents)
 uploads/photos/*
