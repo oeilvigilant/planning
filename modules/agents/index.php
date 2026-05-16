@@ -149,6 +149,13 @@ $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn(
                         <?php endif; ?>
                         <a href="carte.php?id=<?= $a['id'] ?>" class="btn-sm-icon print" title="Carte agent"><i class="fa fa-id-card"></i></a>
                         <a href="export_pdf.php?id=<?= $a['id'] ?>" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="Export PDF"><i class="fa fa-file-pdf"></i></a>
+                        <?php if (canDo('agents','delete')): ?>
+                        <a href="view.php?id=<?= $a['id'] ?>#" onclick="event.preventDefault();document.getElementById('del-<?= $a['id'] ?>').submit()" class="btn-sm-icon delete" title="Supprimer / Désactiver"><i class="fa fa-trash"></i></a>
+                        <form id="del-<?= $a['id'] ?>" method="POST" action="delete.php" style="display:none" onsubmit="return confirm('Désactiver <?= addslashes($a['prenom'].' '.$a['nom']) ?> ?\n\nPour une suppression définitive, ouvrez la fiche agent.')">
+                            <input type="hidden" name="id" value="<?= $a['id'] ?>">
+                            <input type="hidden" name="action" value="deactivate">
+                        </form>
+                        <?php endif; ?>
                     </div>
                 </td>
             </tr>

@@ -47,6 +47,15 @@ $docsLabels = [
 ];
 ?>
 
+<?php
+// Impact counts pour le modal de suppression
+$nbPlanning = 0; $nbDocs = 0;
+if (canDo('agents','delete')) {
+    $s1 = $db->prepare("SELECT COUNT(*) FROM planning_lignes WHERE agent_id=?"); $s1->execute([$id]); $nbPlanning = (int)$s1->fetchColumn();
+    $s2 = $db->prepare("SELECT COUNT(*) FROM agent_documents WHERE agent_id=?"); $s2->execute([$id]); $nbDocs = (int)$s2->fetchColumn();
+}
+?>
+
 <div class="d-flex gap-2 mb-3 flex-wrap">
     <a href="index.php" class="btn btn-ov-secondary"><i class="fa fa-arrow-left me-1"></i>Retour</a>
     <?php if (canDo('agents','edit')): ?>
@@ -57,6 +66,11 @@ $docsLabels = [
     <a href="contrat.php?id=<?= $id ?>" class="btn" style="background:rgba(201,168,76,0.1);color:#92400e;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-file-contract me-1"></i>Contrat</a>
     <?php if (canDo('agents','create')): ?>
     <a href="token.php?id=<?= $id ?>" class="btn" style="background:rgba(99,102,241,0.1);color:#4f46e5;border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-link me-1"></i>Lien auto-remplissage</a>
+    <?php endif; ?>
+    <?php if (canDo('agents','delete')): ?>
+    <button type="button" class="btn ms-auto" style="background:rgba(239,68,68,0.08);color:#dc2626;border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem" data-bs-toggle="modal" data-bs-target="#modalDelete">
+        <i class="fa fa-trash me-1"></i>Supprimer
+    </button>
     <?php endif; ?>
 </div>
 
@@ -277,5 +291,56 @@ $docsLabels = [
   </div>
 </div>
 </div>
+
+<?php if (canDo('agents','delete')): ?>
+<!-- Modal suppression agent -->
+<div class="modal fade" id="modalDelete" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold"><i class="fa fa-triangle-exclamation text-warning me-2"></i>Supprimer <?= h($a['prenom'].' '.$a['nom']) ?></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert mb-3" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:8px;font-size:0.875rem">
+          <strong>Impact de la suppression définitive :</strong>
+          <ul class="mb-0 mt-1">
+            <li><?= $nbPlanning ?> ligne<?= $nbPlanning > 1 ? 's' : '' ?> de planning</li>
+            <li><?= $nbDocs ?> document<?= $nbDocs > 1 ? 's' : '' ?> joint<?= $nbDocs > 1 ? 's' : '' ?></li>
+            <?php if ($a['photo']): ?><li>1 photo de profil</li><?php endif; ?>
+          </ul>
+        </div>
+        <p style="font-size:0.875rem">Choisissez une action :</p>
+        <div class="d-flex flex-column gap-2">
+
+          <!-- Désactiver -->
+          <form method="POST" action="delete.php">
+            <input type="hidden" name="id" value="<?= $id ?>">
+            <input type="hidden" name="action" value="deactivate">
+            <button type="submit" class="btn w-100 text-start" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:0.75rem 1rem">
+              <div class="fw-bold" style="color:#b45309"><i class="fa fa-eye-slash me-2"></i>Désactiver l'agent</div>
+              <div style="font-size:0.78rem;color:#92400e;margin-top:2px">L'agent reste en base mais n'apparaît plus dans le planning. Réversible.</div>
+            </button>
+          </form>
+
+          <!-- Supprimer définitivement -->
+          <form method="POST" action="delete.php" onsubmit="return confirm('Supprimer définitivement <?= addslashes($a['prenom'].' '.$a['nom']) ?> ? Cette action est irréversible.')">
+            <input type="hidden" name="id" value="<?= $id ?>">
+            <input type="hidden" name="action" value="hard_delete">
+            <button type="submit" class="btn w-100 text-start" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:0.75rem 1rem">
+              <div class="fw-bold" style="color:#dc2626"><i class="fa fa-trash me-2"></i>Supprimer définitivement</div>
+              <div style="font-size:0.78rem;color:#991b1b;margin-top:2px">Supprime l'agent, son planning (<?= $nbPlanning ?> ligne<?= $nbPlanning>1?'s':'' ?>), ses documents et sa photo. Irréversible.</div>
+            </button>
+          </form>
+
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-ov-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+      </div>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 <?php include __DIR__ . '/../../includes/footer.php'; ?>
