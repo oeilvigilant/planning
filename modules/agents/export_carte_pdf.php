@@ -40,8 +40,8 @@ $fCnaps    = round($wMm * 0.031, 1);
 $fLegal    = round($wMm * 0.026, 1);
 
 // ── Photo / Logo (mm) ────────────────────────────────────────────────
-$phW     = round($hMm * 0.26, 1);
-$phH     = round($hMm * 0.33, 1);
+$phH     = round($hdrH * 0.82, 1);
+$phW     = round($phH  * 0.68, 1);  // ratio portrait 2:3
 $logoH   = round($hdrH * 0.44, 1);
 $logoCol = round($wMm * 0.21, 1);
 $photoCol= round($wMm * 0.19, 1);

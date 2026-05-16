@@ -46,9 +46,9 @@ $fMat      = (int)round($bW * 0.013);   // Matricule
 $fCnaps    = (int)round($bW * 0.012);   // CNAPS
 $fLegal    = (int)round($bW * 0.011);   // Mention légale
 
-// Photo (px)
-$phW       = (int)round($bH * 0.52);
-$phH       = (int)round($bH * 0.65);
+// Photo (px) — doit tenir dans l'en-tête
+$phH       = (int)round($hdrH * 0.82);
+$phW       = (int)round($phH * 0.68);  // ratio portrait 2:3
 
 // Logo height dans l'en-tête
 $logoH     = (int)round($hdrH * 0.46);
