@@ -327,7 +327,7 @@ ob_start();
 
     <!-- Pied de page fixe -->
     <div class="footer">
-        <div class="footer-line1">Oeil Vigilant (SAS) &nbsp;·&nbsp; 58 RUE DE MONCEAU 75008 PARIS &nbsp;·&nbsp; contact@oeilvigilant.com</div>
+        <div class="footer-line1" style="text-align:center">Oeil Vigilant (SAS) &nbsp;·&nbsp; 58 RUE DE MONCEAU 75008 PARIS &nbsp;·&nbsp; contact@oeilvigilant.com</div>
         <div class="footer-line2">SIREN : 928 552 702 &nbsp;·&nbsp; TVA : FR90928552702 &nbsp;·&nbsp; Tél : +33 (0)7 78 54 24 35 / +33 (0)7 84 90 19 93 &nbsp;·&nbsp; N° autorisation : AUT-075-2123-06-21-20240934026</div>
         <div class="footer-legal">L'autorisation d'exercice ne confère aucune prérogative de puissance publique à l'entreprise ou aux personnes qui en bénéficient.</div>
     </div>
