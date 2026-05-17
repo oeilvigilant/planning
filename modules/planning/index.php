@@ -986,12 +986,28 @@ if ($vue === 'semaine') {
           <div id="exportPeriodInfo" style="font-size:0.85rem;color:var(--ov-navy);font-weight:700;padding:7px 12px;background:#f8f9fa;border-radius:6px;border-left:3px solid var(--ov-gold)"></div>
         </div>
         <div class="mb-3">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="exportCustomDates">
+            <label class="form-check-label" style="font-size:0.82rem;font-weight:600" for="exportCustomDates">Dates spécifiques</label>
+          </div>
+          <div id="exportDateRange" style="display:none" class="row g-2 ps-1">
+            <div class="col-6">
+              <label class="form-label" style="font-size:0.78rem">Du</label>
+              <input type="date" id="exportDateDebut" class="form-control form-control-sm">
+            </div>
+            <div class="col-6">
+              <label class="form-label" style="font-size:0.78rem">Au</label>
+              <input type="date" id="exportDateFin" class="form-control form-control-sm">
+            </div>
+          </div>
+        </div>
+        <div class="mb-3">
           <label class="form-label" style="font-size:0.82rem;font-weight:600">Agents</label>
           <div class="form-check mb-2">
             <input class="form-check-input" type="checkbox" id="exportAllAgents" checked>
             <label class="form-check-label" style="font-size:0.82rem" for="exportAllAgents">Tous les agents</label>
           </div>
-          <div id="exportAgentList" style="display:none;max-height:180px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px">
+          <div id="exportAgentList" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px;padding:8px">
             <?php foreach ($allAgents as $ag): ?>
             <div class="form-check">
               <input class="form-check-input export-agent-cb" type="checkbox" value="<?= $ag['id'] ?>" id="eag<?= $ag['id'] ?>" checked>
@@ -1373,6 +1389,13 @@ if (exportAllCb) {
     });
 }
 
+var exportCustomDatesCb = document.getElementById('exportCustomDates');
+if (exportCustomDatesCb) {
+    exportCustomDatesCb.addEventListener('change', function() {
+        document.getElementById('exportDateRange').style.display = this.checked ? '' : 'none';
+    });
+}
+
 window.doExport = function() {
     var format    = document.querySelector('input[name="exportFormat"]:checked').value;
     var allAgents = document.getElementById('exportAllAgents').checked;
@@ -1383,13 +1406,22 @@ window.doExport = function() {
         if (!ids.length) { alert('Sélectionnez au moins un agent.'); return; }
         agentIds = ids.join(',');
     }
+    var customDates = document.getElementById('exportCustomDates').checked;
+    var dateDebut   = customDates ? document.getElementById('exportDateDebut').value : '';
+    var dateFin     = customDates ? document.getElementById('exportDateFin').value   : '';
+    if (customDates && (!dateDebut || !dateFin)) {
+        alert('Veuillez saisir les deux dates.');
+        return;
+    }
     var url;
     if (exportVue === 'semaine') {
         url = 'export.php?type=week&semaine=' + exportSemaine + '&annee=' + currentAnnee + '&format=' + format;
     } else {
         url = 'export.php?version_id=' + exportVersionId + '&format=' + format;
     }
-    if (agentIds) url += '&agent_ids=' + encodeURIComponent(agentIds);
+    if (agentIds)  url += '&agent_ids='   + encodeURIComponent(agentIds);
+    if (dateDebut) url += '&date_debut='  + encodeURIComponent(dateDebut);
+    if (dateFin)   url += '&date_fin='    + encodeURIComponent(dateFin);
     exportModal.hide();
     window.location.href = url;
 };

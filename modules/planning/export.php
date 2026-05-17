@@ -45,8 +45,12 @@ function detectShiftExport($hDeb, $hFin, $shifts) {
     return null;
 }
 
-$planningData = [];
-$feries       = [];
+$planningData    = [];
+$feries          = [];
+$dateDebutFilter = $_GET['date_debut'] ?? '';
+$dateFinFilter   = $_GET['date_fin']   ?? '';
+$jourDebut       = 1;
+$jourFin         = 31;
 
 // ── Données planning ──────────────────────────────────────────────────────────
 if ($type === 'week') {
@@ -81,6 +85,9 @@ if ($type === 'week') {
     for ($i = 0; $i < 7; $i++) {
         $d = clone $lundi;
         $d->modify("+$i days");
+        $ds = $d->format('Y-m-d');
+        if ($dateDebutFilter && $ds < $dateDebutFilter) continue;
+        if ($dateFinFilter   && $ds > $dateFinFilter)   continue;
         $dates[] = $d;
     }
 
@@ -110,7 +117,22 @@ if ($type === 'week') {
 
     $feries       = getJoursFeries($annee);
     $nbJours      = (int)date('t', mktime(0,0,0,$mois,1,$annee));
+    // Plage filtrée
+    $jourDebut = 1;
+    $jourFin   = $nbJours;
+    if ($dateDebutFilter) {
+        $df = date('Y-m-d', mktime(0,0,0,$mois,$jourDebut,$annee));
+        if ($dateDebutFilter > $df) $jourDebut = (int)date('j', strtotime($dateDebutFilter));
+    }
+    if ($dateFinFilter) {
+        $df = date('Y-m-d', mktime(0,0,0,$mois,$jourFin,$annee));
+        if ($dateFinFilter < $df) $jourFin = (int)date('j', strtotime($dateFinFilter));
+    }
     $periodeLabel = formatMois($mois, $annee) . ' — V' . $version['version'];
+    if ($dateDebutFilter || $dateFinFilter) {
+        $periodeLabel .= ' (du '.($dateDebutFilter ? date('d/m', strtotime($dateDebutFilter)) : '01')
+                       .' au '.($dateFinFilter ? date('d/m', strtotime($dateFinFilter)) : date('d/m', mktime(0,0,0,$mois,$nbJours,$annee))).')';
+    }
     $fileLabel    = sprintf('%02d', $mois) . '_' . $annee . '_v' . $version['version'];
 }
 
@@ -189,11 +211,11 @@ if ($format === 'excel') {
 // ── Export PDF ────────────────────────────────────────────────────────────────
 $html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <style>
-body { font-family: Arial, sans-serif; font-size: 7pt; margin: 0; padding: 10mm; color: #1a2332; }
+body { font-family: Arial, sans-serif; font-size: 7pt; margin: 0; padding: 8mm 10mm 24mm 10mm; color: #1a2332; }
 h1 { font-size: 12pt; color: #1a2332; margin-bottom: 3px; }
 .version-badge { background: #c9a84c; color: white; padding: 2px 8px; border-radius: 10px; font-size: 7pt; }
 table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-th { background: #1a2332; color: white; padding: 4px 3px; text-align: center; font-size: 6.5pt; }
+th { background: #eef0f4; color: #1a2332; padding: 4px 3px; text-align: center; font-size: 6.5pt; font-weight: 600; border-bottom: 1.5px solid #c9a84c; }
 th.agent-col { text-align: left; padding-left: 6px; }
 td { padding: 3px 2px; text-align: center; border-bottom: 1px solid #f0f2f5; font-size: 6.5pt; }
 td.agent-name { text-align: left; padding-left: 6px; font-weight: 600; }
@@ -204,6 +226,12 @@ tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
 .shift-code { font-weight: 900; font-size: 7pt; line-height: 1.1; }
 .shift-times { font-size: 5.5pt; line-height: 1.2; }
 .shift-dur { font-size: 5.5pt; color: #6b7280; }
+tfoot td { background: #f4f6fa; font-weight: 700; border-top: 2px solid #c9a84c; font-size: 6.5pt; color: #1a2332; }
+tfoot td.agent-name { text-align: left; padding-left: 6px; color: #666; font-size: 6pt; }
+.footer-pdf { position: fixed; bottom: 0; left: 0; right: 0; font-size: 6pt; color: #555; border-top: 1.5px solid #c9a84c; padding: 3px 10mm 2px 10mm; background: #fafaf8; }
+.footer-pdf-l1 { font-weight: 700; color: #1a2332; text-align: center; }
+.footer-pdf-l2 { color: #555; }
+.footer-pdf-legal { color: #888; font-style: italic; }
 </style>
 </head><body>';
 
@@ -218,6 +246,9 @@ $html .= '</div>';
 $html .= '<table><thead><tr>';
 $html .= '<th class="agent-col" style="min-width:80px">Agent</th>';
 
+// Accumulateurs par colonne (date => minutes)
+$totauxJour = [];
+
 if ($type === 'week') {
     foreach ($dates as $dt) {
         $dateStr = $dt->format('Y-m-d');
@@ -225,14 +256,16 @@ if ($type === 'week') {
         $isFer   = in_array($dateStr, $feries);
         $bg      = $isFer ? 'background:#fde68a;color:#92400e;' : ($jourSem==7 ? 'background:#fca5a5;color:#7f1d1d;' : '');
         $html   .= '<th style="'.$bg.'">'.$nomsJs[$jourSem].'<br>'.$dt->format('d').'</th>';
+        $totauxJour[$dateStr] = 0;
     }
 } else {
-    for ($d = 1; $d <= $nbJours; $d++) {
+    for ($d = $jourDebut; $d <= $jourFin; $d++) {
         $date    = sprintf('%04d-%02d-%02d', $annee, $mois, $d);
         $jourSem = date('N', strtotime($date));
         $isFer   = in_array($date, $feries);
         $bg      = $isFer ? 'background:#fde68a;color:#92400e;' : ($jourSem==7 ? 'background:#fca5a5;color:#7f1d1d;' : '');
         $html   .= '<th style="'.$bg.'">'.$nomsJs[$jourSem].'<br>'.$d.'</th>';
+        $totauxJour[$date] = 0;
     }
 }
 $html .= '<th class="total-col">Total</th></tr></thead><tbody>';
@@ -253,24 +286,22 @@ foreach ($agents as $ag) {
                 $hFin = substr($ligne['heure_fin'],0,5);
                 $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
+                $totauxJour[$dateStr] += $minT;
                 $code  = detectShiftExport($hDeb, $hFin, $shifts);
                 $color = $code ? $shifts[$code]['color'] : '#374151';
                 $dur   = round($minT/60).'h';
                 $hFin2 = $hFin.($ligne['depasse_minuit']?'<sup>+1</sup>':'');
                 $row .= '<td class="'.$cls.'">'
                     .'<span class="shift-code" style="color:'.$color.'">'
-                    .($code ? $code : $hDeb.'→'.$hFin2)
-                    .'</span>';
-                if ($code) {
-                    $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDeb.'→'.$hFin2.'</span>';
-                }
+                    .($code ? $code : $hDeb.'→'.$hFin2).'</span>';
+                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDeb.'→'.$hFin2.'</span>';
                 $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
         }
     } else {
-        for ($d = 1; $d <= $nbJours; $d++) {
+        for ($d = $jourDebut; $d <= $jourFin; $d++) {
             $date    = sprintf('%04d-%02d-%02d', $annee, $mois, $d);
             $ligne   = $planningData[$ag['id']][$date] ?? null;
             $jourSem = date('N', strtotime($date));
@@ -281,17 +312,15 @@ foreach ($agents as $ag) {
                 $hFin  = substr($ligne['heure_fin'],0,5);
                 $minT  = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
+                $totauxJour[$date] += $minT;
                 $code  = detectShiftExport($hDeb, $hFin, $shifts);
                 $color = $code ? $shifts[$code]['color'] : '#374151';
                 $dur   = round($minT/60).'h';
                 $hFin2 = $hFin.($ligne['depasse_minuit']?'<sup>+1</sup>':'');
                 $row .= '<td class="'.$cls.'">'
                     .'<span class="shift-code" style="color:'.$color.'">'
-                    .($code ? $code : $hDeb.'→'.$hFin2)
-                    .'</span>';
-                if ($code) {
-                    $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDeb.'→'.$hFin2.'</span>';
-                }
+                    .($code ? $code : $hDeb.'→'.$hFin2).'</span>';
+                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDeb.'→'.$hFin2.'</span>';
                 $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
@@ -304,6 +333,22 @@ foreach ($agents as $ag) {
     $html .= $row;
     $html .= '<td class="total-col">'.number_format($totalMin/60,1).'h</td></tr>';
 }
-$html .= '</tbody></table></body></html>';
+
+// Ligne total h/jour
+$grandTotal = array_sum($totauxJour);
+$html .= '</tbody><tfoot><tr><td class="agent-name">Total h/jour</td>';
+foreach ($totauxJour as $min) {
+    $html .= '<td>' . ($min > 0 ? number_format($min/60,1).'h' : '—') . '</td>';
+}
+$html .= '<td class="total-col">' . number_format($grandTotal/60,1) . 'h</td></tr></tfoot>';
+$html .= '</table>';
+
+// Footer légal
+$html .= '<div class="footer-pdf">'
+    . '<div class="footer-pdf-l1">Oeil Vigilant (SAS) &nbsp;·&nbsp; 58 RUE DE MONCEAU 75008 PARIS &nbsp;·&nbsp; contact@oeilvigilant.com</div>'
+    . '<div class="footer-pdf-l2">SIREN : 928 552 702 &nbsp;·&nbsp; TVA : FR90928552702 &nbsp;·&nbsp; Tél : +33 (0)7 78 54 24 35 / +33 (0)7 84 90 19 93 &nbsp;·&nbsp; N° autorisation : AUT-075-2123-06-21-20240934026</div>'
+    . '<div class="footer-pdf-legal">L\'autorisation d\'exercice ne confère aucune prérogative de puissance publique à l\'entreprise ou aux personnes qui en bénéficient.</div>'
+    . '</div>'
+    . '</body></html>';
 
 renderPdf($html, 'planning_' . $fileLabel . '.pdf', 'landscape');
