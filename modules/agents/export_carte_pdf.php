@@ -23,12 +23,13 @@ $hMm = max(34, min(150, (int)($_GET['h'] ?? 54)));
 // ── Constante mm→pt ─────────────────────────────────────────────
 $pt = 2.83465; // 1mm = 2.83465pt
 
-// ── Zones (mm) ───────────────────────────────────────────────────
-$barTop = round($hMm * 0.014, 2);   // ~0.75mm
-$barBot = round($hMm * 0.022, 2);   // ~1.2mm
-$hdrH   = round($hMm * 0.355, 2);   // ~19.2mm
-$ftrH   = round($hMm * 0.165, 2);   // ~8.9mm
-$bodyH  = round($hMm - $barTop - $barBot - $hdrH - 0.3 - $ftrH, 2); // 0.3 = séparateur
+// ── Zones (mm) — légèrement sous la page pour éviter la 2e page DomPDF ──
+$safeH  = $hMm - 0.6;               // buffer 0.6mm
+$barTop = round($safeH * 0.014, 2);
+$barBot = round($safeH * 0.022, 2);
+$hdrH   = round($safeH * 0.355, 2);
+$ftrH   = round($safeH * 0.165, 2);
+$bodyH  = round($safeH - $barTop - $barBot - $hdrH - 0.3 - $ftrH, 2);
 
 // ── Colonnes header (mm) ─────────────────────────────────────────
 $logoCol  = round($wMm * 0.22, 2);
@@ -81,7 +82,7 @@ $bodyFields = [
     ['label'=>'Numéro de carte professionnelle', 'value'=>$a['num_autorisation_cnaps']   ?? ''],
     ['label'=>'Validité',                        'value'=>$a['date_expiration_cnaps']     ? date('d/m/Y', strtotime($a['date_expiration_cnaps'])) : ''],
 ];
-$bodyFields = array_values(array_filter($bodyFields, fn($f) => $f['value'] !== ''));
+// Tous les champs sont affichés même vides (espace réservé)
 
 // ── HTML → DomPDF ────────────────────────────────────────────────
 ob_start(); ?>
@@ -96,7 +97,8 @@ ob_start(); ?>
     margin: 0;
 }
 
-body {
+html, body {
+    margin: 0; padding: 0;
     font-family: Arial, Helvetica, sans-serif;
     width: <?= $wMm ?>mm;
     height: <?= $hMm ?>mm;
@@ -106,11 +108,12 @@ body {
 
 .badge {
     width: <?= $wMm ?>mm;
-    height: <?= $hMm ?>mm;
+    height: <?= $safeH ?>mm;
     background: white;
     border: 0.2mm solid #bbb;
     overflow: hidden;
     position: relative;
+    page-break-inside: avoid;
 }
 
 /* Barres */

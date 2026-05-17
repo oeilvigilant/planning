@@ -76,10 +76,40 @@ $bodyFields = [
     ['label'=>'Numéro de carte professionnelle', 'value'=>$a['num_autorisation_cnaps']    ?? ''],
     ['label'=>'Validité',                        'value'=>$a['date_expiration_cnaps']      ? date('d/m/Y', strtotime($a['date_expiration_cnaps'])) : ''],
 ];
-$bodyFields = array_values(array_filter($bodyFields, fn($f) => $f['value'] !== ''));
+// Tous les champs affichés même vides
 
 $editUrl = APP_URL.'/modules/parametres/index.php?tab=carte';
 ?>
+
+<?php
+// ── Alerte champs manquants ──────────────────────────────────────
+$manquants = [];
+if (empty($a['photo']))                  $manquants[] = 'Photo';
+if (empty($a['date_naissance']))         $manquants[] = 'Date de naissance';
+if (empty($a['num_autorisation_cnaps'])) $manquants[] = 'Numéro de carte professionnelle (CNAPS)';
+if (empty($a['date_expiration_cnaps']))  $manquants[] = 'Validité CNAPS';
+if (empty($params['entreprise_cnaps']))  $manquants[] = 'CNAPS entreprise (dans Paramètres)';
+if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) $manquants[] = 'Adresse entreprise (dans Paramètres)';
+?>
+<?php if ($manquants): ?>
+<div class="alert d-flex align-items-start gap-2 mb-3" style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.35);border-radius:10px;padding:0.85rem 1rem;color:#92400e;">
+    <i class="fa fa-triangle-exclamation mt-1" style="color:#ca8a04;flex-shrink:0;"></i>
+    <div>
+        <strong>Informations manquantes sur ce badge :</strong>
+        <ul class="mb-0 mt-1" style="padding-left:1.2rem;">
+            <?php foreach ($manquants as $m): ?>
+            <li style="font-size:0.85rem;"><?= h($m) ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <div class="mt-2" style="font-size:0.8rem;">
+            <a href="<?= APP_URL ?>/modules/agents/edit.php?id=<?= $id ?>" class="fw-bold" style="color:#92400e;">Modifier l'agent</a>
+            <?php if (in_array('CNAPS entreprise (dans Paramètres)', $manquants) || in_array('Adresse entreprise (dans Paramètres)', $manquants)): ?>
+            · <a href="<?= APP_URL ?>/modules/parametres/index.php?tab=carte" class="fw-bold" style="color:#92400e;">Paramètres badge</a>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
     <a href="view.php?id=<?= $id ?>" class="btn btn-ov-secondary"><i class="fa fa-arrow-left me-1"></i>Retour</a>
