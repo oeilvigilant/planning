@@ -97,7 +97,7 @@ ob_start();
         margin: 0;
         padding: 0;
     }
-    .page { padding: 15mm 12mm 20mm 12mm; }
+    .page { padding: 15mm 12mm 28mm 12mm; }
 
     /* En-tête */
     .entete { width: 100%; margin-bottom: 12px; border-bottom: 2px solid #c9a84c; padding-bottom: 8px; }
@@ -147,8 +147,11 @@ ob_start();
     .profil-sub   { background: #f0f0f0; padding: 3px 8px; font-size: 7.5pt; color: #666; margin-bottom: 4px; }
 
     /* Pied de page */
-    .footer { position: fixed; bottom: 5mm; left: 12mm; right: 12mm; font-size: 7pt; color: #999; border-top: 1px solid #eee; padding-top: 3px; }
-    .footer table { width: 100%; }
+    .footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 6.5pt; color: #666; border-top: 1.5px solid #c9a84c; padding: 4px 12mm 3px 12mm; background: #fafaf8; }
+    .footer-line1 { font-weight: bold; color: #1a2332; margin-bottom: 1px; }
+    .footer-line2 { color: #555; margin-bottom: 1px; }
+    .footer-legal { color: #888; font-style: italic; }
+    .footer-right  { text-align: right; color: #aaa; }
 
     .page-break { page-break-after: always; }
     .text-right { text-align: right; }
@@ -321,10 +324,18 @@ ob_start();
 
     <!-- Pied de page -->
     <div class="footer">
-        <table>
+        <table style="width:100%;border-collapse:collapse">
             <tr>
-                <td>OEIL VIGILANT — Société de Sécurité</td>
-                <td class="text-right">Devis <?= h($devis['numero']) ?> — Généré le <?= date('d/m/Y à H:i') ?></td>
+                <td style="width:70%;vertical-align:top">
+                    <div class="footer-line1">Oeil Vigilant (SAS) &nbsp;·&nbsp; 58 RUE DE MONCEAU 75008 PARIS &nbsp;·&nbsp; contact@oeilvigilant.com</div>
+                    <div class="footer-line2">SIREN : 928 552 702 &nbsp;·&nbsp; TVA : FR90928552702 &nbsp;·&nbsp; Tél : +33 (0)7 78 54 24 35 / +33 (0)7 84 90 19 93</div>
+                    <div class="footer-line2">N° autorisation : AUT-075-2123-06-21-20240934026</div>
+                    <div class="footer-legal">L'autorisation d'exercice ne confère aucune prérogative de puissance publique à l'entreprise ou aux personnes qui en bénéficient.</div>
+                </td>
+                <td style="width:30%;vertical-align:top;text-align:right" class="footer-right">
+                    Devis <?= h($devis['numero']) ?><br>
+                    Généré le <?= date('d/m/Y') ?>
+                </td>
             </tr>
         </table>
     </div>
