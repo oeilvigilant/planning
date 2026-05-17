@@ -119,7 +119,7 @@ ob_start();
     /* Tableau devis */
     .tbl { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.5pt; }
     .tbl th, .tbl td { border: 1px solid #e0e0e0; padding: 3px 4px; text-align: center; }
-    .tbl thead tr:first-child th { background: #1a2332; color: #c9a84c; font-size: 7.5pt; font-weight: 600; padding: 4px; }
+    .tbl thead tr:first-child th { background: #eef0f4; color: #1a2332; font-size: 7.5pt; font-weight: 600; padding: 4px; border-bottom: 1.5px solid #c9a84c; }
     .tbl thead tr:nth-child(2) th { background: #f4f4f4; font-weight: 600; color: #444; }
     .tbl thead tr:nth-child(3) td { background: #faf8f2; color: #a8883c; font-size: 7pt; }
     .tbl tbody tr td:first-child { text-align: left; white-space: nowrap; }
