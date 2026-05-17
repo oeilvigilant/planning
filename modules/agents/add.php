@@ -23,11 +23,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (empty($errors)) {
-            $matricule = !empty($data['matricule']) ? $data['matricule'] : generateMatricule();
+            $sexe      = in_array($data['sexe'] ?? '', ['M','F']) ? $data['sexe'] : 'M';
+            $matricule = !empty($data['matricule']) ? $data['matricule'] : generateMatricule($sexe);
 
             $stmt = $db->prepare("
                 INSERT INTO agents
-                (matricule,nom,prenom,date_naissance,lieu_naissance,nationalite,num_secu,
+                (matricule,nom,prenom,sexe,date_naissance,lieu_naissance,nationalite,num_secu,
                  situation_familiale,nb_enfants,photo,adresse,cp,ville,telephone,email,
                  type_contrat,poste,statut,temps_travail_hebdo,date_debut_contrat,date_fin_contrat,
                  lieu_travail,periode_essai,motif_embauche,remuneration,type_remuneration,
@@ -35,11 +36,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  h_lundi,h_mardi,h_mercredi,h_jeudi,h_vendredi,h_samedi,h_dimanche,
                  dpae,contrat_realise,bulletins_depuis,prelevement_auto,actif,created_by)
                 VALUES
-                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ");
             $stmt->execute([
                 $matricule,
-                $data['nom'], $data['prenom'],
+                $data['nom'], $data['prenom'], $sexe,
                 ($data['date_naissance'] ?? '') ?: null, ($data['lieu_naissance'] ?? '') ?: null,
                 ($data['nationalite'] ?? '') ?: null, ($data['num_secu'] ?? '') ?: null,
                 ($data['situation_familiale'] ?? '') ?: null, (int)($data['nb_enfants'] ?? 0),
@@ -121,15 +122,22 @@ require_once __DIR__ . '/../../includes/header.php';
       <div class="form-section-title">Informations personnelles</div>
       <div class="row g-3">
         <div class="col-md-3">
-          <label class="form-label">Matricule</label>
-          <input type="text" name="matricule" class="form-control" value="<?= h($data['matricule']??'') ?>" placeholder="Auto-généré">
-          <div class="form-text">Laissez vide pour auto-générer</div>
+          <label class="form-label">Sexe <span class="text-danger">*</span></label>
+          <select name="sexe" id="sexeSelect" class="form-select" required>
+            <option value="M" <?= ($data['sexe']??'M')==='M'?'selected':'' ?>>Homme</option>
+            <option value="F" <?= ($data['sexe']??'')==='F'?'selected':'' ?>>Femme</option>
+          </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+          <label class="form-label">Matricule</label>
+          <input type="text" name="matricule" id="matriculeInput" class="form-control" value="<?= h($data['matricule']??'') ?>" placeholder="Auto-généré">
+          <div class="form-text" id="matPreview" style="color:var(--ov-gold);font-weight:600;"></div>
+        </div>
+        <div class="col-md-3">
           <label class="form-label">Nom <span class="text-danger">*</span></label>
           <input type="text" name="nom" class="form-control" value="<?= h($data['nom']??'') ?>" required>
         </div>
-        <div class="col-md-5">
+        <div class="col-md-3">
           <label class="form-label">Prénom <span class="text-danger">*</span></label>
           <input type="text" name="prenom" class="form-control" value="<?= h($data['prenom']??'') ?>" required>
         </div>
@@ -418,4 +426,24 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 </form>
 
+<script>
+(function() {
+    var sel = document.getElementById('sexeSelect');
+    var inp = document.getElementById('matriculeInput');
+    var prv = document.getElementById('matPreview');
+    if (!sel || !prv) return;
+
+    function fetchMatricule() {
+        if (inp.value.trim() !== '') { prv.textContent = ''; return; }
+        fetch('ajax_matricule.php?sexe=' + sel.value)
+            .then(function(r){ return r.json(); })
+            .then(function(d){ prv.textContent = 'Prochain : ' + d.matricule; })
+            .catch(function(){});
+    }
+
+    sel.addEventListener('change', fetchMatricule);
+    inp.addEventListener('input', fetchMatricule);
+    fetchMatricule();
+})();
+</script>
 <?php include __DIR__ . '/../../includes/footer.php'; ?>

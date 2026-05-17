@@ -30,6 +30,33 @@ function getAllParams(): array {
     return $out;
 }
 
+// ── Matricule ────────────────────────────────────────────────────────────────
+
+/**
+ * Génère le prochain matricule disponible.
+ * Format : YY + M|F + NN  (ex: 25F07, 26M03)
+ * YY  = 2 derniers chiffres de l'année
+ * M|F = sexe de l'agent
+ * NN  = numéro séquentiel sur 2+ chiffres (unique par préfixe YY+genre)
+ */
+function generateMatricule(string $sexe = 'M', int $year = 0): string {
+    $db = getDB();
+    if ($year <= 0) $year = (int)date('y');
+    $s    = strtoupper(substr($sexe, 0, 1));
+    if (!in_array($s, ['M', 'F'])) $s = 'M';
+    $pref = sprintf('%02d%s', $year, $s);
+    // SUBSTRING(matricule, pos) = partie numérique après le préfixe (1-indexé)
+    $pos  = strlen($pref) + 1;
+    $stmt = $db->prepare(
+        "SELECT COALESCE(MAX(CAST(SUBSTRING(matricule, ?) AS UNSIGNED)), 0)
+         FROM agents
+         WHERE matricule LIKE ? AND matricule REGEXP ?"
+    );
+    $stmt->execute([$pos, $pref . '%', '^' . $pref . '[0-9]+$']);
+    $next = (int)$stmt->fetchColumn() + 1;
+    return $pref . sprintf('%02d', $next);
+}
+
 // ── Jours fériés & Types de jours ───────────────────────────────────────────
 
 function getJoursFeries(int $annee): array {
@@ -199,13 +226,6 @@ function formatMois(int $mois, int $annee): string {
     $noms = ['','Janvier','Février','Mars','Avril','Mai','Juin',
              'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
     return $noms[$mois] . ' ' . $annee;
-}
-
-function generateMatricule(): string {
-    $db   = getDB();
-    $max  = $db->query("SELECT MAX(CAST(matricule AS UNSIGNED)) as m FROM agents WHERE matricule REGEXP '^[0-9]+$'")->fetch();
-    $next = ($max['m'] ?? 0) + 1;
-    return str_pad($next, 5, '0', STR_PAD_LEFT);
 }
 
 function generateToken(): string {

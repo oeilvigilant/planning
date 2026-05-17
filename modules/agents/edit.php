@@ -43,9 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (empty($errors)) {
+            $sexe = in_array($data['sexe'] ?? '', ['M','F']) ? $data['sexe'] : 'M';
             $db->prepare("
                 UPDATE agents SET
-                matricule=?,nom=?,prenom=?,date_naissance=?,lieu_naissance=?,nationalite=?,num_secu=?,
+                matricule=?,nom=?,prenom=?,sexe=?,date_naissance=?,lieu_naissance=?,nationalite=?,num_secu=?,
                 situation_familiale=?,nb_enfants=?,photo=?,adresse=?,cp=?,ville=?,telephone=?,email=?,
                 type_contrat=?,poste=?,statut=?,temps_travail_hebdo=?,date_debut_contrat=?,date_fin_contrat=?,
                 lieu_travail=?,periode_essai=?,motif_embauche=?,remuneration=?,type_remuneration=?,
@@ -54,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 dpae=?,contrat_realise=?,bulletins_depuis=?,prelevement_auto=?,actif=?
                 WHERE id=?
             ")->execute([
-                $data['matricule'],$data['nom'],$data['prenom'],
+                $data['matricule'],$data['nom'],$data['prenom'],$sexe,
                 $data['date_naissance']?:null,$data['lieu_naissance']?:null,
                 $data['nationalite']?:null,$data['num_secu']?:null,
                 $data['situation_familiale']?:null,(int)($data['nb_enfants']??0),
@@ -145,15 +146,22 @@ $documents = $docs->fetchAll();
     <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-user me-2" style="color:var(--ov-gold)"></i>Identité</h2></div>
     <div class="ov-card-body">
       <div class="row g-3">
+        <div class="col-md-2">
+          <label class="form-label">Sexe</label>
+          <select name="sexe" class="form-select">
+            <option value="M" <?= ($data['sexe']??'M')==='M'?'selected':'' ?>>Homme</option>
+            <option value="F" <?= ($data['sexe']??'')==='F'?'selected':'' ?>>Femme</option>
+          </select>
+        </div>
         <div class="col-md-3">
           <label class="form-label">Matricule</label>
           <input type="text" name="matricule" class="form-control" value="<?= h($data['matricule']??'') ?>">
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label class="form-label">Nom <span class="text-danger">*</span></label>
           <input type="text" name="nom" class="form-control" value="<?= h($data['nom']??'') ?>" required>
         </div>
-        <div class="col-md-5">
+        <div class="col-md-4">
           <label class="form-label">Prénom <span class="text-danger">*</span></label>
           <input type="text" name="prenom" class="form-control" value="<?= h($data['prenom']??'') ?>" required>
         </div>

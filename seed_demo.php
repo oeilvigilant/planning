@@ -40,7 +40,7 @@ $colors = ['#1d4ed8','#7c3aed','#16a34a','#ea580c','#0891b2','#b45309','#dc2626'
 
 $agentsData = [
   [
-    'matricule'=>'25F01','nom'=>'BLOUHI','prenom'=>'Fatiha',
+    'matricule'=>'25F01','sexe'=>'F','nom'=>'BLOUHI','prenom'=>'Fatiha',
     'date_naissance'=>'1980-11-12','lieu_naissance'=>'Sidi Bel Abbès, Algérie',
     'nationalite'=>'Algérienne','num_secu'=>'2 80 11 99 352 762 09',
     'situation_familiale'=>'Divorcé(e)','nb_enfants'=>2,
@@ -59,7 +59,7 @@ $agentsData = [
     'shift'=>'J','off_dow'=>[7],
   ],
   [
-    'matricule'=>'25F02','nom'=>'TARROUFI','prenom'=>'Abderrahim',
+    'matricule'=>'25F02','sexe'=>'M','nom'=>'TARROUFI','prenom'=>'Abderrahim',
     'date_naissance'=>'1977-11-13','lieu_naissance'=>'Kaf el Ghar, Maroc',
     'nationalite'=>'Marocaine','num_secu'=>'1 77 11 99 380 141 84',
     'situation_familiale'=>'Marié(e)','nb_enfants'=>2,
@@ -77,7 +77,7 @@ $agentsData = [
     'shift'=>'N','pattern'=>[1,1,1,0,0,0],
   ],
   [
-    'matricule'=>'25F03','nom'=>'KSOURI','prenom'=>'Hanen',
+    'matricule'=>'25F03','sexe'=>'F','nom'=>'KSOURI','prenom'=>'Hanen',
     'date_naissance'=>'1978-11-19','lieu_naissance'=>'Menzel Bourguiba, Tunisie',
     'nationalite'=>'Tunisienne','num_secu'=>'2 78 11 99 351 266 51',
     'situation_familiale'=>'Divorcé(e)','nb_enfants'=>2,
@@ -95,7 +95,7 @@ $agentsData = [
     'shift'=>'S','off_dow'=>[7],
   ],
   [
-    'matricule'=>'25F04','nom'=>'FERREIRA MONTEIRO','prenom'=>'José',
+    'matricule'=>'25F04','sexe'=>'M','nom'=>'FERREIRA MONTEIRO','prenom'=>'José',
     'date_naissance'=>'1962-03-20','lieu_naissance'=>'Cabeça de Carreira, Santa Catarina',
     'nationalite'=>'Française','num_secu'=>'1 62 03 99 396 034 27',
     'situation_familiale'=>null,'nb_enfants'=>0,
@@ -113,7 +113,7 @@ $agentsData = [
     'shift'=>'M','off_dow'=>[1,7],
   ],
   [
-    'matricule'=>'25F05','nom'=>'GATALOVA','prenom'=>'Khadijat',
+    'matricule'=>'25F05','sexe'=>'F','nom'=>'GATALOVA','prenom'=>'Khadijat',
     'date_naissance'=>'1962-11-20','lieu_naissance'=>'Goragorsk',
     'nationalite'=>'Française','num_secu'=>'2 62 11 99 123 051 33',
     'situation_familiale'=>'Divorcé(e)','nb_enfants'=>0,
@@ -131,7 +131,7 @@ $agentsData = [
     'shift'=>'J','off_dow'=>[6,7],
   ],
   [
-    'matricule'=>'25F06','nom'=>'GNING','prenom'=>'Omar',
+    'matricule'=>'25F06','sexe'=>'M','nom'=>'GNING','prenom'=>'Omar',
     'date_naissance'=>'1997-02-12','lieu_naissance'=>'Ndieyene Sirakh, Sénégal',
     'nationalite'=>'Sénégalaise','num_secu'=>'1 97 02 99 341 144 30',
     'situation_familiale'=>null,'nb_enfants'=>0,
@@ -149,7 +149,7 @@ $agentsData = [
     'shift'=>'NC','pattern'=>[1,1,1,1,0,0],
   ],
   [
-    'matricule'=>'25F07','nom'=>'ABIDI','prenom'=>'Inès',
+    'matricule'=>'25F07','sexe'=>'F','nom'=>'ABIDI','prenom'=>'Inès',
     'date_naissance'=>'1986-01-16','lieu_naissance'=>'Nice',
     'nationalite'=>'Française','num_secu'=>'2 86 01 06 088 263 09',
     'situation_familiale'=>null,'nb_enfants'=>0,
@@ -167,7 +167,7 @@ $agentsData = [
     'shift'=>'S','pattern'=>[0,1,0,0,1,0,0],
   ],
   [
-    'matricule'=>'25F08','nom'=>'BEN HASSEN','prenom'=>'Sahbi',
+    'matricule'=>'25F08','sexe'=>'M','nom'=>'BEN HASSEN','prenom'=>'Sahbi',
     'date_naissance'=>'1998-09-22','lieu_naissance'=>'M\'Saken, Tunisie',
     'nationalite'=>'Tunisienne','num_secu'=>'1 98 09 99 350 753 87',
     'situation_familiale'=>null,'nb_enfants'=>0,
@@ -185,7 +185,7 @@ $agentsData = [
     'shift'=>'N','off_dow'=>[6,7],
   ],
   [
-    'matricule'=>'25F09','nom'=>'GUERRAB','prenom'=>'Halim',
+    'matricule'=>'25F09','sexe'=>'M','nom'=>'GUERRAB','prenom'=>'Halim',
     'date_naissance'=>'1964-09-24','lieu_naissance'=>'Aïn-Taya, Algérie',
     'nationalite'=>'Française','num_secu'=>'1 64 09 99 358 056 76',
     'situation_familiale'=>null,'nb_enfants'=>0,
@@ -203,7 +203,7 @@ $agentsData = [
     'shift'=>'J','off_dow'=>[6,7],
   ],
   [
-    'matricule'=>'25F10','nom'=>'BEN SLIMANE','prenom'=>'Slim',
+    'matricule'=>'25F10','sexe'=>'M','nom'=>'BEN SLIMANE','prenom'=>'Slim',
     'date_naissance'=>'1976-12-03','lieu_naissance'=>'Redeyef, Tunisie',
     'nationalite'=>'Française','num_secu'=>'1 76 12 99 350 205 82',
     'situation_familiale'=>null,'nb_enfants'=>0,
@@ -221,7 +221,7 @@ $agentsData = [
     'shift'=>'M','off_dow'=>[7],
   ],
   [
-    'matricule'=>'25F11','nom'=>'PAVLOVIC','prenom'=>'Stevan',
+    'matricule'=>'25F11','sexe'=>'M','nom'=>'PAVLOVIC','prenom'=>'Stevan',
     'date_naissance'=>'2001-07-11','lieu_naissance'=>'Cluses',
     'nationalite'=>'Française','num_secu'=>'1 01 07 74 081 031 16',
     'situation_familiale'=>null,'nb_enfants'=>0,
@@ -243,7 +243,7 @@ $agentsData = [
 // ── Insertion agents ──────────────────────────────────────────────
 $stmtIns = $db->prepare("
     INSERT IGNORE INTO agents
-        (matricule, nom, prenom, date_naissance, lieu_naissance, nationalite, num_secu,
+        (matricule, nom, prenom, sexe, date_naissance, lieu_naissance, nationalite, num_secu,
          situation_familiale, nb_enfants, adresse, cp, ville,
          type_contrat, poste, statut, temps_travail_hebdo,
          h_lundi, h_mardi, h_mercredi, h_jeudi, h_vendredi, h_samedi, h_dimanche,
@@ -252,7 +252,7 @@ $stmtIns = $db->prepare("
          num_autorisation_cnaps, date_expiration_cnaps,
          bulletins_depuis, dpae, contrat_realise, photo, actif)
     VALUES
-        (:matricule, :nom, :prenom, :ddn, :lieu, :nat, :secu,
+        (:matricule, :nom, :prenom, :sexe, :ddn, :lieu, :nat, :secu,
          :sitfam, :enfants, :adresse, :cp, :ville,
          :contrat, :poste, :statut, :hebdo,
          :hl, :hma, :hme, :hj, :hv, :hsa, :hdi,
@@ -275,6 +275,7 @@ foreach ($agentsData as &$ag) {
 
     $stmtIns->execute([
         ':matricule'=>$ag['matricule'], ':nom'=>$ag['nom'], ':prenom'=>$ag['prenom'],
+        ':sexe'=>($ag['sexe'] ?? 'M'),
         ':ddn'=>$ag['date_naissance'], ':lieu'=>$ag['lieu_naissance'],
         ':nat'=>$ag['nationalite'], ':secu'=>$ag['num_secu'],
         ':sitfam'=>$ag['situation_familiale'], ':enfants'=>$ag['nb_enfants'],
