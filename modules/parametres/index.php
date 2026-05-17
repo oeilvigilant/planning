@@ -74,6 +74,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         header('Location: index.php#carte'); exit;
     }
 
+    if ($action === 'save_carte_textes') {
+        setParam('entreprise_slogan',    trim($_POST['entreprise_slogan']    ?? ''));
+        setParam('entreprise_cnaps',     trim($_POST['entreprise_cnaps']     ?? ''));
+        setParam('carte_mention_legale', trim($_POST['carte_mention_legale'] ?? ''));
+        flash('success','Textes du badge mis à jour.');
+        header('Location: index.php#carte'); exit;
+    }
+
     if ($action === 'save_pdf') {
         $champs = $_POST['champ'] ?? [];
         foreach ($champs as $champId => $d) {
@@ -295,8 +303,38 @@ $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll()
 
 <!-- CARTE AGENT -->
 <div class="tab-pane fade" id="tab-carte">
+
+<!-- Textes du badge -->
+<div class="ov-card mb-3">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-pen-to-square me-2" style="color:var(--ov-gold)"></i>Textes du badge</h2></div>
+  <div class="ov-card-body">
+    <form method="POST">
+    <input type="hidden" name="action" value="save_carte_textes">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Slogan entreprise</label>
+        <input type="text" name="entreprise_slogan" class="form-control" value="<?= h($params['entreprise_slogan'] ?? '') ?>" placeholder="Ex : VOTRE SÉCURITÉ, NOTRE PRIORITÉ">
+        <div class="form-text">Affiché sous le logo sur le badge</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">N° autorisation CNAPS entreprise</label>
+        <input type="text" name="entreprise_cnaps" class="form-control" value="<?= h($params['entreprise_cnaps'] ?? '') ?>" placeholder="AUT-XXX-XXXX-XX-XX-XXXXXXXXXXXXXXX">
+        <div class="form-text">Affiché dans le pied du badge (commun à tous les agents)</div>
+      </div>
+      <div class="col-12">
+        <label class="form-label">Mention légale badge</label>
+        <textarea name="carte_mention_legale" class="form-control" rows="2" placeholder="L'autorisation d'exercice ne confère..."><?= h($params['carte_mention_legale'] ?? '') ?></textarea>
+        <div class="form-text">Texte affiché en bas du badge sous le n° CNAPS</div>
+      </div>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Champs visibilité -->
 <div class="ov-card">
-  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-id-card me-2" style="color:var(--ov-gold)"></i>Champs carte agent (85×54mm)</h2></div>
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-id-card me-2" style="color:var(--ov-gold)"></i>Champs visibles sur le badge</h2></div>
   <div class="ov-card-body">
     <form method="POST">
     <input type="hidden" name="action" value="save_carte">

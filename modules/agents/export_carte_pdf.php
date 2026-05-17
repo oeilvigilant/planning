@@ -14,160 +14,200 @@ $stmt->execute([$id]);
 $a = $stmt->fetch();
 if (!$a) { header('Location: index.php'); exit; }
 
-$params      = getAllParams();
-$champs      = $db->query("SELECT * FROM carte_champs WHERE actif=1 ORDER BY face, ordre")->fetchAll();
-$rectoChamps = array_values(array_filter($champs, fn($c) => $c['face'] === 'recto'));
+$params = getAllParams();
 
-// ── Dimensions (mm) ──────────────────────────────────────────────────
-$wMm = max(85, min(210, (int)($_GET['w'] ?? 105)));
-$hMm = max(50, min(150, (int)($_GET['h'] ?? 74)));
+// ── Dimensions (mm) ──────────────────────────────────────────────
+$wMm = max(54, min(210, (int)($_GET['w'] ?? 86)));
+$hMm = max(34, min(150, (int)($_GET['h'] ?? 54)));
 
-// ── Zones (mm) ───────────────────────────────────────────────────────
-$barTop  = 1.5;
-$barBot  = 2.5;
-$hdrH    = round($hMm * 0.37, 1);
-$ftrH    = round($hMm * 0.17, 1);
-$bodyH   = round($hMm - $barTop - $barBot - $hdrH - 0.3 - $ftrH, 1);
+// ── Constante mm→pt ─────────────────────────────────────────────
+$pt = 2.83465; // 1mm = 2.83465pt
 
-// ── Typographie (pt) ─────────────────────────────────────────────────
-$fCie      = round($wMm * 0.096, 1);  // Nom société (pt)
-$fAddr     = round($wMm * 0.038, 1);
-$fLogoName = round($wMm * 0.033, 1);
-$fSlogan   = round($wMm * 0.028, 1);
-$fField    = round($wMm * 0.043, 1);
-$fMat      = round($wMm * 0.033, 1);
-$fCnaps    = round($wMm * 0.031, 1);
-$fLegal    = round($wMm * 0.026, 1);
+// ── Zones (mm) ───────────────────────────────────────────────────
+$barTop = round($hMm * 0.014, 2);   // ~0.75mm
+$barBot = round($hMm * 0.022, 2);   // ~1.2mm
+$hdrH   = round($hMm * 0.355, 2);   // ~19.2mm
+$ftrH   = round($hMm * 0.165, 2);   // ~8.9mm
+$bodyH  = round($hMm - $barTop - $barBot - $hdrH - 0.3 - $ftrH, 2); // 0.3 = séparateur
 
-// ── Photo / Logo (mm) ────────────────────────────────────────────────
-$phH     = round($hdrH * 0.82, 1);
-$phW     = round($phH  * 0.68, 1);  // ratio portrait 2:3
-$logoH   = round($hdrH * 0.44, 1);
-$logoCol = round($wMm * 0.21, 1);
-$photoCol= round($wMm * 0.19, 1);
+// ── Colonnes header (mm) ─────────────────────────────────────────
+$logoCol  = round($wMm * 0.22, 2);
+$photoCol = round($wMm * 0.19, 2);
+$centerW  = round($wMm - $logoCol - $photoCol, 2);
 
-// ── Images base64 ────────────────────────────────────────────────────
+// ── Photo frame (mm) ─────────────────────────────────────────────
+$phH = round($hdrH * 0.88, 2);
+$phW = round($phH  * 0.68, 2);
+
+// ── Logo (mm) ────────────────────────────────────────────────────
+$logoH    = round($hdrH * 0.52, 2);
+$logoMaxW = round($logoCol - 3, 2);
+
+// ── Typographie (pt) ─────────────────────────────────────────────
+$fCie    = round($wMm * 0.110, 1);  // "Oeil Vigilant" italic serif
+$fAddr   = round($wMm * 0.040, 1);  // adresse
+$fSlogan = round($wMm * 0.027, 1);  // slogan
+$fLname  = round($wMm * 0.030, 1);  // sous logo
+$fField  = round($wMm * 0.048, 1);  // champs body
+$fMat    = round($wMm * 0.038, 1);  // matricule
+$fCnaps  = round($wMm * 0.036, 1);  // CNAPS footer
+$fLegal  = round($wMm * 0.030, 1);  // mention légale
+
+// ── Images base64 ────────────────────────────────────────────────
 function b64img(string $path): string {
-    if (!file_exists($path)) return '';
+    if (!file_exists($path) || !is_readable($path)) return '';
     $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    $mime = $ext === 'png' ? 'image/png' : ($ext === 'svg' ? 'image/svg+xml' : 'image/jpeg');
+    $mime = match($ext) { 'png' => 'image/png', 'svg' => 'image/svg+xml', default => 'image/jpeg' };
     return 'data:'.$mime.';base64,'.base64_encode(file_get_contents($path));
 }
-$photoB64 = $a['photo'] ? b64img(UPLOAD_PATH.'/'.$a['photo']) : '';
+
 $logoB64  = b64img(APP_ROOT.'/assets/img/'.($params['logo_principal'] ?? 'logo.png'));
+$photoB64 = $a['photo'] ? b64img(UPLOAD_PATH.'/'.$a['photo']) : '';
 
-// ── Données ──────────────────────────────────────────────────────────
-function getChampValPdfBadge(array $a, array $params, string $cle): string {
-    $agentMap = [
-        'prenom_nom'             => trim($a['prenom'].' '.$a['nom']),
-        'nom'                    => $a['nom'] ?? '',
-        'prenom'                 => $a['prenom'] ?? '',
-        'matricule'              => $a['matricule'] ?? '',
-        'poste'                  => $a['poste'] ?? '',
-        'num_autorisation_cnaps' => $a['num_autorisation_cnaps'] ?? '',
-        'date_naissance'         => !empty($a['date_naissance']) ? date('d/m/Y', strtotime($a['date_naissance'])) : '',
-        'date_debut_contrat'     => $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
-        'date_expiration_cnaps'  => $a['date_expiration_cnaps'] ? date('d/m/Y', strtotime($a['date_expiration_cnaps'])) : '',
-    ];
-    $entMap = [
-        'entreprise_nom'     => $params['entreprise_nom']     ?? '',
-        'entreprise_adresse' => trim(($params['entreprise_adresse']??'').' '.($params['entreprise_cp']??'').' '.($params['entreprise_ville']??'')),
-        'entreprise_tel'     => $params['entreprise_tel']     ?? '',
-        'entreprise_siret'   => 'SIRET: '.($params['entreprise_siret'] ?? ''),
-    ];
-    return $agentMap[$cle] ?? $entMap[$cle] ?? '';
-}
-
-$companyName = $params['entreprise_nom'] ?? 'Oeil Vigilant';
+// ── Données ──────────────────────────────────────────────────────
+$companyName = $params['entreprise_nom']       ?? 'Oeil Vigilant';
 $companyAddr = strtoupper(trim(($params['entreprise_adresse']??'').' '.($params['entreprise_cp']??'').' '.($params['entreprise_ville']??'')));
-$slogan      = $params['entreprise_slogan'] ?? 'Votre sécurité, notre priorité';
-$cnapsNum    = $a['num_autorisation_cnaps'] ?? '';
-$legalText   = $params['carte_mention_legale']
-    ?? "L'autorisation d'exercice ne confère aucune prérogative de puissance publique à l'entreprise ou aux personnes qui en bénéficient";
+$slogan      = $params['entreprise_slogan']    ?? 'VOTRE SÉCURITÉ, NOTRE PRIORITÉ';
+$cnapsEnt    = $params['entreprise_cnaps']     ?? '';
+$legalText   = $params['carte_mention_legale'] ?? "L'autorisation d'exercice ne confère aucune prérogative de puissance publique à l'entreprise ou aux personnes qui en bénéficient";
 $mat         = $a['matricule'] ?? '';
 $initiales   = strtoupper(substr($a['prenom'],0,1).substr($a['nom'],0,1));
 
-// Champs corps
-$bodyFields = [];
-foreach ($rectoChamps as $c) {
-    if (in_array($c['cle'], ['photo','logo'])) continue;
-    $val = getChampValPdfBadge($a, $params, $c['cle']);
-    if ($val !== '') $bodyFields[] = ['label' => $c['label'], 'value' => $val];
-}
+$bodyFields = [
+    ['label'=>'Nom',                             'value'=>strtoupper($a['nom']    ?? '')],
+    ['label'=>'Prénom',                          'value'=>$a['prenom']            ?? ''],
+    ['label'=>'Né(e) le',                        'value'=>!empty($a['date_naissance'])   ? date('d/m/Y', strtotime($a['date_naissance']))       : ''],
+    ['label'=>'Numéro de carte professionnelle', 'value'=>$a['num_autorisation_cnaps']   ?? ''],
+    ['label'=>'Validité',                        'value'=>$a['date_expiration_cnaps']     ? date('d/m/Y', strtotime($a['date_expiration_cnaps'])) : ''],
+];
+$bodyFields = array_values(array_filter($bodyFields, fn($f) => $f['value'] !== ''));
 
+// ── HTML → DomPDF ────────────────────────────────────────────────
 ob_start(); ?>
 <!DOCTYPE html>
 <html lang="fr">
 <head><meta charset="UTF-8">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-@page { size: <?= $wMm ?>mm <?= $hMm ?>mm; margin: 0; }
-body  { font-family: Arial, Helvetica, sans-serif; width: <?= $wMm ?>mm; height: <?= $hMm ?>mm; overflow: hidden; background: white; }
+
+@page {
+    size: <?= $wMm ?>mm <?= $hMm ?>mm;
+    margin: 0;
+}
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    width: <?= $wMm ?>mm;
+    height: <?= $hMm ?>mm;
+    overflow: hidden;
+    background: white;
+}
 
 .badge {
     width: <?= $wMm ?>mm;
     height: <?= $hMm ?>mm;
-    background-color: #fff;
-    border: 0.3mm solid #bbb;
+    background: white;
+    border: 0.2mm solid #bbb;
     overflow: hidden;
     position: relative;
 }
 
 /* Barres */
-.bar { width: 100%; background: #111; font-size: 0; line-height: 0; display: block; }
+.bar { width: 100%; background: #111; font-size:0; line-height:0; display:block; }
 .bar-top { height: <?= $barTop ?>mm; }
 .bar-bot { height: <?= $barBot ?>mm; }
 
-/* ── En-tête ── */
-.hdr { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.hdr td { vertical-align: top; }
+/* ── En-tête (table 3 colonnes) ── */
+.hdr-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    height: <?= $hdrH ?>mm;
+}
+.td-logo {
+    width: <?= $logoCol ?>mm;
+    vertical-align: middle;
+    text-align: center;
+    padding: 1.5mm 1mm 1mm 2.5mm;
+    border-right: 0.2mm solid #eee;
+}
+.td-center {
+    vertical-align: middle;
+    text-align: center;
+    padding: 1.5mm 2mm;
+    border-right: 0.2mm solid #eee;
+}
+.td-photo {
+    width: <?= $photoCol ?>mm;
+    vertical-align: middle;
+    text-align: center;
+    padding: 1mm 2.5mm 1mm 1mm;
+}
 
-.td-logo  { width: <?= $logoCol ?>mm;  padding: 1.5mm 1mm 1mm 3mm; }
-.td-ctr   { text-align: center; padding: 2mm 2mm 1mm 2mm; }
-.td-photo { width: <?= ($photoCol + 2) ?>mm; padding: 1mm 3mm 1mm 1mm; text-align: center; }
-
-.logo-img  { height: <?= $logoH ?>mm; max-width: <?= ($logoCol - 2) ?>mm; }
-.logo-name { font-size: <?= $fLogoName ?>pt; font-weight: 700; letter-spacing: 0.3pt; color: #111; text-transform: uppercase; margin-top: 1mm; }
+.logo-img    { height: <?= $logoH ?>mm; max-width: <?= $logoMaxW ?>mm; }
+.logo-name   { font-size: <?= $fLname ?>pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4pt; color: #111; margin-top: 0.8mm; }
 .logo-slogan { font-size: <?= $fSlogan ?>pt; color: #666; font-style: italic; line-height: 1.3; margin-top: 0.5mm; }
 
-.cie-name { font-family: Georgia, serif; font-size: <?= $fCie ?>pt; font-weight: 400; color: #111; letter-spacing: 0.5pt; line-height: 1.1; }
-.cie-addr { font-size: <?= $fAddr ?>pt; color: #333; margin-top: 1.5mm; letter-spacing: 0.2pt; }
+.cie-name { font-family: Georgia, serif; font-size: <?= $fCie ?>pt; font-weight: 400; font-style: italic; color: #0a1628; letter-spacing: 0.3pt; line-height: 1.1; }
+.cie-addr { font-size: <?= $fAddr ?>pt; color: #444; font-weight: 600; margin-top: 1mm; letter-spacing: 0.2pt; }
 
-.photo-img  { width: <?= $phW ?>mm; height: <?= $phH ?>mm; border: 0.3mm solid #bbb; }
-.photo-init { width: <?= $phW ?>mm; height: <?= $phH ?>mm; border: 0.3mm solid #bbb; background: #ebebeb; font-size: <?= round($fField*1.3,1) ?>pt; font-weight: 700; color: #888; text-align: center; line-height: <?= $phH ?>mm; }
-.mat-lbl { font-size: <?= $fMat ?>pt; font-weight: 700; color: #111; margin-top: 0.8mm; text-align: center; }
+/* Photo frame : table cell overflow:hidden pour simuler le cadre fixe */
+.photo-outer { width: <?= $phW ?>mm; height: <?= $phH ?>mm; border: 0.2mm solid #bbb; overflow: hidden; margin: 0 auto; background: #ebebeb; }
+.photo-img   { width: <?= $phW ?>mm; height: <?= $phH ?>mm; }
+.photo-init  { width: <?= $phW ?>mm; height: <?= $phH ?>mm; font-size: <?= round($phW * 0.85, 1) ?>pt; font-weight: 700; color: #bbb; text-align: center; line-height: <?= $phH ?>mm; font-family: Georgia, serif; }
+.mat-lbl     { font-size: <?= $fMat ?>pt; font-weight: 700; color: #111; margin-top: 0.8mm; text-align: center; }
+.mat-lbl span { font-weight: 400; color: #777; }
 
 /* Séparateur */
-.sep { height: 0.3mm; background: #ccc; margin: 0 3mm; }
+.sep { height: 0.3mm; background: #ddd; display: block; font-size:0; }
 
 /* ── Corps ── */
-.body { height: <?= $bodyH ?>mm; padding: 1.5mm 4mm 1mm 4mm; overflow: hidden; position: relative; }
+.body {
+    height: <?= $bodyH ?>mm;
+    padding: <?= round($bodyH * 0.09, 1) ?>mm 5mm <?= round($bodyH * 0.05, 1) ?>mm 5mm;
+    overflow: hidden;
+    position: relative;
+}
 
+/* Filigrane */
 .watermark {
     position: absolute;
-    top: <?= round($bodyH * 0.08, 1) ?>mm;
-    left: <?= round($wMm * 0.27, 1) ?>mm;
+    top: <?= round($bodyH * 0.05, 1) ?>mm;
+    left: <?= round(($wMm - $wMm*0.22) / 2, 1) ?>mm;
     text-align: center;
     opacity: 0.055;
 }
-.watermark img { width: <?= round($wMm * 0.28, 1) ?>mm; }
+.watermark img { width: <?= round($wMm * 0.20, 1) ?>mm; display: block; margin: 0 auto; }
 .wm-txt {
-    font-size: <?= round($wMm * 0.09, 1) ?>pt;
+    font-size: <?= round($wMm * 0.130, 1) ?>pt;
     font-weight: 700;
     color: #000;
-    letter-spacing: 1pt;
+    letter-spacing: 1.5pt;
     text-transform: uppercase;
     text-align: center;
-    margin-top: -1mm;
-    opacity: 0.055;
+    margin-top: -0.5mm;
 }
 
-.field { font-size: <?= $fField ?>pt; color: #111; margin-bottom: <?= round($bodyH * 0.06, 1) ?>mm; line-height: 1.25; }
+/* Champs */
+.field-row {
+    margin-bottom: <?= round($bodyH * 0.095, 1) ?>mm;
+    font-size: <?= $fField ?>pt;
+    line-height: 1.25;
+}
+.field-lbl { font-weight: 700; color: #111; }
+.field-val { font-weight: 700; color: #111; }
 
 /* ── Pied ── */
-.footer { height: <?= $ftrH ?>mm; border-top: 0.2mm solid #ddd; padding: 1mm 3mm 0.5mm; text-align: center; overflow: hidden; }
-.cnaps-txt { font-size: <?= $fCnaps ?>pt; color: #333; }
-.legal-txt { font-size: <?= $fLegal ?>pt; color: #666; margin-top: 0.8mm; line-height: 1.35; }
+.footer {
+    height: <?= $ftrH ?>mm;
+    border-top: 0.2mm solid #ddd;
+    background: #fafafa;
+    padding: 1mm 3mm 0.5mm;
+    text-align: center;
+    overflow: hidden;
+}
+.footer-cnaps { font-size: <?= $fCnaps ?>pt; font-weight: 700; color: #333; margin-bottom: 0.7mm; }
+.footer-legal { font-size: <?= $fLegal ?>pt; color: #777; line-height: 1.4; }
 </style>
 </head>
 <body>
@@ -176,8 +216,9 @@ body  { font-family: Arial, Helvetica, sans-serif; width: <?= $wMm ?>mm; height:
   <div class="bar bar-top"></div>
 
   <!-- En-tête -->
-  <table class="hdr">
+  <table class="hdr-table">
   <tr>
+    <!-- Logo -->
     <td class="td-logo">
       <?php if ($logoB64): ?>
       <img src="<?= $logoB64 ?>" class="logo-img" alt="">
@@ -188,21 +229,25 @@ body  { font-family: Arial, Helvetica, sans-serif; width: <?= $wMm ?>mm; height:
       <?php endif; ?>
     </td>
 
-    <td class="td-ctr">
+    <!-- Centre -->
+    <td class="td-center">
       <div class="cie-name"><?= htmlspecialchars($companyName) ?></div>
       <?php if ($companyAddr): ?>
       <div class="cie-addr"><?= htmlspecialchars($companyAddr) ?></div>
       <?php endif; ?>
     </td>
 
+    <!-- Photo -->
     <td class="td-photo">
-      <?php if ($photoB64): ?>
-      <img src="<?= $photoB64 ?>" class="photo-img" alt="">
-      <?php else: ?>
-      <div class="photo-init"><?= htmlspecialchars($initiales) ?></div>
-      <?php endif; ?>
+      <div class="photo-outer">
+        <?php if ($photoB64): ?>
+          <img src="<?= $photoB64 ?>" class="photo-img" alt="">
+        <?php else: ?>
+          <div class="photo-init"><?= htmlspecialchars($initiales) ?></div>
+        <?php endif; ?>
+      </div>
       <?php if ($mat): ?>
-      <div class="mat-lbl"><b>MAT:</b> <?= htmlspecialchars($mat) ?></div>
+      <div class="mat-lbl"><span>MAT:</span> <?= htmlspecialchars($mat) ?></div>
       <?php endif; ?>
     </td>
   </tr>
@@ -215,29 +260,27 @@ body  { font-family: Arial, Helvetica, sans-serif; width: <?= $wMm ?>mm; height:
     <?php if ($logoB64): ?>
     <div class="watermark">
       <img src="<?= $logoB64 ?>" alt="">
+      <div class="wm-txt"><?= htmlspecialchars(strtoupper($companyName)) ?></div>
     </div>
     <?php endif; ?>
-    <div class="wm-txt"><?= htmlspecialchars(strtoupper($companyName)) ?></div>
 
     <?php foreach ($bodyFields as $f): ?>
-    <div class="field">
-      <b><?= htmlspecialchars($f['label']) ?> :</b>
-      <?= htmlspecialchars($f['value']) ?>
+    <div class="field-row">
+      <span class="field-lbl"><?= htmlspecialchars($f['label']) ?> : </span>
+      <span class="field-val"><?= htmlspecialchars($f['value']) ?></span>
     </div>
     <?php endforeach; ?>
   </div>
 
   <!-- Pied -->
-  <?php if ($cnapsNum || $legalText): ?>
   <div class="footer">
-    <?php if ($cnapsNum): ?>
-    <div class="cnaps-txt">CNAPS : <?= htmlspecialchars($cnapsNum) ?></div>
+    <?php if ($cnapsEnt): ?>
+    <div class="footer-cnaps">CNAPS : <?= htmlspecialchars($cnapsEnt) ?></div>
     <?php endif; ?>
     <?php if ($legalText): ?>
-    <div class="legal-txt"><?= htmlspecialchars($legalText) ?></div>
+    <div class="footer-legal"><?= htmlspecialchars($legalText) ?></div>
     <?php endif; ?>
   </div>
-  <?php endif; ?>
 
   <div class="bar bar-bot"></div>
 
@@ -247,7 +290,6 @@ body  { font-family: Arial, Helvetica, sans-serif; width: <?= $wMm ?>mm; height:
 <?php
 $html = ob_get_clean();
 
-// ── Rendu DomPDF à la taille exacte ─────────────────────────────────
 if (file_exists(DOMPDF_AUTOLOAD)) {
     require_once DOMPDF_AUTOLOAD;
     $options = new \Dompdf\Options();
@@ -257,14 +299,13 @@ if (file_exists(DOMPDF_AUTOLOAD)) {
     $options->set('chroot', APP_ROOT);
     $dompdf = new \Dompdf\Dompdf($options);
     $dompdf->loadHtml($html, 'UTF-8');
-    $pt = 2.83465; // mm → pt
     $dompdf->setPaper([0, 0, $wMm * $pt, $hMm * $pt]);
     $dompdf->render();
     $filename = 'badge_'.strtolower($a['nom']).'_'.strtolower($a['prenom']).'.pdf';
     $dompdf->stream($filename, ['Attachment' => true]);
     exit;
 }
-// Fallback
+// Fallback navigateur
 header('Content-Type: text/html; charset=utf-8');
 echo $html;
 echo '<script>window.onload=function(){window.print();}</script>';

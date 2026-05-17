@@ -52,7 +52,7 @@ $agentsData = [
     'lieu_travail'=>'66 Bd Gardiole Bacon, 06160 Antibes',
     'periode_essai'=>'2 semaines','motif_embauche'=>'Accroissement activité',
     'remuneration'=>12.00,'type_remuneration'=>'Nette',
-    'num_autorisation_cnaps'=>'AUT-075-2123-06-21-20240934026',
+    'num_autorisation_cnaps'=>'CAR-006-2026-12-22-20210764566',
     'date_expiration_cnaps'=>'2026-12-22',
     'bulletins_depuis'=>'juillet 2025',
     'color'=>$colors[0],
@@ -125,7 +125,7 @@ $agentsData = [
     'lieu_travail'=>'66 Bd Gardiole Bacon, 06160 Antibes',
     'periode_essai'=>'2 semaines','motif_embauche'=>'Accroissement activité',
     'remuneration'=>12.00,'type_remuneration'=>'Nette',
-    'num_autorisation_cnaps'=>null,'date_expiration_cnaps'=>null,
+    'num_autorisation_cnaps'=>'CAR-006-2029-04-19-20240651397','date_expiration_cnaps'=>'2029-04-19',
     'bulletins_depuis'=>'juillet 2025',
     'color'=>$colors[4],
     'shift'=>'J','off_dow'=>[6,7],
@@ -301,6 +301,22 @@ foreach ($agentsData as &$ag) {
     }
 }
 unset($ag);
+
+// ── UPDATE forcé des numéros de carte pro (même si INSERT IGNORE a ignoré) ──
+$cartesConnues = [
+    '25F01' => ['cnaps'=>'CAR-006-2026-12-22-20210764566', 'exp'=>'2026-12-22'],
+    '25F05' => ['cnaps'=>'CAR-006-2029-04-19-20240651397', 'exp'=>'2029-04-19'],
+];
+$stmtUpCnaps = $db->prepare("UPDATE agents SET num_autorisation_cnaps=?, date_expiration_cnaps=? WHERE matricule=?");
+foreach ($cartesConnues as $mat => $data) {
+    $stmtUpCnaps->execute([$data['cnaps'], $data['exp'], $mat]);
+}
+
+// ── Paramètres entreprise pour le badge ──────────────────────────
+setParam('entreprise_cnaps',    'AUT-075-2123-06-21-20240934026');
+setParam('entreprise_slogan',   'VOTRE SÉCURITÉ, NOTRE PRIORITÉ');
+setParam('carte_mention_legale',"L'autorisation d'exercice ne confère aucune prérogative de puissance publique à l'entreprise ou aux personnes qui en bénéficient");
+$ok[] = '✓ Paramètres badge (CNAPS entreprise, slogan, mention légale) injectés';
 
 // ── Planning Avril 2026 (données démo fictives) ───────────────────
 $shiftsH = [
