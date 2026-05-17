@@ -35,25 +35,25 @@ $ftrH   = (int)round($bH * 0.155);   // ~85px
 $bodyH  = $bH - $barTop - $barBot - $hdrH - $ftrH;
 
 // ── Colonnes header ─────────────────────────────────────────────
-$logoCol  = (int)round($bW * 0.21);   // ~179px  logo seul (pas de texte dessous)
-$photoCol = (int)round($bW * 0.185);  // ~158px
+$logoCol  = (int)round($bW * 0.215);  // ~183px
+$photoCol = (int)round($bW * 0.195);  // ~166px
 
 // ── Photo frame ─────────────────────────────────────────────────
-$phH = (int)round($hdrH * 0.90);      // ~179px
-$phW = (int)round($phH  * 0.68);      // ~122px
+$phH = (int)round($hdrH * 0.86);
+$phW = (int)round($phH  * 0.70);
 
-// ── Logo (agrandi, plus de texte dessous) ───────────────────────
-$logoH    = (int)round($hdrH * 0.80); // ~159px — beaucoup plus grand
-$logoMaxW = $logoCol - 10;            // ~169px
+// ── Logo ────────────────────────────────────────────────────────
+$logoH    = (int)round($hdrH * 0.80);
+$logoMaxW = $logoCol - 12;
 
 // ── Typographie (px) ────────────────────────────────────────────
-$fCie    = (int)round($bW * 0.052);   // ~44px — Oeil Vigilant (plus grand)
-$fSlogan = (int)round($bW * 0.013);   // ~11px — slogan (centre)
-$fAddr   = (int)round($bW * 0.013);   // ~11px — adresse
-$fField  = (int)round($bW * 0.018);   // ~15px — champs body
-$fMat    = (int)round($bW * 0.015);   // ~13px — matricule
-$fCnaps  = (int)round($bW * 0.014);   // ~12px — CNAPS footer
-$fLegal  = (int)round($bW * 0.011);   // ~9px  — mention légale
+$fCie    = (int)round($bW * 0.058);   // nom société — agrandi
+$fSlogan = (int)round($bW * 0.014);   // slogan
+$fAddr   = (int)round($bW * 0.014);   // adresse
+$fField  = (int)round($bW * 0.019);   // champs body
+$fMat    = (int)round($bW * 0.015);   // matricule
+$fCnaps  = (int)round($bW * 0.015);   // CNAPS footer
+$fLegal  = (int)round($bW * 0.012);   // mention légale
 
 // ── Échelle impression ───────────────────────────────────────────
 $printScale = round($wMm / ($bW * 0.2646), 4);
@@ -133,47 +133,44 @@ if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) 
 <style>
 /* ═══ Impression ════════════════════════════════════════════════════ */
 @media print {
-    /* Cacher tout sauf le badge */
     body * { visibility: hidden; }
     .badge-wrap, .badge-wrap * { visibility: visible; }
     .badge-wrap {
         position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
+        top: 0 !important; left: 0 !important;
         transform-origin: top left !important;
         transform: scale(<?= $printScale ?>) !important;
         box-shadow: none !important;
-        border: none !important;
     }
+}
+
+/* ═══ Conteneur ═════════════════════════════════════════════════════ */
+.badge-outer {
+    display: inline-block;
+    padding: 16px;
+    background: #e2e6ed;
+    border-radius: 6px;
 }
 
 /* ═══ Badge ═════════════════════════════════════════════════════════ */
 .badge-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
-
-.badge-outer {
-    display: inline-block;
-    border: 1.5px dashed #c8c8c8;
-    padding: 10px;
-    background: #ebebeb;
-    border-radius: 4px;
-}
 
 .badge-wrap {
     width: <?= $bW ?>px;
     height: <?= $bH ?>px;
     font-family: Arial, Helvetica, sans-serif;
     background: #fff;
-    border: 1px solid #d0d0d0;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
+    border: 1px solid #c4cad6;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
     overflow: hidden;
     display: flex;
     flex-direction: column;
 }
 
-/* ── Barres noires ── */
+/* ── Barres ── */
 .b-bar { width: 100%; flex-shrink: 0; }
-.b-bar-top { height: <?= $barTop ?>px; background: #0d0d0d; }
-.b-bar-bot { height: <?= $barBot ?>px; background: #0d0d0d; }
+.b-bar-top { height: <?= $barTop ?>px; background: #0d1118; }
+.b-bar-bot { height: <?= $barBot ?>px; background: #0d1118; }
 
 /* ── En-tête ── */
 .b-hdr {
@@ -182,17 +179,16 @@ if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) 
     align-items: stretch;
     flex-shrink: 0;
     overflow: hidden;
-    background: linear-gradient(160deg, #f6f9ff 0%, #ffffff 55%);
 }
 
-/* Logo (image seule, pas de texte) */
 .b-logo {
     width: <?= $logoCol ?>px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px 6px 8px 12px;
+    padding: 8px 5px 8px 12px;
+    background: #f4f7fc;
 }
 .b-logo img {
     max-height: <?= $logoH ?>px;
@@ -201,7 +197,6 @@ if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) 
     display: block;
 }
 
-/* Centre — nom société + slogan + adresse */
 .b-center {
     flex: 1;
     display: flex;
@@ -209,17 +204,18 @@ if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) 
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 8px 14px;
+    padding: 8px 16px;
+    background: #ffffff;
     overflow: hidden;
-    gap: 5px;
+    gap: 4px;
 }
 .b-cie-name {
     font-family: Georgia, 'Times New Roman', serif;
     font-size: <?= $fCie ?>px;
-    font-weight: 400;
+    font-weight: 700;
     font-style: italic;
     color: #0a1628;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     line-height: 1.05;
 }
 .b-cie-slogan {
@@ -238,7 +234,6 @@ if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) 
     line-height: 1.2;
 }
 
-/* Photo */
 .b-photo-col {
     width: <?= $photoCol ?>px;
     flex-shrink: 0;
@@ -247,123 +242,74 @@ if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) 
     align-items: center;
     justify-content: center;
     padding: 6px 12px 6px 4px;
+    background: #f4f7fc;
     gap: 4px;
 }
 .b-photo-frame {
     width: <?= $phW ?>px;
     height: <?= $phH ?>px;
-    border: 1px solid #ccc;
+    border: 1px solid #c8d0dc;
     overflow: hidden;
-    background: #e8e8e8;
+    background: #e0e4ec;
     flex-shrink: 0;
 }
-.b-photo-frame img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
+.b-photo-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .b-photo-init {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: <?= (int)round($phW * 0.30) ?>px;
-    font-weight: 900;
-    color: #c0c0c0;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: <?= (int)round($phW * 0.28) ?>px;
+    font-weight: 900; color: #b0b8c8;
     font-family: Georgia, serif;
 }
-.b-mat {
-    font-size: <?= $fMat ?>px;
-    font-weight: 700;
-    color: #111;
-    text-align: center;
-    white-space: nowrap;
-}
-.b-mat span { font-weight: 400; color: #777; }
+.b-mat { font-size: <?= $fMat ?>px; font-weight: 700; color: #111; text-align: center; white-space: nowrap; }
+.b-mat span { font-weight: 400; color: #888; }
 
-/* ── Corps — pas de séparateur, juste la continuité ── */
+/* ── Corps ── */
 .b-body {
     flex: 1;
     position: relative;
     overflow: hidden;
-    padding: <?= max(10, (int)round($bodyH * 0.10)) ?>px 36px <?= max(6, (int)round($bodyH * 0.06)) ?>px 36px;
+    padding: <?= max(8, (int)round($bodyH * 0.07)) ?>px <?= (int)round($bW * 0.042) ?>px 0;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    gap: <?= max(8, (int)round($bodyH * 0.050)) ?>px;
+    justify-content: flex-start;
+    gap: <?= max(6, (int)round($bodyH * 0.045)) ?>px;
     background: #fff;
 }
-
-/* Filigrane */
 .b-watermark {
-    position: absolute;
-    top: 50%; left: 50%;
+    position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    opacity: 0.05;
-    text-align: center;
-    pointer-events: none;
-    user-select: none;
+    opacity: 0.045; text-align: center;
+    pointer-events: none; user-select: none;
 }
-.b-watermark img { width: <?= (int)round($bW * 0.19) ?>px; display: block; margin: 0 auto; }
+.b-watermark img { width: <?= (int)round($bW * 0.18) ?>px; display: block; margin: 0 auto; }
 .b-wm-txt {
-    font-size: <?= (int)round($bW * 0.044) ?>px;
-    font-weight: 900;
-    color: #000;
-    text-transform: uppercase;
-    letter-spacing: 4px;
-    font-family: Arial, sans-serif;
-    margin-top: -4px;
-    white-space: nowrap;
+    font-size: <?= (int)round($bW * 0.042) ?>px; font-weight: 900; color: #000;
+    text-transform: uppercase; letter-spacing: 4px;
+    font-family: Arial, sans-serif; margin-top: -4px; white-space: nowrap;
 }
-
-/* Champs */
-.b-field {
-    display: flex;
-    align-items: baseline;
-    font-size: <?= $fField ?>px;
-    line-height: 1.15;
-}
-.b-field-lbl {
-    font-weight: 700;
-    color: #222;
-    white-space: nowrap;
-    min-width: <?= (int)round($bW * 0.315) ?>px;
-}
-.b-field-val {
-    font-weight: 700;
-    color: #111;
-    font-size: <?= ($fField + 1) ?>px;
-}
+.b-field { display: flex; align-items: baseline; font-size: <?= $fField ?>px; line-height: 1.2; }
+.b-field-lbl { font-weight: 700; color: #0a1628; white-space: nowrap; min-width: <?= (int)round($bW * 0.295) ?>px; }
+.b-field-val { font-weight: 600; color: #111; }
+.b-field-empty { font-weight: 400; color: #bbb; font-style: italic; }
 
 /* ── Pied ── */
 .b-footer {
     height: <?= $ftrH ?>px;
-    border-top: 1.5px solid #e8e8e8;
-    background: linear-gradient(180deg, #f6f8fc 0%, #f0f3f8 100%);
+    border-top: 1px solid #dde2ec;
+    background: #f4f7fc;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     text-align: center;
     padding: 5px 20px 4px;
     flex-shrink: 0;
     overflow: hidden;
-    gap: 3px;
+    gap: 2px;
 }
-.b-footer-cnaps {
-    font-size: <?= $fCnaps ?>px;
-    font-weight: 700;
-    color: #222;
-    letter-spacing: 0.2px;
-}
-.b-footer-legal {
-    font-size: <?= $fLegal ?>px;
-    color: #666;
-    line-height: 1.4;
-    max-width: 88%;
-}
+.b-footer-cnaps { font-size: <?= $fCnaps ?>px; font-weight: 700; color: #0a1628; letter-spacing: 0.2px; }
+.b-footer-legal { font-size: <?= $fLegal ?>px; color: #555; line-height: 1.4; max-width: 90%; }
 </style>
 
 <div class="badge-outer">
@@ -371,23 +317,15 @@ if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) 
 
   <div class="b-bar b-bar-top"></div>
 
-  <!-- En-tête : logo | société | photo -->
   <div class="b-hdr">
-
     <div class="b-logo">
       <img src="<?= h($logoUrl) ?>" alt="" onerror="this.style.display='none'">
     </div>
-
     <div class="b-center">
       <div class="b-cie-name"><?= h($companyName) ?></div>
-      <?php if ($slogan): ?>
-      <div class="b-cie-slogan"><?= h($slogan) ?></div>
-      <?php endif; ?>
-      <?php if ($companyAddr): ?>
-      <div class="b-cie-addr"><?= h($companyAddr) ?></div>
-      <?php endif; ?>
+      <?php if ($slogan): ?><div class="b-cie-slogan"><?= h($slogan) ?></div><?php endif; ?>
+      <?php if ($companyAddr): ?><div class="b-cie-addr"><?= h($companyAddr) ?></div><?php endif; ?>
     </div>
-
     <div class="b-photo-col">
       <div class="b-photo-frame">
         <?php if ($photoUrl): ?>
@@ -396,41 +334,35 @@ if (empty($params['entreprise_adresse']) && empty($params['entreprise_ville'])) 
           <div class="b-photo-init"><?= h($initiales) ?></div>
         <?php endif; ?>
       </div>
-      <?php if ($mat): ?>
-      <div class="b-mat"><span>MAT:</span> <?= h($mat) ?></div>
-      <?php endif; ?>
+      <?php if ($mat): ?><div class="b-mat"><span>MAT:</span> <?= h($mat) ?></div><?php endif; ?>
     </div>
-
   </div>
 
-  <!-- Corps (pas de séparateur) -->
   <div class="b-body">
     <div class="b-watermark">
       <img src="<?= h($logoUrl) ?>" alt="" onerror="this.style.display='none'">
       <div class="b-wm-txt"><?= h(strtoupper($companyName)) ?></div>
     </div>
-
     <?php foreach ($bodyFields as $f): ?>
     <div class="b-field">
       <span class="b-field-lbl"><?= h($f['label']) ?> :</span>
-      <span class="b-field-val"><?= h($f['value']) ?></span>
+      <?php if ($f['value'] !== ''): ?>
+        <span class="b-field-val">&nbsp;<?= h($f['value']) ?></span>
+      <?php else: ?>
+        <span class="b-field-empty">&nbsp;—</span>
+      <?php endif; ?>
     </div>
     <?php endforeach; ?>
   </div>
 
-  <!-- Pied -->
   <div class="b-footer">
-    <?php if ($cnapsEnt): ?>
-    <div class="b-footer-cnaps">CNAPS : <?= h($cnapsEnt) ?></div>
-    <?php endif; ?>
-    <?php if ($legalText): ?>
-    <div class="b-footer-legal"><?= h($legalText) ?></div>
-    <?php endif; ?>
+    <?php if ($cnapsEnt): ?><div class="b-footer-cnaps">CNAPS : <?= h($cnapsEnt) ?></div><?php endif; ?>
+    <?php if ($legalText): ?><div class="b-footer-legal"><?= h($legalText) ?></div><?php endif; ?>
   </div>
 
   <div class="b-bar b-bar-bot"></div>
 
-</div><!-- /.badge-wrap -->
-</div><!-- /.badge-outer -->
+</div>
+</div>
 
 <?php include __DIR__ . '/../../includes/footer.php'; ?>
