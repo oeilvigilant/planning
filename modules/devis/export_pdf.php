@@ -171,10 +171,8 @@ ob_start();
                 <div class="societe-name">OEIL VIGILANT</div>
                 <div class="societe-sub">Votre sécurité, Notre priorité</div>
             </td>
-            <td>&nbsp;</td>
-            <td class="devis-info-cell">
+            <td style="text-align:right;vertical-align:middle">
                 <div class="devis-numero">DEVIS <?= h($devis['numero']) ?></div>
-                <div style="font-size:8pt;color:#666">Émis le <?= date('d/m/Y') ?></div>
             </td>
         </tr>
     </table>
@@ -332,9 +330,8 @@ ob_start();
                     <div class="footer-line2">N° autorisation : AUT-075-2123-06-21-20240934026</div>
                     <div class="footer-legal">L'autorisation d'exercice ne confère aucune prérogative de puissance publique à l'entreprise ou aux personnes qui en bénéficient.</div>
                 </td>
-                <td style="width:30%;vertical-align:top;text-align:right" class="footer-right">
-                    Devis <?= h($devis['numero']) ?><br>
-                    Généré le <?= date('d/m/Y') ?>
+                <td style="width:30%;vertical-align:bottom;text-align:right" class="footer-right">
+                    Devis <?= h($devis['numero']) ?> &nbsp;·&nbsp; Généré le <?= date('d/m/Y') ?>
                 </td>
             </tr>
         </table>
