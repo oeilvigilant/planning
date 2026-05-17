@@ -566,14 +566,16 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
 
     // ── Autofill ──────────────────────────────────────────────────────────
     var currentProfilCard = null;
-    var modalEl = document.getElementById('modalAutofill');
-    var modal   = new bootstrap.Modal(modalEl);
+
+    function getModal() {
+        return bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAutofill'));
+    }
 
     document.addEventListener('click', function(e) {
         var btn = e.target.closest('.btn-autofill');
         if (!btn) return;
         currentProfilCard = document.querySelector('.profil-card[data-profil-id="' + btn.dataset.profilId + '"]');
-        modal.show();
+        getModal().show();
     });
 
     document.getElementById('afPresetJour').addEventListener('click', function() {
@@ -611,7 +613,7 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
             });
         });
         recalcAll();
-        modal.hide();
+        getModal().hide();
     });
 
     // ── Copier 1ère ligne ─────────────────────────────────────────────────
