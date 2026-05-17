@@ -84,6 +84,15 @@ $currentModule = $currentModule ?? '';
         </li>
         <?php endif; ?>
 
+        <?php if (canDo('devis','view')): ?>
+        <div class="sidebar-section">Commercial</div>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/modules/devis/index.php" class="nav-link <?= (strncmp($currentModule,'devis',5)===0)?'active':'' ?>">
+                <span class="nav-icon"><i class="fa fa-file-invoice"></i></span> Devis
+            </a>
+        </li>
+        <?php endif; ?>
+
         <?php if (canDo('parametres','view')): ?>
         <div class="sidebar-section">Administration</div>
         <li class="nav-item">
