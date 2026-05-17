@@ -102,29 +102,29 @@ ob_start();
     /* En-tête */
     .entete { width: 100%; margin-bottom: 12px; border-bottom: 2px solid #c9a84c; padding-bottom: 8px; }
     .entete td { vertical-align: top; }
-    .logo-cell { width: 170px; }
-    .logo-cell img { height: 65px; max-width: 160px; }
+    .logo-cell { width: 210px; }
+    .logo-cell img { height: 85px; max-width: 200px; }
     .societe-cell { padding-left: 10px; }
-    .societe-name { font-size: 14pt; font-weight: bold; color: #1a2332; white-space: nowrap; }
+    .societe-name { font-size: 13pt; font-weight: 600; color: #1a2332; white-space: nowrap; }
     .societe-sub  { font-size: 8pt; color: #888; font-style: italic; }
     .devis-info-cell { text-align: right; }
-    .devis-numero { font-size: 13pt; font-weight: bold; color: #c9a84c; }
+    .devis-numero { font-size: 13pt; font-weight: 600; color: #c9a84c; }
 
     /* Bloc client / période */
     .info-block { width: 100%; margin-bottom: 10px; }
     .info-block td { padding: 4px 8px; vertical-align: top; font-size: 8.5pt; }
-    .info-label { font-weight: bold; color: #666; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.5px; }
-    .info-value { color: #1a2332; }
+    .info-label { font-weight: 600; color: #888; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.5px; }
+    .info-value { color: #1a2332; font-weight: normal; }
 
     /* Tableau devis */
     .tbl { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 7.5pt; }
-    .tbl th, .tbl td { border: 1px solid #ddd; padding: 3px 4px; text-align: center; }
-    .tbl thead tr:first-child th { background: #1a2332; color: #c9a84c; font-size: 8pt; padding: 5px 4px; }
-    .tbl thead tr:nth-child(2) th { background: #f0f0f0; font-weight: bold; }
-    .tbl thead tr:nth-child(3) td { background: #f8f6f0; color: #a8883c; font-size: 7pt; }
+    .tbl th, .tbl td { border: 1px solid #e0e0e0; padding: 3px 4px; text-align: center; }
+    .tbl thead tr:first-child th { background: #1a2332; color: #c9a84c; font-size: 7.5pt; font-weight: 600; padding: 4px; }
+    .tbl thead tr:nth-child(2) th { background: #f4f4f4; font-weight: 600; color: #444; }
+    .tbl thead tr:nth-child(3) td { background: #faf8f2; color: #a8883c; font-size: 7pt; }
     .tbl tbody tr td:first-child { text-align: left; white-space: nowrap; }
-    .tbl tbody tr.zero td { color: #bbb; }
-    .tbl tfoot tr td { background: #f8f6e8; font-weight: bold; border-top: 2px solid #c9a84c; }
+    .tbl tbody tr.zero td { color: #ccc; }
+    .tbl tfoot tr td { background: #f8f6e8; font-weight: 600; border-top: 1.5px solid #c9a84c; }
     .tbl tfoot tr td:first-child { text-align: left; }
 
     /* Couleurs de type */
