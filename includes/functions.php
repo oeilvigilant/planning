@@ -1,6 +1,23 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 
+// ── Migration automatique ────────────────────────────────────────────────────
+
+function ensureAgentsSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db  = getDB();
+        $has = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agents' AND COLUMN_NAME = 'sexe'")->fetchColumn();
+        if (!$has) {
+            $db->exec("ALTER TABLE agents ADD COLUMN sexe ENUM('M','F') NOT NULL DEFAULT 'M' AFTER prenom");
+            $db->exec("UPDATE agents SET sexe = CASE WHEN LEFT(TRIM(num_secu),1) = '2' THEN 'F' ELSE 'M' END WHERE num_secu IS NOT NULL AND num_secu != ''");
+        }
+    } catch (Exception $e) {}
+}
+
 // ── Paramètres ──────────────────────────────────────────────────────────────
 
 function getParam(string $cle, string $default = ''): string {

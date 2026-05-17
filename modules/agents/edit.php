@@ -5,6 +5,7 @@ requireLogin();
 requirePerm('agents', 'edit');
 
 $db = getDB();
+ensureAgentsSchema();
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: index.php'); exit; }
 

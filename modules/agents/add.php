@@ -5,6 +5,7 @@ requireLogin();
 requirePerm('agents', 'create');
 
 $db     = getDB();
+ensureAgentsSchema();
 $errors = [];
 $data   = [];
 
