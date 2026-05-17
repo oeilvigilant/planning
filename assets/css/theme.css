@@ -58,7 +58,7 @@ body.app-body {
     margin-top: 0.75rem;
 }
 
-.nav-item a.nav-link {
+#sidebar .nav-item a.nav-link {
     color: rgba(232,234,240,0.75);
     padding: 0.6rem 1rem;
     border-radius: 8px;
@@ -70,18 +70,18 @@ body.app-body {
     text-decoration: none;
     font-size: 0.875rem;
 }
-.nav-item a.nav-link:hover,
-.nav-item a.nav-link.active {
+#sidebar .nav-item a.nav-link:hover,
+#sidebar .nav-item a.nav-link.active {
     background: rgba(201,168,76,0.12);
     color: var(--ov-gold);
 }
-.nav-item a.nav-link .nav-icon {
+#sidebar .nav-item a.nav-link .nav-icon {
     width: 20px;
     text-align: center;
     font-size: 0.95rem;
     opacity: 0.8;
 }
-.nav-item a.nav-link.active .nav-icon { opacity: 1; }
+#sidebar .nav-item a.nav-link.active .nav-icon { opacity: 1; }
 .nav-badge {
     margin-left: auto;
     background: var(--ov-gold);

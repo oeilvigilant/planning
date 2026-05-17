@@ -57,7 +57,8 @@ $fLegal  = round($wMm * 0.030, 1);  // mention légale
 function b64img(string $path): string {
     if (!file_exists($path) || !is_readable($path)) return '';
     $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    $mime = match($ext) { 'png' => 'image/png', 'svg' => 'image/svg+xml', default => 'image/jpeg' };
+    $mimeMap = ['png' => 'image/png', 'svg' => 'image/svg+xml'];
+    $mime = $mimeMap[$ext] ?? 'image/jpeg';
     return 'data:'.$mime.';base64,'.base64_encode(file_get_contents($path));
 }
 
