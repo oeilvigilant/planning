@@ -102,11 +102,11 @@ ob_start();
     /* En-tête */
     .entete { width: 100%; margin-bottom: 12px; border-bottom: 2px solid #c9a84c; padding-bottom: 8px; }
     .entete td { vertical-align: top; }
-    .logo-cell { width: 120px; }
-    .logo-cell img { height: 40px; }
+    .logo-cell { width: 170px; }
+    .logo-cell img { height: 65px; max-width: 160px; }
     .societe-cell { padding-left: 10px; }
-    .societe-name { font-size: 14pt; font-weight: bold; color: #1a2332; }
-    .societe-sub  { font-size: 8pt; color: #666; }
+    .societe-name { font-size: 14pt; font-weight: bold; color: #1a2332; white-space: nowrap; }
+    .societe-sub  { font-size: 8pt; color: #888; font-style: italic; }
     .devis-info-cell { text-align: right; }
     .devis-numero { font-size: 13pt; font-weight: bold; color: #c9a84c; }
 
@@ -169,7 +169,7 @@ ob_start();
                 <img src="<?= $logoBase64 ?>" alt="Logo">
                 <?php endif; ?>
                 <div class="societe-name">OEIL VIGILANT</div>
-                <div class="societe-sub">Société de Sécurité</div>
+                <div class="societe-sub">Votre sécurité, Notre priorité</div>
             </td>
             <td>&nbsp;</td>
             <td class="devis-info-cell">
