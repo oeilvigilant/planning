@@ -143,8 +143,8 @@ ob_start();
     .tbl-recap tr.ttc td { border-top: 2px solid #c9a84c; font-size: 11pt; color: #c9a84c; font-weight: bold; }
 
     /* Titre profil */
-    .profil-title { background: #1a2332; color: #c9a84c; padding: 5px 8px; font-weight: bold; font-size: 9pt; margin-bottom: 0; }
-    .profil-sub   { background: #f0f0f0; padding: 3px 8px; font-size: 7.5pt; color: #666; margin-bottom: 4px; }
+    .profil-title { background: #eef0f4; color: #1a2332; padding: 5px 8px; font-weight: 600; font-size: 9pt; margin-bottom: 0; border-left: 3px solid #c9a84c; }
+    .profil-sub   { background: #f8f8f8; padding: 3px 8px; font-size: 7.5pt; color: #777; margin-bottom: 4px; }
 
     /* Pied de page */
     .footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 6.5pt; color: #666; border-top: 1.5px solid #c9a84c; padding: 4px 12mm 3px 12mm; background: #fafaf8; }
