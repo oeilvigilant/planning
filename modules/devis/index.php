@@ -128,6 +128,11 @@ $statutLabels = [
                         <a href="export_pdf.php?id=<?= $d['id'] ?>" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="Export PDF" target="_blank">
                             <i class="fa fa-file-pdf"></i>
                         </a>
+                        <a href="duplicate.php?id=<?= $d['id'] ?>"
+                           onclick="return confirm('Dupliquer le devis <?= addslashes(h($d['numero'])) ?> ?')"
+                           class="btn-sm-icon" style="background:rgba(99,102,241,0.1);color:#4f46e5" title="Dupliquer">
+                            <i class="fa fa-copy"></i>
+                        </a>
                         <a href="#"
                            onclick="event.preventDefault(); if(confirm('Supprimer le devis <?= addslashes(h($d['numero'])) ?> ?\nCette action est irréversible.')) document.getElementById('del-<?= $d['id'] ?>').submit();"
                            class="btn-sm-icon delete" title="Supprimer">

@@ -91,6 +91,8 @@ $currentModule = 'devis';
 $topbarActions = '
 <a href="index.php" class="btn btn-ov-secondary btn-sm me-1"><i class="fa fa-arrow-left me-1"></i> Retour</a>
 <a href="edit_info.php?id=' . $id . '" class="btn btn-ov-secondary btn-sm me-1"><i class="fa fa-pen me-1"></i> Modifier infos</a>
+<a href="duplicate.php?id=' . $id . '" class="btn btn-ov-secondary btn-sm me-1"
+   onclick="return confirm(\'Dupliquer ce devis ?\')"><i class="fa fa-copy me-1"></i> Dupliquer</a>
 <a href="export_pdf.php?id=' . $id . '" class="btn btn-sm me-1" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.3)" target="_blank"><i class="fa fa-file-pdf me-1"></i> PDF</a>
 <span class="badge bg-' . $sColor . ' ms-1">' . h($sLabel) . '</span>
 ';
@@ -161,13 +163,30 @@ foreach ($profils as $profil):
      data-taux-nd="<?= $tauxNd ?>"
      data-taux-jf="<?= $tauxJf ?>"
      data-taux-nf="<?= $tauxNf ?>">
-    <div class="ov-card-header">
+    <div class="ov-card-header flex-wrap gap-2">
         <h2 class="ov-card-title" style="font-size:0.95rem">
             <i class="fa fa-user-shield me-2" style="color:var(--ov-gold)"></i>
             <?= h($profil['label']) ?>
         </h2>
         <div class="text-muted" style="font-size:0.8rem">
             <?= h($profil['activite']) ?> &nbsp;|&nbsp; <?= h($profil['plage']) ?>
+        </div>
+        <div class="ms-auto d-flex gap-1">
+            <button type="button" class="btn btn-sm btn-outline-secondary btn-autofill"
+                data-profil-id="<?= $pid ?>"
+                title="Remplir automatiquement toutes les lignes">
+                <i class="fa fa-wand-magic-sparkles me-1"></i>Remplir auto
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary btn-copy-first"
+                data-profil-id="<?= $pid ?>"
+                title="Copier les valeurs de la 1ère ligne sur toutes les lignes">
+                <i class="fa fa-copy me-1"></i>Copier 1ère ligne
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-clear-all"
+                data-profil-id="<?= $pid ?>"
+                title="Vider toutes les cellules">
+                <i class="fa fa-eraser me-1"></i>Vider
+            </button>
         </div>
     </div>
     <div class="ov-card-body p-0">
@@ -402,11 +421,71 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
 
 </form>
 
+<!-- Modal remplissage auto -->
+<div class="modal fade" id="modalAutofill" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa fa-wand-magic-sparkles me-2"></i>Remplissage automatique</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3" style="font-size:0.85rem">
+            Saisissez les heures à appliquer sur <strong>chaque jour</strong> (selon le type de jour). Les colonnes désactivées pour un jour donné seront ignorées.
+        </p>
+        <div class="row g-2 text-center">
+            <div class="col-4"><div class="p-2 rounded" style="background:rgba(99,102,241,0.08)">
+                <div style="font-size:0.7rem;font-weight:700;color:#4f46e5">JOUR NORMAL</div>
+                <div class="d-flex gap-1 mt-1">
+                    <div class="flex-fill"><small class="text-muted d-block">Jour</small>
+                        <input type="number" id="af_jn" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
+                    <div class="flex-fill"><small class="text-muted d-block">Nuit</small>
+                        <input type="number" id="af_nn" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
+                </div>
+            </div></div>
+            <div class="col-4"><div class="p-2 rounded" style="background:rgba(59,130,246,0.08)">
+                <div style="font-size:0.7rem;font-weight:700;color:#2563eb">DIMANCHE</div>
+                <div class="d-flex gap-1 mt-1">
+                    <div class="flex-fill"><small class="text-muted d-block">Jour</small>
+                        <input type="number" id="af_jd" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
+                    <div class="flex-fill"><small class="text-muted d-block">Nuit</small>
+                        <input type="number" id="af_nd" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
+                </div>
+            </div></div>
+            <div class="col-4"><div class="p-2 rounded" style="background:rgba(239,68,68,0.08)">
+                <div style="font-size:0.7rem;font-weight:700;color:#dc2626">FÉRIÉ</div>
+                <div class="d-flex gap-1 mt-1">
+                    <div class="flex-fill"><small class="text-muted d-block">Jour</small>
+                        <input type="number" id="af_jf" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
+                    <div class="flex-fill"><small class="text-muted d-block">Nuit</small>
+                        <input type="number" id="af_nf" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
+                </div>
+            </div></div>
+        </div>
+        <hr class="my-3">
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="afPresetJour">
+                <i class="fa fa-sun me-1"></i>Préremplir Jour (07h-19h)
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="afPresetNuit">
+                <i class="fa fa-moon me-1"></i>Préremplir Nuit (19h-07h)
+            </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ov-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-ov-primary" id="btnApplyAutofill">
+            <i class="fa fa-check me-1"></i>Appliquer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
     var tvaTaux = <?= (float)$devis['tva_taux'] ?>;
 
-    // Taux par profil (depuis data-attributes des cards)
     function getTaux(profilCard) {
         return {
             h_jn: parseFloat(profilCard.dataset.tauxJn) || 0,
@@ -418,27 +497,16 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
         };
     }
 
-    function val(inp) {
-        return parseFloat(inp.value) || 0;
-    }
-
-    function fmtH(v) {
-        return v > 0 ? v.toFixed(1) : '—';
-    }
-
-    function fmtHT(v) {
-        return v > 0 ? v.toFixed(2).replace('.', ',') + ' €' : '—';
-    }
+    function val(inp) { return parseFloat(inp.value) || 0; }
+    function fmtH(v)  { return v > 0 ? v.toFixed(1) : '—'; }
+    function fmtHT(v) { return v > 0 ? v.toFixed(2).replace('.', ',') + ' €' : '—'; }
 
     function recalcRow(row) {
         var profilCard = row.closest('.profil-card');
         var taux = getTaux(profilCard);
         var inputs = row.querySelectorAll('.h-input');
         var values = {};
-        inputs.forEach(function(inp) {
-            values[inp.dataset.col] = val(inp);
-        });
-        // Hidden inputs for disabled cols also contribute 0
+        inputs.forEach(function(inp) { values[inp.dataset.col] = val(inp); });
         var cols = ['h_jn','h_nn','h_jd','h_nd','h_jf','h_nf'];
         var totalH = 0, totalHT = 0;
         cols.forEach(function(c) {
@@ -454,32 +522,24 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
     }
 
     function recalcProfil(profilCard) {
-        var taux   = getTaux(profilCard);
         var rows   = profilCard.querySelectorAll('tbody .ligne-jour');
         var stCols = {h_jn:0,h_nn:0,h_jd:0,h_nd:0,h_jf:0,h_nf:0};
         var stH    = 0, stHT = 0;
-
         rows.forEach(function(row) {
-            var inputs = row.querySelectorAll('.h-input');
-            inputs.forEach(function(inp) {
+            row.querySelectorAll('.h-input').forEach(function(inp) {
                 stCols[inp.dataset.col] = (stCols[inp.dataset.col] || 0) + val(inp);
             });
             var r = recalcRow(row);
             stH  += r.h;
             stHT += r.ht;
         });
-
-        // Sous-totaux colonnes
-        var stColCells = profilCard.querySelectorAll('tfoot .st-col');
-        stColCells.forEach(function(td) {
-            var c = td.dataset.col;
-            td.textContent = stCols[c] > 0 ? stCols[c].toFixed(1) : '—';
+        profilCard.querySelectorAll('tfoot .st-col').forEach(function(td) {
+            td.textContent = stCols[td.dataset.col] > 0 ? stCols[td.dataset.col].toFixed(1) : '—';
         });
         var stTH  = profilCard.querySelector('tfoot .st-total-h');
         var stTHT = profilCard.querySelector('tfoot .st-total-ht');
         if (stTH)  stTH.textContent  = fmtH(stH);
         if (stTHT) stTHT.textContent = fmtHT(stHT);
-
         return { h: stH, ht: stHT };
     }
 
@@ -493,7 +553,6 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
         });
         var tva = grandHT * (tvaTaux / 100);
         var ttc = grandHT + tva;
-
         var el;
         el = document.getElementById('gtotalH');   if (el) el.textContent = grandH.toFixed(1) + ' h';
         el = document.getElementById('gtotalHT');  if (el) el.textContent = grandHT.toFixed(2).replace('.', ',') + ' €';
@@ -501,14 +560,92 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
         el = document.getElementById('gtotalTTC'); if (el) el.textContent = ttc.toFixed(2).replace('.', ',') + ' €';
     }
 
-    // Écouter les changements sur tous les inputs
     document.addEventListener('input', function(e) {
-        if (e.target.classList.contains('h-input')) {
-            recalcAll();
-        }
+        if (e.target.classList.contains('h-input')) recalcAll();
     });
 
-    // Recalcul initial
+    // ── Autofill ──────────────────────────────────────────────────────────
+    var currentProfilCard = null;
+    var modalEl = document.getElementById('modalAutofill');
+    var modal   = new bootstrap.Modal(modalEl);
+
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-autofill');
+        if (!btn) return;
+        currentProfilCard = document.querySelector('.profil-card[data-profil-id="' + btn.dataset.profilId + '"]');
+        modal.show();
+    });
+
+    document.getElementById('afPresetJour').addEventListener('click', function() {
+        document.getElementById('af_jn').value = 12;
+        document.getElementById('af_nn').value = '';
+        document.getElementById('af_jd').value = 12;
+        document.getElementById('af_nd').value = '';
+        document.getElementById('af_jf').value = 12;
+        document.getElementById('af_nf').value = '';
+    });
+
+    document.getElementById('afPresetNuit').addEventListener('click', function() {
+        document.getElementById('af_jn').value = 3;
+        document.getElementById('af_nn').value = 9;
+        document.getElementById('af_jd').value = 3;
+        document.getElementById('af_nd').value = 9;
+        document.getElementById('af_jf').value = 3;
+        document.getElementById('af_nf').value = 9;
+    });
+
+    document.getElementById('btnApplyAutofill').addEventListener('click', function() {
+        if (!currentProfilCard) return;
+        var afVals = {
+            h_jn: parseFloat(document.getElementById('af_jn').value) || 0,
+            h_nn: parseFloat(document.getElementById('af_nn').value) || 0,
+            h_jd: parseFloat(document.getElementById('af_jd').value) || 0,
+            h_nd: parseFloat(document.getElementById('af_nd').value) || 0,
+            h_jf: parseFloat(document.getElementById('af_jf').value) || 0,
+            h_nf: parseFloat(document.getElementById('af_nf').value) || 0,
+        };
+        currentProfilCard.querySelectorAll('tbody .ligne-jour').forEach(function(row) {
+            row.querySelectorAll('.h-input').forEach(function(inp) {
+                var col = inp.dataset.col;
+                if (afVals[col] !== undefined) inp.value = afVals[col] || '';
+            });
+        });
+        recalcAll();
+        modal.hide();
+    });
+
+    // ── Copier 1ère ligne ─────────────────────────────────────────────────
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-copy-first');
+        if (!btn) return;
+        var card = document.querySelector('.profil-card[data-profil-id="' + btn.dataset.profilId + '"]');
+        if (!card) return;
+        var rows = card.querySelectorAll('tbody .ligne-jour');
+        if (rows.length < 2) return;
+        var firstVals = {};
+        rows[0].querySelectorAll('.h-input').forEach(function(inp) {
+            firstVals[inp.dataset.col] = inp.value;
+        });
+        for (var i = 1; i < rows.length; i++) {
+            rows[i].querySelectorAll('.h-input').forEach(function(inp) {
+                var col = inp.dataset.col;
+                if (firstVals[col] !== undefined) inp.value = firstVals[col];
+            });
+        }
+        recalcAll();
+    });
+
+    // ── Vider tout ────────────────────────────────────────────────────────
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-clear-all');
+        if (!btn) return;
+        if (!confirm('Vider toutes les heures de ce profil ?')) return;
+        var card = document.querySelector('.profil-card[data-profil-id="' + btn.dataset.profilId + '"]');
+        if (!card) return;
+        card.querySelectorAll('tbody .h-input').forEach(function(inp) { inp.value = ''; });
+        recalcAll();
+    });
+
     recalcAll();
 })();
 </script>

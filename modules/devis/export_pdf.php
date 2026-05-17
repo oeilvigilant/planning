@@ -199,7 +199,12 @@ ob_start();
     </table>
 
     <!-- Tableau par profil -->
-    <?php foreach ($profils as $profil):
+    <?php
+    function showH($v, $active) {
+        if (!$active) return '<td class="td-disabled">—</td>';
+        return '<td>' . ($v > 0 ? number_format($v, 1) : '—') . '</td>';
+    }
+    foreach ($profils as $profil):
         $pid      = $profil['id'];
         $donnees  = $totauxProfils[$pid];
         $tauxJn   = (float)$profil['taux_jn'];
@@ -264,10 +269,6 @@ ob_start();
             $activeJf = $ferie;
             $activeNf = $ferie;
 
-            function showH($v, $active) {
-                if (!$active) return '<td class="td-disabled">—</td>';
-                return '<td>' . ($v > 0 ? number_format($v, 1) : '—') . '</td>';
-            }
         ?>
         <tr class="<?= $trCls ?>">
             <td class="<?= $dateCls ?>"><?= h($jourFmt) ?></td>

@@ -243,24 +243,35 @@ require_once __DIR__ . '/../../includes/header.php';
         <h6 class="mb-0 fw-bold" style="color:var(--ov-gold)">
             <i class="fa fa-user-shield me-1"></i> Profil <span class="profil-num">__NUM__</span>
         </h6>
-        <button type="button" class="btn btn-sm btn-outline-danger btn-remove-profil" title="Supprimer ce profil">
-            <i class="fa fa-times"></i>
-        </button>
+        <div class="d-flex gap-2 align-items-center">
+            <select class="form-select form-select-sm tpl-select" style="width:200px" title="Charger un profil type">
+                <option value="">— Profil type —</option>
+                <option value="agent-jour">Agent de Jour (07h-19h)</option>
+                <option value="agent-nuit">Agent de Nuit (19h-07h)</option>
+                <option value="cynophile">Maître Chien (20h-06h)</option>
+                <option value="ssiap1">Agent SSIAP 1</option>
+                <option value="ssiap2">Chef d'équipe SSIAP 2</option>
+                <option value="chef-equipe">Chef d'Équipe</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-danger btn-remove-profil" title="Supprimer ce profil">
+                <i class="fa fa-times"></i>
+            </button>
+        </div>
     </div>
     <div class="row g-3">
         <div class="col-md-4">
             <label class="form-label">Label du profil <span class="text-danger">*</span></label>
-            <input type="text" name="profils[__IDX__][label]" class="form-control"
+            <input type="text" name="profils[__IDX__][label]" class="form-control tpl-label"
                 placeholder="Ex: Profil A : 1 Agent De Jour" required>
         </div>
         <div class="col-md-4">
             <label class="form-label">Activité</label>
-            <input type="text" name="profils[__IDX__][activite]" class="form-control"
+            <input type="text" name="profils[__IDX__][activite]" class="form-control tpl-activite"
                 value="Agent de Sécurité">
         </div>
         <div class="col-md-4">
             <label class="form-label">Plage horaire</label>
-            <input type="text" name="profils[__IDX__][plage]" class="form-control"
+            <input type="text" name="profils[__IDX__][plage]" class="form-control tpl-plage"
                 value="De 07h00 à 19h00" placeholder="De HHhMM à HHhMM">
         </div>
     </div>
@@ -270,27 +281,27 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="row g-2">
         <div class="col">
             <label class="form-label text-center d-block" style="font-size:0.75rem">JN Jour<br><small class="text-muted">Jour Normal</small></label>
-            <input type="number" name="profils[__IDX__][taux_jn]" class="form-control form-control-sm text-center" step="0.01" min="0" value="25.90">
+            <input type="number" name="profils[__IDX__][taux_jn]" class="form-control form-control-sm text-center tpl-jn" step="0.01" min="0" value="25.90">
         </div>
         <div class="col">
             <label class="form-label text-center d-block" style="font-size:0.75rem">NN Nuit<br><small class="text-muted">Jour Normal</small></label>
-            <input type="number" name="profils[__IDX__][taux_nn]" class="form-control form-control-sm text-center" step="0.01" min="0" value="27.90">
+            <input type="number" name="profils[__IDX__][taux_nn]" class="form-control form-control-sm text-center tpl-nn" step="0.01" min="0" value="27.90">
         </div>
         <div class="col">
             <label class="form-label text-center d-block" style="font-size:0.75rem">JD Jour<br><small class="text-muted">Dimanche</small></label>
-            <input type="number" name="profils[__IDX__][taux_jd]" class="form-control form-control-sm text-center" step="0.01" min="0" value="27.90">
+            <input type="number" name="profils[__IDX__][taux_jd]" class="form-control form-control-sm text-center tpl-jd" step="0.01" min="0" value="27.90">
         </div>
         <div class="col">
             <label class="form-label text-center d-block" style="font-size:0.75rem">ND Nuit<br><small class="text-muted">Dimanche</small></label>
-            <input type="number" name="profils[__IDX__][taux_nd]" class="form-control form-control-sm text-center" step="0.01" min="0" value="30.90">
+            <input type="number" name="profils[__IDX__][taux_nd]" class="form-control form-control-sm text-center tpl-nd" step="0.01" min="0" value="30.90">
         </div>
         <div class="col">
             <label class="form-label text-center d-block" style="font-size:0.75rem">JF Jour<br><small class="text-muted">Férié</small></label>
-            <input type="number" name="profils[__IDX__][taux_jf]" class="form-control form-control-sm text-center" step="0.01" min="0" value="51.80">
+            <input type="number" name="profils[__IDX__][taux_jf]" class="form-control form-control-sm text-center tpl-jf" step="0.01" min="0" value="51.80">
         </div>
         <div class="col">
             <label class="form-label text-center d-block" style="font-size:0.75rem">NF Nuit<br><small class="text-muted">Férié</small></label>
-            <input type="number" name="profils[__IDX__][taux_nf]" class="form-control form-control-sm text-center" step="0.01" min="0" value="55.80">
+            <input type="number" name="profils[__IDX__][taux_nf]" class="form-control form-control-sm text-center tpl-nf" step="0.01" min="0" value="55.80">
         </div>
     </div>
 </div>
@@ -302,6 +313,29 @@ require_once __DIR__ . '/../../includes/header.php';
     var btnAdd    = document.getElementById('btnAddProfil');
     var noMsg     = document.getElementById('noProfilMsg');
     var counter   = 0;
+
+    var PROFILS_TYPES = {
+        'agent-jour':   { label: 'Profil : Agent De Jour',        activite: 'Agent de Sécurité',  plage: 'De 07h00 à 19h00', jn: 25.90, nn: 27.90, jd: 27.90, nd: 30.90, jf: 51.80, nf: 55.80 },
+        'agent-nuit':   { label: 'Profil : Agent De Nuit',        activite: 'Agent de Sécurité',  plage: 'De 19h00 à 07h00', jn: 25.90, nn: 27.90, jd: 27.90, nd: 30.90, jf: 51.80, nf: 55.80 },
+        'cynophile':    { label: 'Profil : Maître Chien',         activite: 'Agent Cynophile',    plage: 'De 20h00 à 06h00', jn: 28.00, nn: 30.00, jd: 30.00, nd: 33.00, jf: 56.00, nf: 60.00 },
+        'ssiap1':       { label: 'Profil : Agent SSIAP 1',        activite: 'Agent SSIAP',        plage: 'De 07h00 à 19h00', jn: 26.50, nn: 28.50, jd: 28.50, nd: 31.50, jf: 53.00, nf: 57.00 },
+        'ssiap2':       { label: "Profil : Chef d'équipe SSIAP 2",activite: 'Agent SSIAP',        plage: 'De 07h00 à 19h00', jn: 28.00, nn: 30.00, jd: 30.00, nd: 33.00, jf: 56.00, nf: 60.00 },
+        'chef-equipe':  { label: "Profil : Chef D'Équipe",        activite: "Chef d'Équipe",      plage: 'De 07h00 à 19h00', jn: 27.50, nn: 29.50, jd: 29.50, nd: 32.50, jf: 55.00, nf: 59.00 },
+    };
+
+    function applyTemplate(block, key) {
+        var t = PROFILS_TYPES[key];
+        if (!t) return;
+        block.querySelector('.tpl-label').value   = t.label;
+        block.querySelector('.tpl-activite').value = t.activite;
+        block.querySelector('.tpl-plage').value    = t.plage;
+        block.querySelector('.tpl-jn').value = t.jn.toFixed(2);
+        block.querySelector('.tpl-nn').value = t.nn.toFixed(2);
+        block.querySelector('.tpl-jd').value = t.jd.toFixed(2);
+        block.querySelector('.tpl-nd').value = t.nd.toFixed(2);
+        block.querySelector('.tpl-jf').value = t.jf.toFixed(2);
+        block.querySelector('.tpl-nf').value = t.nf.toFixed(2);
+    }
 
     function addProfil() {
         var tpl = document.getElementById('tplProfil');
@@ -317,6 +351,10 @@ require_once __DIR__ . '/../../includes/header.php';
             block.remove();
             renumberProfils();
             checkEmpty();
+        });
+        block.querySelector('.tpl-select').addEventListener('change', function() {
+            if (this.value) applyTemplate(block, this.value);
+            this.value = '';
         });
         container.appendChild(block);
         checkEmpty();
