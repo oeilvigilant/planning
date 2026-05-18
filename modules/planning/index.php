@@ -1016,7 +1016,7 @@ if ($vue === 'semaine') {
             <?php endforeach; ?>
           </div>
         </div>
-        <div class="mb-2">
+        <div class="mb-3">
           <label class="form-label" style="font-size:0.82rem;font-weight:600">Format</label>
           <div class="d-flex gap-3">
             <div class="form-check">
@@ -1027,6 +1027,12 @@ if ($vue === 'semaine') {
               <input class="form-check-input" type="radio" name="exportFormat" id="exportFmtExcel" value="excel">
               <label class="form-check-label" style="font-size:0.82rem" for="exportFmtExcel"><i class="fa fa-file-excel me-1" style="color:#16a34a"></i>Excel / CSV</label>
             </div>
+          </div>
+        </div>
+        <div class="mb-0">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="exportShowFooter" checked>
+            <label class="form-check-label" style="font-size:0.82rem" for="exportShowFooter">Inclure les mentions légales</label>
           </div>
         </div>
       </div>
@@ -1422,6 +1428,7 @@ window.doExport = function() {
     if (agentIds)  url += '&agent_ids='   + encodeURIComponent(agentIds);
     if (dateDebut) url += '&date_debut='  + encodeURIComponent(dateDebut);
     if (dateFin)   url += '&date_fin='    + encodeURIComponent(dateFin);
+    if (document.getElementById('exportShowFooter').checked) url += '&footer=1';
     exportModal.hide();
     window.location.href = url;
 };

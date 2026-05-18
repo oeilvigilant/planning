@@ -211,7 +211,7 @@ if ($format === 'excel') {
 // ── Export PDF ────────────────────────────────────────────────────────────────
 $html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <style>
-body { font-family: Arial, sans-serif; font-size: 7pt; margin: 0; padding: 8mm 10mm 24mm 10mm; color: #1a2332; }
+body { font-family: Arial, sans-serif; font-size: 7pt; margin: 0; padding: 5mm 5mm <?= !empty($_GET['footer']) ? '20mm' : '5mm' ?> 5mm; color: #1a2332; }
 h1 { font-size: 12pt; color: #1a2332; margin-bottom: 3px; }
 .version-badge { background: #c9a84c; color: white; padding: 2px 8px; border-radius: 10px; font-size: 7pt; }
 table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -343,12 +343,14 @@ foreach ($totauxJour as $min) {
 $html .= '<td class="total-col">' . number_format($grandTotal/60,1) . 'h</td></tr></tfoot>';
 $html .= '</table>';
 
-// Footer légal
-$html .= '<div class="footer-pdf">'
-    . '<div class="footer-pdf-l1">Oeil Vigilant (SAS) &nbsp;·&nbsp; 58 RUE DE MONCEAU 75008 PARIS &nbsp;·&nbsp; contact@oeilvigilant.com</div>'
-    . '<div class="footer-pdf-l2">SIREN : 928 552 702 &nbsp;·&nbsp; TVA : FR90928552702 &nbsp;·&nbsp; Tél : +33 (0)7 78 54 24 35 / +33 (0)7 84 90 19 93 &nbsp;·&nbsp; N° autorisation : AUT-075-2123-06-21-20240934026</div>'
-    . '<div class="footer-pdf-legal">L\'autorisation d\'exercice ne confère aucune prérogative de puissance publique à l\'entreprise ou aux personnes qui en bénéficient.</div>'
-    . '</div>'
-    . '</body></html>';
+// Footer légal (optionnel)
+if (!empty($_GET['footer'])) {
+    $html .= '<div class="footer-pdf">'
+        . '<div class="footer-pdf-l1">Oeil Vigilant (SAS) &nbsp;·&nbsp; 58 RUE DE MONCEAU 75008 PARIS &nbsp;·&nbsp; contact@oeilvigilant.com</div>'
+        . '<div class="footer-pdf-l2">SIREN : 928 552 702 &nbsp;·&nbsp; TVA : FR90928552702 &nbsp;·&nbsp; Tél : +33 (0)7 78 54 24 35 / +33 (0)7 84 90 19 93 &nbsp;·&nbsp; N° autorisation : AUT-075-2123-06-21-20240934026</div>'
+        . '<div class="footer-pdf-legal">L\'autorisation d\'exercice ne confère aucune prérogative de puissance publique à l\'entreprise ou aux personnes qui en bénéficient.</div>'
+        . '</div>';
+}
+$html .= '</body></html>';
 
 renderPdf($html, 'planning_' . $fileLabel . '.pdf', 'landscape');

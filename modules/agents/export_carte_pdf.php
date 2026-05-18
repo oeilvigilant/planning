@@ -120,7 +120,7 @@ html, body {
     height: <?= $hPt ?>pt;
     border-collapse: collapse;
     table-layout: fixed;
-    border: 0.4pt solid #c8ced8;
+    border: none;
     page-break-inside: avoid;
 }
 

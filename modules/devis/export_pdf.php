@@ -97,7 +97,7 @@ ob_start();
         margin: 0;
         padding: 0;
     }
-    .page { padding: 15mm 12mm 28mm 12mm; }
+    .page { padding: 8mm 5mm 26mm 5mm; }
 
     /* En-tête */
     .entete { width: 100%; margin-bottom: 12px; border-bottom: 2px solid #c9a84c; padding-bottom: 8px; }
