@@ -9,6 +9,7 @@ $pageTitle     = 'Devis';
 $currentModule = 'devis';
 
 $db = getDB();
+ensureDevisSchema();
 
 // Récupérer tous les devis avec Total TTC calculé
 $sql = "

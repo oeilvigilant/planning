@@ -6,6 +6,7 @@ requireLogin();
 requirePerm('devis', 'create');
 
 $db     = getDB();
+ensureDevisSchema();
 $errors = [];
 
 // Génération auto du numéro de devis

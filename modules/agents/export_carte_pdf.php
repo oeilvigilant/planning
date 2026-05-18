@@ -36,8 +36,8 @@ $logoColPt  = round($wPt * 0.215, 2);
 $photoColPt = round($wPt * 0.195, 2);
 
 // ── Photo (pt) ───────────────────────────────────────────────────
-$phHpt = round($hdrPt * 0.86, 2);
-$phWpt = round($phHpt * 0.70, 2);
+$phHpt = round($hdrPt * 0.68, 2);
+$phWpt = round($phHpt * 0.75, 2);
 
 // ── Logo (pt) ────────────────────────────────────────────────────
 $logoHpt    = round($hdrPt * 0.80, 2);
@@ -150,7 +150,7 @@ html, body {
     vertical-align: middle;
     text-align: center;
     padding: 3pt 6pt;
-    background: #ffffff;
+    background: #f4f7fc;
     overflow: hidden;
 }
 .td-photo {

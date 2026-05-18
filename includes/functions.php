@@ -18,6 +18,62 @@ function ensureAgentsSchema(): void {
     } catch (Exception $e) {}
 }
 
+function ensureDevisSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db = getDB();
+        $exists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis'")->fetchColumn();
+        if (!$exists) {
+            $db->exec("CREATE TABLE devis (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                numero VARCHAR(50) NOT NULL UNIQUE,
+                client_nom VARCHAR(255) DEFAULT '',
+                client_adresse TEXT,
+                periode_debut DATE NOT NULL,
+                periode_fin DATE NOT NULL,
+                description TEXT,
+                tva_taux DECIMAL(5,2) NOT NULL DEFAULT 20.00,
+                statut ENUM('brouillon','envoye','accepte','refuse') NOT NULL DEFAULT 'brouillon',
+                created_by INT DEFAULT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            $db->exec("CREATE TABLE devis_profils (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                devis_id INT NOT NULL,
+                ordre INT NOT NULL DEFAULT 0,
+                label VARCHAR(255) NOT NULL DEFAULT '',
+                activite VARCHAR(255) DEFAULT '',
+                plage VARCHAR(100) DEFAULT '',
+                taux_jn DECIMAL(8,2) NOT NULL DEFAULT 0,
+                taux_nn DECIMAL(8,2) NOT NULL DEFAULT 0,
+                taux_jd DECIMAL(8,2) NOT NULL DEFAULT 0,
+                taux_nd DECIMAL(8,2) NOT NULL DEFAULT 0,
+                taux_jf DECIMAL(8,2) NOT NULL DEFAULT 0,
+                taux_nf DECIMAL(8,2) NOT NULL DEFAULT 0,
+                INDEX (devis_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            $db->exec("CREATE TABLE devis_lignes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                profil_id INT NOT NULL,
+                date DATE NOT NULL,
+                h_jn DECIMAL(8,2) NOT NULL DEFAULT 0,
+                h_nn DECIMAL(8,2) NOT NULL DEFAULT 0,
+                h_jd DECIMAL(8,2) NOT NULL DEFAULT 0,
+                h_nd DECIMAL(8,2) NOT NULL DEFAULT 0,
+                h_jf DECIMAL(8,2) NOT NULL DEFAULT 0,
+                h_nf DECIMAL(8,2) NOT NULL DEFAULT 0,
+                UNIQUE KEY profil_date (profil_id, date),
+                INDEX (profil_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+    } catch (Exception $e) {}
+}
+
 // ── Paramètres ──────────────────────────────────────────────────────────────
 
 function getParam(string $cle, string $default = ''): string {
