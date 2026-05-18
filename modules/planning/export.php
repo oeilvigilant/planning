@@ -209,11 +209,12 @@ if ($format === 'excel') {
 }
 
 // ── Export PDF ────────────────────────────────────────────────────────────────
-$showFooter  = !empty($_GET['footer']);
-$padBottom   = $showFooter ? '20mm' : '5mm';
+$showFooter    = !empty($_GET['footer']);
+$marginBottom  = $showFooter ? '22mm' : '5mm';
 $html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <style>
-body { font-family: Arial, sans-serif; font-size: 7pt; margin: 0; padding: 5mm 5mm ' . $padBottom . ' 5mm; color: #1a2332; }
+@page { size: A4 landscape; margin: 5mm 5mm ' . $marginBottom . ' 5mm; }
+body { font-family: Arial, sans-serif; font-size: 7pt; margin: 0; padding: 0; color: #1a2332; }
 h1 { font-size: 12pt; color: #1a2332; margin-bottom: 3px; }
 .version-badge { background: #c9a84c; color: white; padding: 2px 8px; border-radius: 10px; font-size: 7pt; }
 table { width: 100%; border-collapse: collapse; margin-top: 8px; }
