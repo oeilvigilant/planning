@@ -86,7 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cur = strtotime('+1 day', $cur);
         }
 
-        $pids = array_column($db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?")->execute([$id])->fetchAll(), 'id');
+        $stmtPids = $db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?");
+        $stmtPids->execute([$id]);
+        $pids = array_column($stmtPids->fetchAll(), 'id');
         foreach ($pids as $pid) insertLignesProfil($db, $pid, $newJours);
 
         flash('success', 'Période ajoutée.');
@@ -119,7 +121,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Supprimer uniquement les jours exclusifs à cette période
         $toDelete = array_filter($toCheck, fn($d) => !isset($otherCovered[$d]));
         if ($toDelete) {
-            $profilIds = array_column($db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?")->execute([$id])->fetchAll(), 'id');
+            $stmtPids2 = $db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?");
+            $stmtPids2->execute([$id]);
+            $profilIds = array_column($stmtPids2->fetchAll(), 'id');
             if ($profilIds) {
                 $ph = implode(',', array_fill(0, count($profilIds), '?'));
                 foreach ($toDelete as $date) {
@@ -144,7 +148,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->prepare("DELETE FROM devis_dates_exclues WHERE devis_id = ?")->execute([$id]);
         // Reconstruire tous les jours depuis les périodes
         $jours = buildJoursDevis($db, $id);
-        $profilIds = array_column($db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?")->execute([$id])->fetchAll(), 'id');
+        $stmtPids3 = $db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?");
+        $stmtPids3->execute([$id]);
+        $profilIds = array_column($stmtPids3->fetchAll(), 'id');
         foreach ($profilIds as $pid) insertLignesProfil($db, $pid, $jours);
         // Supprimer les lignes orphelines (hors périodes)
         if ($jours && $profilIds) {
