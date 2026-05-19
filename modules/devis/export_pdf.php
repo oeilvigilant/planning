@@ -118,13 +118,13 @@ ob_start();
         margin: 0;
         padding: 0;
     }
-    .page { padding: 8mm 5mm 26mm 5mm; }
+    .page { padding: 4mm 5mm 26mm 5mm; }
 
     /* En-tête */
-    .entete { width: 100%; margin-bottom: 12px; border-bottom: 2px solid #c9a84c; padding-bottom: 8px; }
+    .entete { width: 100%; margin-bottom: 5px; border-bottom: 2px solid #c9a84c; padding-bottom: 5px; }
     .entete td { vertical-align: top; }
     .logo-cell { width: 210px; }
-    .logo-cell img { height: 85px; max-width: 200px; }
+    .logo-cell img { height: 75px; max-width: 190px; }
     .societe-cell { padding-left: 10px; }
     .societe-name { font-size: 13pt; font-weight: 600; color: #1a2332; white-space: nowrap; }
     .societe-sub  { font-size: 8pt; color: #888; font-style: italic; }
@@ -132,8 +132,8 @@ ob_start();
     .devis-numero { font-size: 13pt; font-weight: 600; color: #c9a84c; }
 
     /* Bloc client / période */
-    .info-block { width: 100%; margin-bottom: 10px; }
-    .info-block td { padding: 4px 8px; vertical-align: top; font-size: 8.5pt; }
+    .info-block { width: 100%; margin-bottom: 6px; }
+    .info-block td { padding: 3px 6px; vertical-align: top; font-size: 8.5pt; }
     .info-label { font-weight: 600; color: #888; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.5px; }
     .info-value { color: #1a2332; font-weight: normal; }
 
@@ -201,21 +201,21 @@ ob_start();
     <!-- Infos client / période -->
     <table class="info-block">
         <tr>
-            <td style="width:40%">
+            <td style="width:32%">
                 <div class="info-label">Client</div>
                 <div class="info-value" style="font-size:10pt;font-weight:bold"><?= h($devis['client_nom'] ?: '—') ?></div>
                 <?php if ($devis['client_adresse']): ?>
                 <div class="info-value" style="color:#666;font-size:8pt"><?= nl2br(h($devis['client_adresse'])) ?></div>
                 <?php endif; ?>
             </td>
-            <td style="width:30%">
+            <td style="width:22%">
                 <div class="info-label">Période(s)</div>
                 <?php foreach ($periodesPdf as $pRow): ?>
                 <div class="info-value"><?= h(formatDate($pRow['date_debut'])) ?> → <?= h(formatDate($pRow['date_fin'])) ?></div>
                 <?php endforeach; ?>
                 <div style="color:#666;font-size:8pt"><?= count($jours) ?> jour(s) facturé(s)</div>
             </td>
-            <td style="width:30%">
+            <td style="width:46%">
                 <div class="info-label">Description</div>
                 <div class="info-value" style="font-size:8pt"><?= nl2br(h($devis['description'] ?: '—')) ?></div>
             </td>
