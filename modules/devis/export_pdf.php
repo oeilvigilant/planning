@@ -122,13 +122,11 @@ ob_start();
 
     /* En-tête */
     .entete { width: 100%; margin-bottom: 5px; border-bottom: 2px solid #c9a84c; padding-bottom: 5px; }
-    .entete td { vertical-align: top; }
-    .logo-cell { width: 210px; }
-    .logo-cell img { height: 75px; max-width: 190px; }
-    .societe-cell { padding-left: 10px; }
-    .societe-name { font-size: 13pt; font-weight: 600; color: #1a2332; white-space: nowrap; }
-    .societe-sub  { font-size: 8pt; color: #888; font-style: italic; }
-    .devis-info-cell { text-align: right; }
+    .entete td { vertical-align: middle; }
+    .logo-cell { width: 130px; }
+    .logo-cell img { height: 95px; max-width: 125px; }
+    .societe-name { font-size: 14pt; font-weight: 700; color: #1a2332; white-space: nowrap; }
+    .societe-sub  { font-size: 8.5pt; color: #888; font-style: italic; margin-top: 2px; }
     .devis-numero { font-size: 13pt; font-weight: 600; color: #c9a84c; }
 
     /* Bloc client / période */
@@ -189,10 +187,12 @@ ob_start();
                 <?php if ($logoBase64): ?>
                 <img src="<?= $logoBase64 ?>" alt="Logo">
                 <?php endif; ?>
+            </td>
+            <td style="text-align:center;vertical-align:middle">
                 <div class="societe-name">OEIL VIGILANT</div>
                 <div class="societe-sub">Votre sécurité, Notre priorité</div>
             </td>
-            <td style="text-align:right;vertical-align:middle">
+            <td style="text-align:right;vertical-align:middle;width:150px">
                 <div class="devis-numero">DEVIS <?= h($devis['numero']) ?></div>
             </td>
         </tr>
@@ -201,21 +201,21 @@ ob_start();
     <!-- Infos client / période -->
     <table class="info-block">
         <tr>
-            <td style="width:32%">
+            <td style="width:30%">
                 <div class="info-label">Client</div>
                 <div class="info-value" style="font-size:10pt;font-weight:bold"><?= h($devis['client_nom'] ?: '—') ?></div>
                 <?php if ($devis['client_adresse']): ?>
                 <div class="info-value" style="color:#666;font-size:8pt"><?= nl2br(h($devis['client_adresse'])) ?></div>
                 <?php endif; ?>
             </td>
-            <td style="width:22%">
+            <td style="width:28%">
                 <div class="info-label">Période(s)</div>
                 <?php foreach ($periodesPdf as $pRow): ?>
-                <div class="info-value"><?= h(formatDate($pRow['date_debut'])) ?> → <?= h(formatDate($pRow['date_fin'])) ?></div>
+                <div class="info-value" style="font-size:7.5pt;white-space:nowrap"><?= h(formatDate($pRow['date_debut'])) ?> → <?= h(formatDate($pRow['date_fin'])) ?></div>
                 <?php endforeach; ?>
-                <div style="color:#666;font-size:8pt"><?= count($jours) ?> jour(s) facturé(s)</div>
+                <div style="color:#666;font-size:7pt;margin-top:2px"><?= count($jours) ?> jour(s) facturé(s)</div>
             </td>
-            <td style="width:46%">
+            <td style="width:42%">
                 <div class="info-label">Description</div>
                 <div class="info-value" style="font-size:8pt"><?= nl2br(h($devis['description'] ?: '—')) ?></div>
             </td>
