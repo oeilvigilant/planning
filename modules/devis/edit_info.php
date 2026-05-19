@@ -6,6 +6,7 @@ requireLogin();
 requirePerm('devis', 'edit');
 
 $db = getDB();
+ensureClientsSchema();
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 if (!$id) { header('Location: index.php'); exit; }
 
@@ -22,12 +23,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Sauvegarder les infos générales ───────────────────────────────────
     if ($action === 'save_info') {
         $numero       = trim($_POST['numero'] ?? '');
+        $clientId     = (int)($_POST['client_id'] ?? 0) ?: null;
         $clientNom    = trim($_POST['client_nom'] ?? '');
         $clientAdr    = trim($_POST['client_adresse'] ?? '');
         $periodeDebut = trim($_POST['periode_debut'] ?? '');
         $periodeFin   = trim($_POST['periode_fin'] ?? '');
         $description  = trim($_POST['description'] ?? '');
         $tvaTaux      = (float)($_POST['tva_taux'] ?? 20);
+        $remiseType   = in_array($_POST['remise_type'] ?? '', ['pct','val']) ? $_POST['remise_type'] : null;
+        $remiseVal    = max(0, (float)($_POST['remise_valeur'] ?? 0));
         $statut       = $_POST['statut'] ?? 'brouillon';
 
         if (empty($numero))       $errors[] = 'Le numéro est obligatoire.';
@@ -50,14 +54,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $db->prepare("
                 UPDATE devis SET
-                    numero = ?, client_nom = ?, client_adresse = ?,
+                    client_id = ?, numero = ?, client_nom = ?, client_adresse = ?,
                     periode_debut = ?, periode_fin = ?,
-                    description = ?, tva_taux = ?, statut = ?
+                    description = ?, tva_taux = ?,
+                    remise_type = ?, remise_valeur = ?,
+                    statut = ?
                 WHERE id = ?
             ")->execute([
-                $numero, $clientNom, $clientAdr,
+                $clientId, $numero, $clientNom, $clientAdr,
                 $periodeDebut, $periodeFin,
                 $description, $tvaTaux,
+                $remiseType, $remiseVal,
                 in_array($statut, ['brouillon','envoye','accepte','refuse']) ? $statut : 'brouillon',
                 $id
             ]);
@@ -202,6 +209,9 @@ $stmtP = $db->prepare("SELECT * FROM devis_profils WHERE devis_id = ? ORDER BY o
 $stmtP->execute([$id]);
 $profils = $stmtP->fetchAll();
 
+// Clients pour le sélecteur
+$clientsList = $db->query("SELECT id, nom, adresse, contact FROM clients ORDER BY nom")->fetchAll();
+
 $pageTitle     = 'Modifier — ' . $devis['numero'];
 $currentModule = 'devis';
 $topbarActions = '<a href="view.php?id=' . $id . '" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i> Retour au devis</a>';
@@ -242,7 +252,28 @@ $PROFILS_TYPES = [
                 </div>
                 <div class="col-md-5">
                     <label class="form-label">Client</label>
-                    <input type="text" name="client_nom" class="form-control" value="<?= h($devis['client_nom'] ?? '') ?>">
+                    <?php if ($clientsList): ?>
+                    <select id="clientSelect" class="form-select mb-2" style="font-size:0.88rem">
+                        <option value="">— Sélectionner un client enregistré —</option>
+                        <?php foreach ($clientsList as $cl): ?>
+                        <option value="<?= $cl['id'] ?>"
+                            data-nom="<?= h($cl['nom']) ?>"
+                            data-adresse="<?= h($cl['adresse'] ?? '') ?>"
+                            <?= (int)($devis['client_id'] ?? 0) === $cl['id'] ? 'selected' : '' ?>>
+                            <?= h($cl['nom']) ?><?= $cl['contact'] ? ' — ' . h($cl['contact']) : '' ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php endif; ?>
+                    <input type="hidden" name="client_id" id="clientIdHidden" value="<?= h($devis['client_id'] ?? '') ?>">
+                    <input type="text" name="client_nom" id="clientNomInput" class="form-control" value="<?= h($devis['client_nom'] ?? '') ?>">
+                    <?php if (canDo('clients','create')): ?>
+                    <div class="form-text">
+                        <a href="<?= APP_URL ?>/modules/clients/add.php" target="_blank">
+                            <i class="fa fa-plus me-1"></i>Créer un nouveau client
+                        </a>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Date début <span class="text-danger">*</span></label>
@@ -254,7 +285,7 @@ $PROFILS_TYPES = [
                 </div>
                 <div class="col-md-8">
                     <label class="form-label">Adresse client</label>
-                    <textarea name="client_adresse" class="form-control" rows="2"><?= h($devis['client_adresse'] ?? '') ?></textarea>
+                    <textarea name="client_adresse" id="clientAdrInput" class="form-control" rows="2"><?= h($devis['client_adresse'] ?? '') ?></textarea>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">TVA (%)</label>
@@ -448,6 +479,18 @@ var PROFILS_TYPES = <?= json_encode(array_map(function($t) {
     return ['label'=>$t['label'],'activite'=>$t['activite'],'plage'=>$t['plage'],
             'jn'=>$t['jn'],'nn'=>$t['nn'],'jd'=>$t['jd'],'nd'=>$t['nd'],'jf'=>$t['jf'],'nf'=>$t['nf']];
 }, $PROFILS_TYPES)) ?>;
+
+// Sélecteur client
+(function() {
+    var sel = document.getElementById('clientSelect');
+    if (!sel) return;
+    sel.addEventListener('change', function() {
+        var opt = this.options[this.selectedIndex];
+        document.getElementById('clientIdHidden').value  = opt.value || '';
+        document.getElementById('clientNomInput').value  = opt.value ? opt.dataset.nom     : '';
+        document.getElementById('clientAdrInput').value  = opt.value ? opt.dataset.adresse : '';
+    });
+})();
 
 document.getElementById('newTplSelect').addEventListener('change', function() {
     var t = PROFILS_TYPES[this.value];

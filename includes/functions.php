@@ -36,6 +36,8 @@ function ensureDevisSchema(): void {
                 periode_fin DATE NOT NULL,
                 description TEXT,
                 tva_taux DECIMAL(5,2) NOT NULL DEFAULT 20.00,
+                remise_type ENUM('pct','val') DEFAULT NULL,
+                remise_valeur DECIMAL(10,2) NOT NULL DEFAULT 0,
                 statut ENUM('brouillon','envoye','accepte','refuse') NOT NULL DEFAULT 'brouillon',
                 created_by INT DEFAULT NULL,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -70,6 +72,47 @@ function ensureDevisSchema(): void {
                 UNIQUE KEY profil_date (profil_id, date),
                 INDEX (profil_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+        // Colonnes remise (migration auto)
+        if ($exists) {
+            $hasRemise = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis' AND COLUMN_NAME = 'remise_type'")->fetchColumn();
+            if (!$hasRemise) {
+                $db->exec("ALTER TABLE devis ADD COLUMN remise_type ENUM('pct','val') DEFAULT NULL AFTER tva_taux");
+                $db->exec("ALTER TABLE devis ADD COLUMN remise_valeur DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER remise_type");
+            }
+        }
+    } catch (Exception $e) {}
+}
+
+function ensureClientsSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db = getDB();
+        $exists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clients'")->fetchColumn();
+        if (!$exists) {
+            $db->exec("CREATE TABLE clients (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nom VARCHAR(255) NOT NULL,
+                adresse TEXT,
+                email VARCHAR(255) DEFAULT '',
+                telephone VARCHAR(30) DEFAULT '',
+                contact VARCHAR(255) DEFAULT '',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+        // Ajouter client_id à devis si absent
+        $hasDevis = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis'")->fetchColumn();
+        if ($hasDevis) {
+            $hasClientId = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis' AND COLUMN_NAME = 'client_id'")->fetchColumn();
+            if (!$hasClientId) {
+                $db->exec("ALTER TABLE devis ADD COLUMN client_id INT DEFAULT NULL AFTER id");
+            }
         }
     } catch (Exception $e) {}
 }

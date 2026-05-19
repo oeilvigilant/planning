@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/c/wamp64/bin/mysql/mysql9.1.0/bin/mysql.exe *)",
+      "Bash(mkdir -p /c/wamp64/www/ov-gestion/.claude)",
+      "Bash(cp /c/wamp64/www/ov/.claude/settings.local.json /c/wamp64/www/ov-gestion/.claude/settings.local.json)",
+      "Bash(php -l modules/devis/view.php)",
+      "Bash(php -l modules/devis/export_pdf.php)",
+      "Bash(php -l modules/devis/edit_info.php)",
+      "Bash(php -l includes/functions.php)",
+      "Bash(php -l modules/devis/add.php)",
+      "Bash(php -l modules/devis/index.php)",
+      "Bash(php -l modules/clients/index.php)",
+      "Bash(php -l modules/clients/add.php)",
+      "Bash(php -l modules/clients/delete.php)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

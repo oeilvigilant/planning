@@ -29,9 +29,17 @@ if ($profils) {
     }
 }
 
+// Période filtrée (paramètres GET optionnels)
+$pdfDebut = $_GET['pdf_debut'] ?? $devis['periode_debut'];
+$pdfFin   = $_GET['pdf_fin']   ?? $devis['periode_fin'];
+// Clamp dans les bornes du devis
+if ($pdfDebut < $devis['periode_debut']) $pdfDebut = $devis['periode_debut'];
+if ($pdfFin   > $devis['periode_fin'])   $pdfFin   = $devis['periode_fin'];
+if ($pdfDebut > $pdfFin) { $pdfDebut = $devis['periode_debut']; $pdfFin = $devis['periode_fin']; }
+
 $jours = [];
-$cur   = strtotime($devis['periode_debut']);
-$end   = strtotime($devis['periode_fin']);
+$cur   = strtotime($pdfDebut);
+$end   = strtotime($pdfFin);
 while ($cur <= $end) {
     $jours[] = date('Y-m-d', $cur);
     $cur      = strtotime('+1 day', $cur);
@@ -69,6 +77,7 @@ foreach ($profils as $profil) {
         $hJd = (float)$lg['h_jd']; $hNd = (float)$lg['h_nd'];
         $hJf = (float)$lg['h_jf']; $hNf = (float)$lg['h_nf'];
         $tH  = $hJn + $hNn + $hJd + $hNd + $hJf + $hNf;
+        if ($tH == 0) continue; // ne pas exporter les dates sans heures
         $tHT = $hJn*$tauxJn + $hNn*$tauxNn + $hJd*$tauxJd + $hNd*$tauxNd + $hJf*$tauxJf + $hNf*$tauxNf;
         $stH  += $tH;
         $stHT += $tHT;
@@ -78,8 +87,17 @@ foreach ($profils as $profil) {
     $grandTotalH  += $stH;
     $grandTotalHT += $stHT;
 }
-$tvaMontant    = $grandTotalHT * ($devis['tva_taux'] / 100);
-$grandTotalTTC = $grandTotalHT + $tvaMontant;
+$remiseType    = $devis['remise_type'] ?? null;
+$remiseVal     = (float)($devis['remise_valeur'] ?? 0);
+$remiseMontant = 0;
+if ($remiseType === 'pct' && $remiseVal > 0) {
+    $remiseMontant = $grandTotalHT * ($remiseVal / 100);
+} elseif ($remiseType === 'val' && $remiseVal > 0) {
+    $remiseMontant = min($remiseVal, $grandTotalHT);
+}
+$htApresRemise = $grandTotalHT - $remiseMontant;
+$tvaMontant    = $htApresRemise * ($devis['tva_taux'] / 100);
+$grandTotalTTC = $htApresRemise + $tvaMontant;
 
 // Générer HTML pour DomPDF
 ob_start();
@@ -189,8 +207,8 @@ ob_start();
             </td>
             <td style="width:30%">
                 <div class="info-label">Période</div>
-                <div class="info-value"><?= h(formatDate($devis['periode_debut'])) ?> → <?= h(formatDate($devis['periode_fin'])) ?></div>
-                <div style="color:#666;font-size:8pt"><?= count($jours) ?> jour(s)</div>
+                <div class="info-value"><?= h(formatDate($pdfDebut)) ?> → <?= h(formatDate($pdfFin)) ?></div>
+                <div style="color:#666;font-size:8pt"><?= count($jours) ?> jour(s) facturé(s)</div>
             </td>
             <td style="width:30%">
                 <div class="info-label">Description</div>
@@ -310,6 +328,18 @@ ob_start();
             <td class="lbl">Total HT</td>
             <td class="val"><?= number_format($grandTotalHT, 2, ',', ' ') ?> €</td>
         </tr>
+        <?php if ($remiseMontant > 0): ?>
+        <tr>
+            <td class="lbl" style="color:#c0392b">
+                Remise <?= $remiseType === 'pct' ? '(' . number_format($remiseVal, 2) . ' %)' : '' ?>
+            </td>
+            <td class="val" style="color:#c0392b">− <?= number_format($remiseMontant, 2, ',', ' ') ?> €</td>
+        </tr>
+        <tr>
+            <td class="lbl">HT après remise</td>
+            <td class="val"><?= number_format($htApresRemise, 2, ',', ' ') ?> €</td>
+        </tr>
+        <?php endif; ?>
         <tr>
             <td class="lbl">TVA <?= h($devis['tva_taux']) ?>%</td>
             <td class="val"><?= number_format($tvaMontant, 2, ',', ' ') ?> €</td>

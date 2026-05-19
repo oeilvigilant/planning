@@ -7,6 +7,10 @@ requirePerm('devis', 'create');
 
 $db     = getDB();
 ensureDevisSchema();
+ensureClientsSchema();
+
+// Charger la liste des clients pour le sélecteur
+$clientsList = $db->query("SELECT id, nom, adresse, contact, telephone FROM clients ORDER BY nom")->fetchAll();
 $errors = [];
 
 // Génération auto du numéro de devis
@@ -25,6 +29,7 @@ $defaultNumero = generateNumeroDevis();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $numero       = trim($_POST['numero'] ?? '');
+    $clientId     = (int)($_POST['client_id'] ?? 0) ?: null;
     $clientNom    = trim($_POST['client_nom'] ?? '');
     $clientAdr    = trim($_POST['client_adresse'] ?? '');
     $periodeDebut = trim($_POST['periode_debut'] ?? '');
@@ -57,12 +62,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             // Insérer le devis
             $stmtD = $db->prepare("
-                INSERT INTO devis (numero, client_nom, client_adresse, periode_debut, periode_fin,
+                INSERT INTO devis (client_id, numero, client_nom, client_adresse, periode_debut, periode_fin,
                     description, tva_taux, statut, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmtD->execute([
-                $numero, $clientNom, $clientAdr,
+                $clientId, $numero, $clientNom, $clientAdr,
                 $periodeDebut, $periodeFin,
                 $description, $tvaTaux,
                 in_array($statut, ['brouillon','envoye','accepte','refuse']) ? $statut : 'brouillon',
@@ -157,10 +162,31 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="form-text">Format : S-YY-MM-N (auto-généré)</div>
             </div>
             <div class="col-md-5">
-                <label class="form-label">Nom du client</label>
-                <input type="text" name="client_nom" class="form-control"
+                <label class="form-label">Client</label>
+                <?php if ($clientsList): ?>
+                <select id="clientSelect" class="form-select mb-2">
+                    <option value="">— Sélectionner un client enregistré —</option>
+                    <?php foreach ($clientsList as $cl): ?>
+                    <option value="<?= $cl['id'] ?>"
+                        data-nom="<?= h($cl['nom']) ?>"
+                        data-adresse="<?= h($cl['adresse'] ?? '') ?>"
+                        <?= (int)($_POST['client_id'] ?? 0) === $cl['id'] ? 'selected' : '' ?>>
+                        <?= h($cl['nom']) ?><?= $cl['contact'] ? ' — ' . h($cl['contact']) : '' ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php endif; ?>
+                <input type="hidden" name="client_id" id="clientIdHidden" value="<?= (int)($_POST['client_id'] ?? 0) ?: '' ?>">
+                <input type="text" name="client_nom" id="clientNomInput" class="form-control"
                     value="<?= h($_POST['client_nom'] ?? '') ?>"
-                    placeholder="Nom de l'entreprise ou du client">
+                    placeholder="Nom de l'entreprise ou du client (libre ou auto-rempli)">
+                <?php if (canDo('clients','create')): ?>
+                <div class="form-text">
+                    <a href="<?= APP_URL ?>/modules/clients/add.php" target="_blank">
+                        <i class="fa fa-plus me-1"></i>Créer un nouveau client
+                    </a>
+                </div>
+                <?php endif; ?>
             </div>
             <div class="col-md-2">
                 <label class="form-label">Date début <span class="text-danger">*</span></label>
@@ -174,7 +200,7 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
             <div class="col-md-8">
                 <label class="form-label">Adresse du client</label>
-                <textarea name="client_adresse" class="form-control" rows="2"
+                <textarea name="client_adresse" id="clientAdrInput" class="form-control" rows="2"
                     placeholder="Adresse complète du client"><?= h($_POST['client_adresse'] ?? '') ?></textarea>
             </div>
             <div class="col-md-2">
@@ -236,6 +262,19 @@ require_once __DIR__ . '/../../includes/header.php';
 
 </div>
 </form>
+
+<script>
+(function() {
+    var sel = document.getElementById('clientSelect');
+    if (!sel) return;
+    sel.addEventListener('change', function() {
+        var opt = this.options[this.selectedIndex];
+        document.getElementById('clientIdHidden').value  = opt.value || '';
+        document.getElementById('clientNomInput').value  = opt.value ? opt.dataset.nom    : '';
+        document.getElementById('clientAdrInput').value  = opt.value ? opt.dataset.adresse : '';
+    });
+})();
+</script>
 
 <!-- Template profil (caché) -->
 <template id="tplProfil">

@@ -84,8 +84,14 @@ $statutLabels = [
             </thead>
             <tbody>
             <?php foreach ($devisList as $d):
-                $tva     = $d['total_ht'] * ($d['tva_taux'] / 100);
-                $ttc     = $d['total_ht'] + $tva;
+                $remiseM = 0;
+                if ($d['remise_type'] === 'pct' && $d['remise_valeur'] > 0)
+                    $remiseM = $d['total_ht'] * ($d['remise_valeur'] / 100);
+                elseif ($d['remise_type'] === 'val' && $d['remise_valeur'] > 0)
+                    $remiseM = min((float)$d['remise_valeur'], $d['total_ht']);
+                $htNet   = $d['total_ht'] - $remiseM;
+                $tva     = $htNet * ($d['tva_taux'] / 100);
+                $ttc     = $htNet + $tva;
                 $sColor  = $statutColors[$d['statut']] ?? 'secondary';
                 $sLabel  = $statutLabels[$d['statut']] ?? $d['statut'];
                 $desc    = mb_strlen($d['description'] ?? '') > 60

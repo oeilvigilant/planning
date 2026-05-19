@@ -44,6 +44,13 @@ while ($cur <= $end) {
 // Traitement POST — sauvegarde des heures
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lignes'])) {
     requirePerm('devis', 'edit');
+
+    // Sauvegarder la remise
+    $remiseType = in_array($_POST['remise_type'] ?? '', ['pct','val']) ? $_POST['remise_type'] : null;
+    $remiseVal  = max(0, (float)($_POST['remise_valeur'] ?? 0));
+    $db->prepare("UPDATE devis SET remise_type = ?, remise_valeur = ? WHERE id = ?")
+       ->execute([$remiseType, $remiseVal, $id]);
+
     $lignesPost = $_POST['l'] ?? [];
     $stmtUps = $db->prepare("
         INSERT INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf)
@@ -55,7 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lignes'])) {
     ");
     foreach ($lignesPost as $profilId => $dates) {
         $profilId = (int)$profilId;
-        // Vérifier que ce profil appartient bien à ce devis
         $chkP = $db->prepare("SELECT id FROM devis_profils WHERE id = ? AND devis_id = ?");
         $chkP->execute([$profilId, $id]);
         if (!$chkP->fetch()) continue;
@@ -93,7 +99,10 @@ $topbarActions = '
 <a href="edit_info.php?id=' . $id . '" class="btn btn-ov-secondary btn-sm me-1"><i class="fa fa-pen me-1"></i> Modifier infos</a>
 <a href="duplicate.php?id=' . $id . '" class="btn btn-ov-secondary btn-sm me-1"
    onclick="return confirm(\'Dupliquer ce devis ?\')"><i class="fa fa-copy me-1"></i> Dupliquer</a>
-<a href="export_pdf.php?id=' . $id . '" class="btn btn-sm me-1" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.3)" target="_blank"><i class="fa fa-file-pdf me-1"></i> PDF</a>
+<button type="button" class="btn btn-sm me-1" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.3)"
+   data-bs-toggle="modal" data-bs-target="#modalExportPdf">
+   <i class="fa fa-file-pdf me-1"></i> PDF
+</button>
 <span class="badge bg-' . $sColor . ' ms-1">' . h($sLabel) . '</span>
 ';
 require_once __DIR__ . '/../../includes/header.php';
@@ -370,8 +379,17 @@ foreach ($profils as $profil):
 
 <!-- Totaux généraux -->
 <?php
-$tvaMontant  = $grandTotalHT * ($devis['tva_taux'] / 100);
-$grandTotalTTC = $grandTotalHT + $tvaMontant;
+$remiseType    = $devis['remise_type'] ?? null;
+$remiseVal     = (float)($devis['remise_valeur'] ?? 0);
+$remiseMontant = 0;
+if ($remiseType === 'pct' && $remiseVal > 0) {
+    $remiseMontant = $grandTotalHT * ($remiseVal / 100);
+} elseif ($remiseType === 'val' && $remiseVal > 0) {
+    $remiseMontant = min($remiseVal, $grandTotalHT);
+}
+$htApresRemise = $grandTotalHT - $remiseMontant;
+$tvaMontant    = $htApresRemise * ($devis['tva_taux'] / 100);
+$grandTotalTTC = $htApresRemise + $tvaMontant;
 ?>
 <div class="ov-card mb-3" id="cardTotaux">
     <div class="ov-card-header">
@@ -381,7 +399,7 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
     </div>
     <div class="ov-card-body">
         <div class="row justify-content-end">
-            <div class="col-md-5 col-lg-4">
+            <div class="col-md-6 col-lg-5">
                 <table class="table table-sm mb-0">
                     <tbody>
                         <tr>
@@ -391,6 +409,19 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
                         <tr>
                             <td class="text-muted">Total HT</td>
                             <td class="text-end fw-bold" id="gtotalHT"><?= number_format($grandTotalHT, 2, ',', ' ') ?> €</td>
+                        </tr>
+                        <!-- Remise -->
+                        <tr id="rowRemise" <?= !$remiseMontant ? 'style="display:none"' : '' ?>>
+                            <td class="text-muted" id="lblRemise">
+                                Remise <?= $remiseType === 'pct' ? number_format($remiseVal, 2) . '%' : '' ?>
+                            </td>
+                            <td class="text-end" id="gtotalRemise" style="color:#dc2626">
+                                − <?= number_format($remiseMontant, 2, ',', ' ') ?> €
+                            </td>
+                        </tr>
+                        <tr id="rowHTApres" <?= !$remiseMontant ? 'style="display:none"' : '' ?>>
+                            <td class="text-muted">HT après remise</td>
+                            <td class="text-end fw-bold" id="gtotalHTRemise"><?= number_format($htApresRemise, 2, ',', ' ') ?> €</td>
                         </tr>
                         <tr>
                             <td class="text-muted">TVA <?= h($devis['tva_taux']) ?>%</td>
@@ -404,6 +435,31 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
                         </tr>
                     </tbody>
                 </table>
+
+                <!-- Saisie remise -->
+                <div class="mt-3 pt-3 border-top">
+                    <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:0.85rem">
+                        <span class="text-muted">Remise :</span>
+                        <div class="btn-group btn-group-sm" role="group" id="remiseBtnGroup">
+                            <input type="radio" class="btn-check" name="remise_type_ui" id="rtNone"  value=""    autocomplete="off" <?= !$remiseType ? 'checked' : '' ?>>
+                            <label class="btn btn-outline-secondary" for="rtNone">Aucune</label>
+                            <input type="radio" class="btn-check" name="remise_type_ui" id="rtPct"   value="pct" autocomplete="off" <?= $remiseType==='pct' ? 'checked' : '' ?>>
+                            <label class="btn btn-outline-secondary" for="rtPct">%</label>
+                            <input type="radio" class="btn-check" name="remise_type_ui" id="rtVal"   value="val" autocomplete="off" <?= $remiseType==='val' ? 'checked' : '' ?>>
+                            <label class="btn btn-outline-secondary" for="rtVal">€ fixe</label>
+                        </div>
+                        <div id="remiseValBox" class="d-flex align-items-center gap-1" <?= !$remiseType ? 'style="display:none!important"' : '' ?>>
+                            <input type="number" id="remiseValInput" class="form-control form-control-sm text-end"
+                                style="width:90px" step="0.01" min="0"
+                                value="<?= $remiseVal > 0 ? number_format($remiseVal, 2, '.', '') : '' ?>"
+                                placeholder="0">
+                            <span id="remiseUnit" class="text-muted"><?= $remiseType === 'pct' ? '%' : '€' ?></span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Champs hidden dans le formulaire principal -->
+                <input type="hidden" name="remise_type"   id="hidRemiseType"  value="<?= h($remiseType ?? '') ?>">
+                <input type="hidden" name="remise_valeur" id="hidRemiseValeur" value="<?= h($remiseVal ?: '0') ?>">
             </div>
         </div>
     </div>
@@ -420,6 +476,50 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
 </div>
 
 </form>
+
+<!-- Modal Export PDF -->
+<div class="modal fade" id="modalExportPdf" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa fa-file-pdf me-2" style="color:#dc2626"></i>Exporter en PDF</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3" style="font-size:0.85rem">
+            Choisissez la période à inclure dans le PDF. Les dates sans heures saisies seront automatiquement exclues.
+        </p>
+        <div class="row g-3">
+            <div class="col-6">
+                <label class="form-label">Date début</label>
+                <input type="date" id="pdfDebut" class="form-control"
+                    value="<?= h($devis['periode_debut']) ?>"
+                    min="<?= h($devis['periode_debut']) ?>"
+                    max="<?= h($devis['periode_fin']) ?>">
+            </div>
+            <div class="col-6">
+                <label class="form-label">Date fin</label>
+                <input type="date" id="pdfFin" class="form-control"
+                    value="<?= h($devis['periode_fin']) ?>"
+                    min="<?= h($devis['periode_debut']) ?>"
+                    max="<?= h($devis['periode_fin']) ?>">
+            </div>
+        </div>
+        <div class="alert alert-info mt-3 mb-0" style="font-size:0.8rem">
+            <i class="fa fa-circle-info me-1"></i>
+            Période complète du devis : <strong><?= h(formatDate($devis['periode_debut'])) ?> → <?= h(formatDate($devis['periode_fin'])) ?></strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ov-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-sm" id="btnLancerPdf"
+            style="background:rgba(239,68,68,0.15);color:#dc2626;border:1px solid rgba(239,68,68,0.4)">
+            <i class="fa fa-file-pdf me-1"></i>Générer le PDF
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Modal remplissage auto -->
 <div class="modal fade" id="modalAutofill" tabindex="-1">
@@ -484,7 +584,12 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
 
 <script>
 (function() {
-    var tvaTaux = <?= (float)$devis['tva_taux'] ?>;
+    var tvaTaux    = <?= (float)$devis['tva_taux'] ?>;
+    var devisId    = <?= $id ?>;
+    var periodeFull = {
+        debut: '<?= $devis['periode_debut'] ?>',
+        fin:   '<?= $devis['periode_fin'] ?>'
+    };
 
     function getTaux(profilCard) {
         return {
@@ -543,6 +648,16 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
         return { h: stH, ht: stHT };
     }
 
+    function getRemise(grandHT) {
+        var rt  = document.getElementById('hidRemiseType').value;
+        var rv  = parseFloat(document.getElementById('hidRemiseValeur').value) || 0;
+        if (!rt || rv <= 0) return { montant: 0, type: '', val: 0 };
+        var montant = 0;
+        if (rt === 'pct') montant = grandHT * (rv / 100);
+        else              montant = Math.min(rv, grandHT);
+        return { montant: montant, type: rt, val: rv };
+    }
+
     function recalcAll() {
         var cards = document.querySelectorAll('.profil-card');
         var grandH = 0, grandHT = 0;
@@ -551,17 +666,79 @@ $grandTotalTTC = $grandTotalHT + $tvaMontant;
             grandH  += r.h;
             grandHT += r.ht;
         });
-        var tva = grandHT * (tvaTaux / 100);
-        var ttc = grandHT + tva;
+
+        var remise = getRemise(grandHT);
+        var htNet  = grandHT - remise.montant;
+        var tva    = htNet * (tvaTaux / 100);
+        var ttc    = htNet + tva;
+
         var el;
         el = document.getElementById('gtotalH');   if (el) el.textContent = grandH.toFixed(1) + ' h';
         el = document.getElementById('gtotalHT');  if (el) el.textContent = grandHT.toFixed(2).replace('.', ',') + ' €';
+
+        var rowR   = document.getElementById('rowRemise');
+        var rowHTA = document.getElementById('rowHTApres');
+        var elR    = document.getElementById('gtotalRemise');
+        var elHTA  = document.getElementById('gtotalHTRemise');
+        var elLbl  = document.getElementById('lblRemise');
+
+        if (remise.montant > 0) {
+            if (rowR)   rowR.style.display   = '';
+            if (rowHTA) rowHTA.style.display = '';
+            if (elR)    elR.textContent = '− ' + remise.montant.toFixed(2).replace('.', ',') + ' €';
+            if (elHTA)  elHTA.textContent = htNet.toFixed(2).replace('.', ',') + ' €';
+            if (elLbl)  elLbl.textContent = 'Remise ' + (remise.type === 'pct' ? remise.val.toFixed(2) + '%' : '(' + remise.val.toFixed(2).replace('.',',') + ' €)');
+        } else {
+            if (rowR)   rowR.style.display   = 'none';
+            if (rowHTA) rowHTA.style.display = 'none';
+        }
+
         el = document.getElementById('gtotalTVA'); if (el) el.textContent = tva.toFixed(2).replace('.', ',') + ' €';
         el = document.getElementById('gtotalTTC'); if (el) el.textContent = ttc.toFixed(2).replace('.', ',') + ' €';
     }
 
     document.addEventListener('input', function(e) {
         if (e.target.classList.contains('h-input')) recalcAll();
+    });
+
+    // ── Gestion de la remise ──────────────────────────────────────────────
+    var radios = document.querySelectorAll('input[name="remise_type_ui"]');
+    radios.forEach(function(r) {
+        r.addEventListener('change', function() {
+            var type = this.value;
+            document.getElementById('hidRemiseType').value = type;
+            var box  = document.getElementById('remiseValBox');
+            var unit = document.getElementById('remiseUnit');
+            if (type) {
+                box.style.removeProperty('display');
+                if (unit) unit.textContent = type === 'pct' ? '%' : '€';
+            } else {
+                box.style.setProperty('display', 'none', 'important');
+                document.getElementById('remiseValInput').value = '';
+                document.getElementById('hidRemiseValeur').value = '0';
+            }
+            recalcAll();
+        });
+    });
+    var remiseInput = document.getElementById('remiseValInput');
+    if (remiseInput) {
+        remiseInput.addEventListener('input', function() {
+            document.getElementById('hidRemiseValeur').value = this.value || '0';
+            recalcAll();
+        });
+    }
+
+    // ── Bouton Export PDF ─────────────────────────────────────────────────
+    document.getElementById('btnLancerPdf').addEventListener('click', function() {
+        var debut = document.getElementById('pdfDebut').value;
+        var fin   = document.getElementById('pdfFin').value;
+        if (!debut || !fin || debut > fin) {
+            alert('Veuillez saisir une période valide.');
+            return;
+        }
+        var url = 'export_pdf.php?id=' + devisId + '&pdf_debut=' + debut + '&pdf_fin=' + fin;
+        window.open(url, '_blank');
+        bootstrap.Modal.getInstance(document.getElementById('modalExportPdf')).hide();
     });
 
     // ── Autofill ──────────────────────────────────────────────────────────

@@ -84,13 +84,22 @@ $currentModule = $currentModule ?? '';
         </li>
         <?php endif; ?>
 
-        <?php if (canDo('devis','view')): ?>
+        <?php if (canDo('devis','view') || canDo('clients','view')): ?>
         <div class="sidebar-section">Commercial</div>
+        <?php if (canDo('clients','view')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/modules/clients/index.php" class="nav-link <?= (strncmp($currentModule,'clients',7)===0)?'active':'' ?>">
+                <span class="nav-icon"><i class="fa fa-building"></i></span> Clients
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if (canDo('devis','view')): ?>
         <li class="nav-item">
             <a href="<?= APP_URL ?>/modules/devis/index.php" class="nav-link <?= (strncmp($currentModule,'devis',5)===0)?'active':'' ?>">
                 <span class="nav-icon"><i class="fa fa-file-invoice"></i></span> Devis
             </a>
         </li>
+        <?php endif; ?>
         <?php endif; ?>
 
         <?php if (canDo('parametres','view')): ?>
