@@ -22,9 +22,11 @@ function ensureDevisSchema(): void {
     static $done = false;
     if ($done) return;
     $done = true;
+    $db = getDB();
+
+    // Tables de base devis / devis_profils / devis_lignes
     try {
-        $db = getDB();
-        $exists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+        $exists = (int)$db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis'")->fetchColumn();
         if (!$exists) {
             $db->exec("CREATE TABLE devis (
@@ -42,7 +44,6 @@ function ensureDevisSchema(): void {
                 created_by INT DEFAULT NULL,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
             $db->exec("CREATE TABLE devis_profils (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 devis_id INT NOT NULL,
@@ -58,7 +59,6 @@ function ensureDevisSchema(): void {
                 taux_nf DECIMAL(8,2) NOT NULL DEFAULT 0,
                 INDEX (devis_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
             $db->exec("CREATE TABLE devis_lignes (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 profil_id INT NOT NULL,
@@ -73,9 +73,14 @@ function ensureDevisSchema(): void {
                 INDEX (profil_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         }
-        // Colonnes remise (migration auto)
-        if ($exists) {
-            $hasRemise = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    } catch (Exception $e) {}
+
+    // Colonnes remise (migration auto)
+    try {
+        $devisExists = (int)$db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis'")->fetchColumn();
+        if ($devisExists) {
+            $hasRemise = (int)$db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis' AND COLUMN_NAME = 'remise_type'")->fetchColumn();
             if (!$hasRemise) {
                 $db->exec("ALTER TABLE devis ADD COLUMN remise_type ENUM('pct','val') DEFAULT NULL AFTER tva_taux");
@@ -83,6 +88,79 @@ function ensureDevisSchema(): void {
             }
         }
     } catch (Exception $e) {}
+
+    // Table devis_periodes
+    try {
+        $hasPeriodes = (int)$db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis_periodes'")->fetchColumn();
+        if (!$hasPeriodes) {
+            $db->exec("CREATE TABLE devis_periodes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                devis_id INT NOT NULL,
+                ordre INT NOT NULL DEFAULT 0,
+                date_debut DATE NOT NULL,
+                date_fin DATE NOT NULL,
+                INDEX (devis_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            // Migrer les devis existants (une période par devis = la plage complète)
+            $db->exec("INSERT IGNORE INTO devis_periodes (devis_id, ordre, date_debut, date_fin)
+                SELECT id, 0, periode_debut, periode_fin FROM devis
+                WHERE periode_debut IS NOT NULL AND periode_fin IS NOT NULL");
+        }
+    } catch (Exception $e) {}
+
+    // Table devis_dates_exclues
+    try {
+        $hasExclues = (int)$db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'devis_dates_exclues'")->fetchColumn();
+        if (!$hasExclues) {
+            $db->exec("CREATE TABLE devis_dates_exclues (
+                devis_id INT NOT NULL,
+                date DATE NOT NULL,
+                PRIMARY KEY (devis_id, date)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+    } catch (Exception $e) {}
+}
+
+// ── Helpers devis : périodes & jours ────────────────────────────────────────
+
+function buildJoursDevis(PDO $db, int $devisId): array {
+    $stmtP = $db->prepare("SELECT date_debut, date_fin FROM devis_periodes WHERE devis_id = ? ORDER BY date_debut");
+    $stmtP->execute([$devisId]);
+    $periodes = $stmtP->fetchAll();
+
+    $stmtE = $db->prepare("SELECT date FROM devis_dates_exclues WHERE devis_id = ?");
+    $stmtE->execute([$devisId]);
+    $exclu = array_flip(array_column($stmtE->fetchAll(), 'date'));
+
+    $jourSet = [];
+    foreach ($periodes as $p) {
+        $cur = strtotime($p['date_debut']);
+        $end = strtotime($p['date_fin']);
+        while ($cur <= $end) {
+            $d = date('Y-m-d', $cur);
+            if (!isset($exclu[$d])) $jourSet[$d] = true;
+            $cur = strtotime('+1 day', $cur);
+        }
+    }
+    ksort($jourSet);
+    return array_keys($jourSet);
+}
+
+function syncDevisBounds(PDO $db, int $devisId): void {
+    $row = $db->prepare("SELECT MIN(date_debut) AS dmin, MAX(date_fin) AS dmax FROM devis_periodes WHERE devis_id = ?");
+    $row->execute([$devisId]);
+    $row = $row->fetch();
+    if ($row && $row['dmin']) {
+        $db->prepare("UPDATE devis SET periode_debut = ?, periode_fin = ? WHERE id = ?")
+           ->execute([$row['dmin'], $row['dmax'], $devisId]);
+    }
+}
+
+function insertLignesProfil(PDO $db, int $profilId, array $jours): void {
+    $stmt = $db->prepare("INSERT IGNORE INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf) VALUES (?,?,0,0,0,0,0,0)");
+    foreach ($jours as $jour) $stmt->execute([$profilId, $jour]);
 }
 
 function ensureClientsSchema(): void {
