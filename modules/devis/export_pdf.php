@@ -217,7 +217,7 @@ ob_start();
             </td>
             <td style="width:42%">
                 <div class="info-label">Description</div>
-                <div class="info-value" style="font-size:8pt"><?= nl2br(h($devis['description'] ?: '—')) ?></div>
+                <div class="info-value" style="font-size:7pt"><?= nl2br(h($devis['description'] ?: '—')) ?></div>
             </td>
         </tr>
     </table>
