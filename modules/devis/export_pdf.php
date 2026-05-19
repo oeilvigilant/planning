@@ -39,13 +39,14 @@ if ($pdfDebut < $devis['periode_debut']) $pdfDebut = $devis['periode_debut'];
 if ($pdfFin   > $devis['periode_fin'])   $pdfFin   = $devis['periode_fin'];
 if ($pdfDebut > $pdfFin) { $pdfDebut = $devis['periode_debut']; $pdfFin = $devis['periode_fin']; }
 
-$jours = [];
-$cur   = strtotime($pdfDebut);
-$end   = strtotime($pdfFin);
-while ($cur <= $end) {
-    $jours[] = date('Y-m-d', $cur);
-    $cur      = strtotime('+1 day', $cur);
-}
+// Jours actifs du devis filtrés dans la fenêtre PDF demandée
+$allJours = buildJoursDevis($db, $id);
+$jours    = array_values(array_filter($allJours, fn($d) => $d >= $pdfDebut && $d <= $pdfFin));
+
+// Périodes pour l'affichage dans l'en-tête PDF
+$stmtPer = $db->prepare("SELECT date_debut, date_fin FROM devis_periodes WHERE devis_id = ? ORDER BY date_debut");
+$stmtPer->execute([$id]);
+$periodesPdf = $stmtPer->fetchAll();
 
 $joursAbrev = ['1'=>'lun','2'=>'mar','3'=>'mer','4'=>'jeu','5'=>'ven','6'=>'sam','7'=>'dim'];
 
@@ -208,8 +209,10 @@ ob_start();
                 <?php endif; ?>
             </td>
             <td style="width:30%">
-                <div class="info-label">Période</div>
-                <div class="info-value"><?= h(formatDate($pdfDebut)) ?> → <?= h(formatDate($pdfFin)) ?></div>
+                <div class="info-label">Période(s)</div>
+                <?php foreach ($periodesPdf as $pRow): ?>
+                <div class="info-value"><?= h(formatDate($pRow['date_debut'])) ?> → <?= h(formatDate($pRow['date_fin'])) ?></div>
+                <?php endforeach; ?>
                 <div style="color:#666;font-size:8pt"><?= count($jours) ?> jour(s) facturé(s)</div>
             </td>
             <td style="width:30%">

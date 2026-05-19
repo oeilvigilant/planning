@@ -6,6 +6,9 @@ requireLogin();
 requirePerm('devis', 'create');
 
 $db = getDB();
+ensureDevisSchema();
+ensureClientsSchema();
+
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: index.php'); exit; }
 
@@ -14,8 +17,7 @@ $src->execute([$id]);
 $src = $src->fetch();
 if (!$src) { header('Location: index.php'); exit; }
 
-// Générer un nouveau numéro : numéro d'origine + _COPIE ou incrément
-function generateNumeroCopie($db, $base) {
+function generateNumeroCopie($db) {
     $yy = date('y');
     $mm = date('m');
     $prefix = "S-$yy-$mm-";
@@ -25,17 +27,18 @@ function generateNumeroCopie($db, $base) {
     return $prefix . $n;
 }
 
-$newNumero = generateNumeroCopie($db, $src['numero']);
+$newNumero = generateNumeroCopie($db);
 
 $db->beginTransaction();
 try {
-    // Insérer le devis copié
+    // Insérer le devis copié (sans les heures)
     $stmtD = $db->prepare("
-        INSERT INTO devis (numero, client_nom, client_adresse, periode_debut, periode_fin,
-            description, tva_taux, statut, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'brouillon', ?)
+        INSERT INTO devis (client_id, numero, client_nom, client_adresse, periode_debut, periode_fin,
+            description, tva_taux, remise_type, remise_valeur, statut, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'brouillon', ?)
     ");
     $stmtD->execute([
+        $src['client_id'],
         $newNumero,
         $src['client_nom'],
         $src['client_adresse'],
@@ -43,34 +46,42 @@ try {
         $src['periode_fin'],
         $src['description'],
         $src['tva_taux'],
+        $src['remise_type'],
+        $src['remise_valeur'],
         getCurrentUser()['id'],
     ]);
     $newDevisId = (int)$db->lastInsertId();
 
-    // Générer la liste des jours
-    $jours = [];
-    $cur   = strtotime($src['periode_debut']);
-    $end   = strtotime($src['periode_fin']);
-    while ($cur <= $end) {
-        $jours[] = date('Y-m-d', $cur);
-        $cur = strtotime('+1 day', $cur);
+    // Copier les périodes
+    $srcPer = $db->prepare("SELECT date_debut, date_fin, ordre FROM devis_periodes WHERE devis_id = ? ORDER BY ordre, date_debut");
+    $srcPer->execute([$id]);
+    $stmtPerIns = $db->prepare("INSERT INTO devis_periodes (devis_id, ordre, date_debut, date_fin) VALUES (?,?,?,?)");
+    foreach ($srcPer->fetchAll() as $p) {
+        $stmtPerIns->execute([$newDevisId, $p['ordre'], $p['date_debut'], $p['date_fin']]);
     }
 
-    // Copier les profils
+    // Copier les exclusions (mêmes jours exclus)
+    $srcEx = $db->prepare("SELECT date FROM devis_dates_exclues WHERE devis_id = ?");
+    $srcEx->execute([$id]);
+    $stmtExIns = $db->prepare("INSERT IGNORE INTO devis_dates_exclues (devis_id, date) VALUES (?,?)");
+    foreach ($srcEx->fetchAll() as $ex) {
+        $stmtExIns->execute([$newDevisId, $ex['date']]);
+    }
+
+    // Construire la liste des jours actifs du nouveau devis (périodes - exclusions)
+    $jours = buildJoursDevis($db, $newDevisId);
+
+    // Copier les profils et créer des lignes vides pour chaque jour actif
     $srcProfils = $db->prepare("SELECT * FROM devis_profils WHERE devis_id = ? ORDER BY ordre, id");
     $srcProfils->execute([$id]);
-    $srcProfils = $srcProfils->fetchAll();
 
     $stmtP = $db->prepare("
         INSERT INTO devis_profils (devis_id, ordre, label, activite, plage,
             taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    $stmtL = $db->prepare("
-        INSERT INTO devis_lignes (profil_id, date) VALUES (?, ?)
-    ");
 
-    foreach ($srcProfils as $sp) {
+    foreach ($srcProfils->fetchAll() as $sp) {
         $stmtP->execute([
             $newDevisId,
             $sp['ordre'],
@@ -85,9 +96,7 @@ try {
             $sp['taux_nf'],
         ]);
         $newProfilId = (int)$db->lastInsertId();
-        foreach ($jours as $jour) {
-            $stmtL->execute([$newProfilId, $jour]);
-        }
+        insertLignesProfil($db, $newProfilId, $jours);
     }
 
     $db->commit();

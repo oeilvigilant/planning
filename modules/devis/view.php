@@ -34,13 +34,26 @@ if ($profils) {
     }
 }
 
-// Générer la liste de jours de la période
-$jours = [];
-$cur = strtotime($devis['periode_debut']);
-$end = strtotime($devis['periode_fin']);
-while ($cur <= $end) {
-    $jours[] = date('Y-m-d', $cur);
-    $cur = strtotime('+1 day', $cur);
+// Charger les périodes
+$stmtPer = $db->prepare("SELECT * FROM devis_periodes WHERE devis_id = ? ORDER BY date_debut");
+$stmtPer->execute([$id]);
+$periodes = $stmtPer->fetchAll();
+
+// Construire la liste de jours (union des périodes moins les exclusions)
+$jours = buildJoursDevis($db, $id);
+
+// AJAX — exclure un jour de ce devis
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_jour') {
+    requirePerm('devis', 'edit');
+    header('Content-Type: application/json');
+    $date = $_POST['date'] ?? '';
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) { echo json_encode(['ok'=>false,'err'=>'date invalide']); exit; }
+    $db->prepare("DELETE dl FROM devis_lignes dl JOIN devis_profils dp ON dl.profil_id=dp.id WHERE dp.devis_id=? AND dl.date=?")
+       ->execute([$id, $date]);
+    $db->prepare("INSERT IGNORE INTO devis_dates_exclues (devis_id, date) VALUES (?,?)")
+       ->execute([$id, $date]);
+    echo json_encode(['ok' => true]);
+    exit;
 }
 
 // Traitement POST — sauvegarde des heures
@@ -129,9 +142,11 @@ require_once __DIR__ . '/../../includes/header.php';
                 <?php endif; ?>
             </div>
             <div class="col-md-3">
-                <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:1px">Période</div>
-                <div class="fw-600"><?= h(formatDate($devis['periode_debut'])) ?> → <?= h(formatDate($devis['periode_fin'])) ?></div>
-                <div class="text-muted" style="font-size:0.8rem"><?= count($jours) ?> jour(s)</div>
+                <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:1px">Période(s)</div>
+                <?php foreach ($periodes as $pRow): ?>
+                <div class="fw-600" style="font-size:0.88rem"><?= h(formatDate($pRow['date_debut'])) ?> → <?= h(formatDate($pRow['date_fin'])) ?></div>
+                <?php endforeach; ?>
+                <div class="text-muted" style="font-size:0.8rem"><?= count($jours) ?> jour(s) actif(s)</div>
             </div>
             <div class="col-md-5">
                 <div class="text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:1px">Description</div>
@@ -211,6 +226,7 @@ foreach ($profils as $profil):
                     <th colspan="2" class="text-center" style="background:rgba(239,68,68,0.08)">Jour Férié</th>
                     <th rowspan="3" class="text-center" style="width:70px;vertical-align:middle">Total H</th>
                     <th rowspan="3" class="text-center" style="width:90px;vertical-align:middle">Total HT</th>
+                    <th rowspan="3" style="width:28px;vertical-align:middle"></th>
                 </tr>
                 <tr>
                     <th class="text-center" style="background:rgba(99,102,241,0.06)">JOUR</th>
@@ -354,6 +370,13 @@ foreach ($profils as $profil):
 
                 <td class="text-center fw-bold ligne-total-h"><?= $totalH > 0 ? number_format($totalH, 1) : '—' ?></td>
                 <td class="text-end fw-bold ligne-total-ht" style="font-size:0.78rem"><?= $totalHT > 0 ? number_format($totalHT, 2, ',', ' ') . ' €' : '—' ?></td>
+                <td class="text-center p-0">
+                    <button type="button" class="btn-del-jour" data-date="<?= h($jour) ?>" title="Supprimer ce jour"
+                        style="padding:2px 5px;background:none;border:none;color:#dc2626;opacity:0.45;cursor:pointer"
+                        onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.45">
+                        <i class="fa fa-trash" style="font-size:0.7rem"></i>
+                    </button>
+                </td>
             </tr>
             <?php
                 $grandTotalH  += $totalH;
@@ -371,6 +394,7 @@ foreach ($profils as $profil):
                     <td class="text-center st-col" data-col="h_nf"><?= $stNf > 0 ? number_format($stNf, 1) : '—' ?></td>
                     <td class="text-center st-total-h"><?= $stH > 0 ? number_format($stH, 1) : '—' ?></td>
                     <td class="text-end st-total-ht"><?= $stHT > 0 ? number_format($stHT, 2, ',', ' ') . ' €' : '—' ?></td>
+                    <td></td>
                 </tr>
             </tfoot>
         </table>
@@ -825,6 +849,27 @@ $grandTotalTTC = $htApresRemise + $tvaMontant;
         if (!card) return;
         card.querySelectorAll('tbody .h-input').forEach(function(inp) { inp.value = ''; });
         recalcAll();
+    });
+
+    // ── Supprimer un jour ─────────────────────────────────────────────────
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.btn-del-jour');
+        if (!btn) return;
+        var date = btn.dataset.date;
+        var jourFmt = btn.closest('tr').querySelector('td').textContent.trim();
+        if (!confirm('Supprimer le jour « ' + jourFmt + ' » de ce devis ?\nLes heures saisies seront perdues et ce jour ne réapparaîtra pas avec Remplir auto.')) return;
+        var fd = new FormData();
+        fd.append('action', 'delete_jour');
+        fd.append('date', date);
+        fetch('view.php?id=' + devisId, { method: 'POST', body: fd })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    document.querySelectorAll('tr.ligne-jour[data-date="' + date + '"]').forEach(function(r) { r.remove(); });
+                    recalcAll();
+                }
+            })
+            .catch(function() { alert('Erreur lors de la suppression.'); });
     });
 
     recalcAll();
