@@ -6,6 +6,7 @@ requireLogin();
 requirePerm('devis', 'edit');
 
 $db = getDB();
+ensureDevisSchema();
 ensureClientsSchema();
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 if (!$id) { header('Location: index.php'); exit; }
