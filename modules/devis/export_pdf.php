@@ -127,7 +127,7 @@ ob_start();
     .logo-cell img { height: 95px; max-width: 125px; }
     .societe-name { font-size: 14pt; font-weight: 700; color: #1a2332; white-space: nowrap; }
     .societe-sub  { font-size: 8.5pt; color: #888; font-style: italic; margin-top: 2px; }
-    .devis-numero { font-size: 13pt; font-weight: 600; color: #c9a84c; }
+    .devis-numero { font-size: 10pt; font-weight: 600; color: #c9a84c; }
 
     /* Bloc client / période */
     .info-block { width: 100%; margin-bottom: 6px; }
