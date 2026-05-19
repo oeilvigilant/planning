@@ -23,110 +23,156 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Sauvegarder les infos générales ───────────────────────────────────
     if ($action === 'save_info') {
-        $numero       = trim($_POST['numero'] ?? '');
-        $clientId     = (int)($_POST['client_id'] ?? 0) ?: null;
-        $clientNom    = trim($_POST['client_nom'] ?? '');
-        $clientAdr    = trim($_POST['client_adresse'] ?? '');
-        $periodeDebut = trim($_POST['periode_debut'] ?? '');
-        $periodeFin   = trim($_POST['periode_fin'] ?? '');
-        $description  = trim($_POST['description'] ?? '');
-        $tvaTaux      = (float)($_POST['tva_taux'] ?? 20);
-        $remiseType   = in_array($_POST['remise_type'] ?? '', ['pct','val']) ? $_POST['remise_type'] : null;
-        $remiseVal    = max(0, (float)($_POST['remise_valeur'] ?? 0));
-        $statut       = $_POST['statut'] ?? 'brouillon';
+        $numero     = trim($_POST['numero'] ?? '');
+        $clientId   = (int)($_POST['client_id'] ?? 0) ?: null;
+        $clientNom  = trim($_POST['client_nom'] ?? '');
+        $clientAdr  = trim($_POST['client_adresse'] ?? '');
+        $description= trim($_POST['description'] ?? '');
+        $tvaTaux    = (float)($_POST['tva_taux'] ?? 20);
+        $remiseType = in_array($_POST['remise_type'] ?? '', ['pct','val']) ? $_POST['remise_type'] : null;
+        $remiseVal  = max(0, (float)($_POST['remise_valeur'] ?? 0));
+        $statut     = $_POST['statut'] ?? 'brouillon';
 
-        if (empty($numero))       $errors[] = 'Le numéro est obligatoire.';
-        if (empty($periodeDebut)) $errors[] = 'La date de début est obligatoire.';
-        if (empty($periodeFin))   $errors[] = 'La date de fin est obligatoire.';
-        if ($periodeDebut && $periodeFin && $periodeFin < $periodeDebut)
-            $errors[] = 'La date de fin doit être postérieure à la date de début.';
-
+        if (empty($numero)) $errors[] = 'Le numéro est obligatoire.';
         if (empty($errors)) {
             $stmtChk = $db->prepare("SELECT COUNT(*) FROM devis WHERE numero = ? AND id != ?");
             $stmtChk->execute([$numero, $id]);
-            if ((int)$stmtChk->fetchColumn() > 0)
-                $errors[] = 'Ce numéro de devis est déjà utilisé.';
+            if ((int)$stmtChk->fetchColumn() > 0) $errors[] = 'Ce numéro de devis est déjà utilisé.';
         }
 
         if (empty($errors)) {
-            $oldDebut = $devis['periode_debut'];
-            $oldFin   = $devis['periode_fin'];
-            $periodeChanged = ($periodeDebut !== $oldDebut || $periodeFin !== $oldFin);
-
             $db->prepare("
                 UPDATE devis SET
-                    client_id = ?, numero = ?, client_nom = ?, client_adresse = ?,
-                    periode_debut = ?, periode_fin = ?,
-                    description = ?, tva_taux = ?,
-                    remise_type = ?, remise_valeur = ?,
-                    statut = ?
-                WHERE id = ?
+                    client_id=?, numero=?, client_nom=?, client_adresse=?,
+                    description=?, tva_taux=?, remise_type=?, remise_valeur=?, statut=?
+                WHERE id=?
             ")->execute([
                 $clientId, $numero, $clientNom, $clientAdr,
-                $periodeDebut, $periodeFin,
-                $description, $tvaTaux,
-                $remiseType, $remiseVal,
+                $description, $tvaTaux, $remiseType, $remiseVal,
                 in_array($statut, ['brouillon','envoye','accepte','refuse']) ? $statut : 'brouillon',
-                $id
+                $id,
             ]);
-
-            if ($periodeChanged) {
-                $profils = $db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?");
-                $profils->execute([$id]);
-                $profils = $profils->fetchAll();
-
-                $jours = [];
-                $cur   = strtotime($periodeDebut);
-                $end   = strtotime($periodeFin);
-                while ($cur <= $end) { $jours[] = date('Y-m-d', $cur); $cur = strtotime('+1 day', $cur); }
-
-                $stmtIns = $db->prepare("INSERT IGNORE INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf) VALUES (?, ?, 0, 0, 0, 0, 0, 0)");
-                foreach ($profils as $profil) {
-                    foreach ($jours as $jour) { $stmtIns->execute([$profil['id'], $jour]); }
-                }
-                $db->prepare("DELETE dl FROM devis_lignes dl JOIN devis_profils dp ON dp.id = dl.profil_id WHERE dp.devis_id = ? AND (dl.date < ? OR dl.date > ?)")->execute([$id, $periodeDebut, $periodeFin]);
-            }
-
             flash('success', 'Devis mis à jour.');
             header('Location: view.php?id=' . $id);
             exit;
         }
-        // Pré-remplir en cas d'erreur
-        $devis = array_merge($devis, compact('numero','clientNom','clientAdr','periodeDebut','periodeFin','description','tvaTaux','statut'));
+        $devis = array_merge($devis, compact('numero','clientNom','clientAdr','description','tvaTaux','statut'));
+    }
+
+    // ── Ajouter une période ───────────────────────────────────────────────
+    elseif ($action === 'add_periode') {
+        $dateDebut = trim($_POST['date_debut'] ?? '');
+        $dateFin   = trim($_POST['date_fin']   ?? '');
+        if (!$dateDebut || !$dateFin)      { flash('danger', 'Dates requises.'); header('Location: edit_info.php?id='.$id); exit; }
+        if ($dateFin < $dateDebut)          { flash('danger', 'La date de fin doit être postérieure au début.'); header('Location: edit_info.php?id='.$id); exit; }
+
+        $stmtMax = $db->prepare("SELECT COALESCE(MAX(ordre),0) FROM devis_periodes WHERE devis_id = ?");
+        $stmtMax->execute([$id]);
+        $db->prepare("INSERT INTO devis_periodes (devis_id, ordre, date_debut, date_fin) VALUES (?,?,?,?)")
+           ->execute([$id, (int)$stmtMax->fetchColumn() + 1, $dateDebut, $dateFin]);
+
+        syncDevisBounds($db, $id);
+
+        // Générer lignes pour les nouveaux jours (exclus non réintégrés)
+        $stmtE = $db->prepare("SELECT date FROM devis_dates_exclues WHERE devis_id = ?");
+        $stmtE->execute([$id]);
+        $exclu = array_flip(array_column($stmtE->fetchAll(), 'date'));
+
+        $newJours = [];
+        $cur = strtotime($dateDebut); $end = strtotime($dateFin);
+        while ($cur <= $end) {
+            $d = date('Y-m-d', $cur);
+            if (!isset($exclu[$d])) $newJours[] = $d;
+            $cur = strtotime('+1 day', $cur);
+        }
+
+        $pids = array_column($db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?")->execute([$id])->fetchAll(), 'id');
+        foreach ($pids as $pid) insertLignesProfil($db, $pid, $newJours);
+
+        flash('success', 'Période ajoutée.');
+        header('Location: edit_info.php?id='.$id);
+        exit;
+    }
+
+    // ── Supprimer une période ─────────────────────────────────────────────
+    elseif ($action === 'remove_periode') {
+        $pid = (int)($_POST['periode_id'] ?? 0);
+        $per = $db->prepare("SELECT * FROM devis_periodes WHERE id = ? AND devis_id = ?");
+        $per->execute([$pid, $id]);
+        $per = $per->fetch();
+        if (!$per) { flash('danger', 'Période introuvable.'); header('Location: edit_info.php?id='.$id); exit; }
+
+        // Jours couverts par cette période
+        $toCheck = [];
+        $cur = strtotime($per['date_debut']); $end = strtotime($per['date_fin']);
+        while ($cur <= $end) { $toCheck[] = date('Y-m-d', $cur); $cur = strtotime('+1 day', $cur); }
+
+        // Jours couverts par les AUTRES périodes
+        $otherPeriodes = $db->prepare("SELECT date_debut, date_fin FROM devis_periodes WHERE devis_id = ? AND id != ?");
+        $otherPeriodes->execute([$id, $pid]);
+        $otherCovered = [];
+        foreach ($otherPeriodes->fetchAll() as $op) {
+            $c = strtotime($op['date_debut']); $e = strtotime($op['date_fin']);
+            while ($c <= $e) { $otherCovered[date('Y-m-d', $c)] = true; $c = strtotime('+1 day', $c); }
+        }
+
+        // Supprimer uniquement les jours exclusifs à cette période
+        $toDelete = array_filter($toCheck, fn($d) => !isset($otherCovered[$d]));
+        if ($toDelete) {
+            $profilIds = array_column($db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?")->execute([$id])->fetchAll(), 'id');
+            if ($profilIds) {
+                $ph = implode(',', array_fill(0, count($profilIds), '?'));
+                foreach ($toDelete as $date) {
+                    $params = array_merge([$date], $profilIds);
+                    $db->prepare("DELETE FROM devis_lignes WHERE date = ? AND profil_id IN ($ph)")->execute($params);
+                    $db->prepare("DELETE FROM devis_dates_exclues WHERE devis_id = ? AND date = ?")->execute([$id, $date]);
+                }
+            }
+        }
+
+        $db->prepare("DELETE FROM devis_periodes WHERE id = ?")->execute([$pid]);
+        syncDevisBounds($db, $id);
+
+        flash('success', 'Période supprimée.');
+        header('Location: edit_info.php?id='.$id);
+        exit;
+    }
+
+    // ── Réinitialiser tous les jours ──────────────────────────────────────
+    elseif ($action === 'reset_jours') {
+        // Effacer les exclusions
+        $db->prepare("DELETE FROM devis_dates_exclues WHERE devis_id = ?")->execute([$id]);
+        // Reconstruire tous les jours depuis les périodes
+        $jours = buildJoursDevis($db, $id);
+        $profilIds = array_column($db->prepare("SELECT id FROM devis_profils WHERE devis_id = ?")->execute([$id])->fetchAll(), 'id');
+        foreach ($profilIds as $pid) insertLignesProfil($db, $pid, $jours);
+        // Supprimer les lignes orphelines (hors périodes)
+        if ($jours && $profilIds) {
+            $ph = implode(',', array_fill(0, count($profilIds), '?'));
+            $phJ = implode(',', array_fill(0, count($jours), '?'));
+            $params = array_merge($profilIds, $jours);
+            $db->prepare("DELETE FROM devis_lignes WHERE profil_id IN ($ph) AND date NOT IN ($phJ)")->execute($params);
+        }
+        flash('success', 'Jours réinitialisés depuis les périodes définies.');
+        header('Location: edit_info.php?id='.$id);
+        exit;
     }
 
     // ── Ajouter un profil ─────────────────────────────────────────────────
     elseif ($action === 'add_profil') {
         requirePerm('devis', 'create');
-        $label    = trim($_POST['label']    ?? '');
-        $activite = trim($_POST['activite'] ?? 'Agent de Sécurité');
-        $plage    = trim($_POST['plage']    ?? '');
+        $label = trim($_POST['label'] ?? '');
         if (empty($label)) { flash('danger', 'Le label du profil est obligatoire.'); header('Location: edit_info.php?id='.$id); exit; }
 
-        $jours = [];
-        $cur   = strtotime($devis['periode_debut']);
-        $end   = strtotime($devis['periode_fin']);
-        while ($cur <= $end) { $jours[] = date('Y-m-d', $cur); $cur = strtotime('+1 day', $cur); }
-
-        $maxOrdre = (int)$db->prepare("SELECT COALESCE(MAX(ordre),0) FROM devis_profils WHERE devis_id = ?")->execute([$id]);
-        $stmtMax  = $db->prepare("SELECT COALESCE(MAX(ordre),0) FROM devis_profils WHERE devis_id = ?");
+        $stmtMax = $db->prepare("SELECT COALESCE(MAX(ordre),0) FROM devis_profils WHERE devis_id = ?");
         $stmtMax->execute([$id]);
-        $ordre = (int)$stmtMax->fetchColumn() + 1;
-
-        $stmtP = $db->prepare("INSERT INTO devis_profils (devis_id, ordre, label, activite, plage, taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
-        $stmtP->execute([
-            $id, $ordre, $label, $activite, $plage,
-            (float)($_POST['taux_jn'] ?? 25.90),
-            (float)($_POST['taux_nn'] ?? 27.90),
-            (float)($_POST['taux_jd'] ?? 27.90),
-            (float)($_POST['taux_nd'] ?? 30.90),
-            (float)($_POST['taux_jf'] ?? 51.80),
-            (float)($_POST['taux_nf'] ?? 55.80),
-        ]);
-        $newProfilId = (int)$db->lastInsertId();
-        $stmtL = $db->prepare("INSERT IGNORE INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf) VALUES (?,?,0,0,0,0,0,0)");
-        foreach ($jours as $jour) { $stmtL->execute([$newProfilId, $jour]); }
-
+        $db->prepare("INSERT INTO devis_profils (devis_id, ordre, label, activite, plage, taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+           ->execute([$id, (int)$stmtMax->fetchColumn() + 1,
+               $label, trim($_POST['activite'] ?? 'Agent de Sécurité'), trim($_POST['plage'] ?? ''),
+               (float)($_POST['taux_jn']??25.90),(float)($_POST['taux_nn']??27.90),(float)($_POST['taux_jd']??27.90),
+               (float)($_POST['taux_nd']??30.90),(float)($_POST['taux_jf']??51.80),(float)($_POST['taux_nf']??55.80),
+           ]);
+        insertLignesProfil($db, (int)$db->lastInsertId(), buildJoursDevis($db, $id));
         flash('success', 'Profil ajouté.');
         header('Location: edit_info.php?id='.$id);
         exit;
@@ -135,23 +181,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // ── Modifier un profil ────────────────────────────────────────────────
     elseif ($action === 'edit_profil') {
         $pid = (int)($_POST['profil_id'] ?? 0);
-        // Vérifier appartenance
         $chk = $db->prepare("SELECT id FROM devis_profils WHERE id = ? AND devis_id = ?");
         $chk->execute([$pid, $id]);
         if (!$chk->fetch()) { flash('danger', 'Profil introuvable.'); header('Location: edit_info.php?id='.$id); exit; }
-
-        $db->prepare("UPDATE devis_profils SET label=?, activite=?, plage=?, taux_jn=?, taux_nn=?, taux_jd=?, taux_nd=?, taux_jf=?, taux_nf=? WHERE id = ?")->execute([
-            trim($_POST['label']    ?? ''),
-            trim($_POST['activite'] ?? ''),
-            trim($_POST['plage']    ?? ''),
-            (float)($_POST['taux_jn'] ?? 25.90),
-            (float)($_POST['taux_nn'] ?? 27.90),
-            (float)($_POST['taux_jd'] ?? 27.90),
-            (float)($_POST['taux_nd'] ?? 30.90),
-            (float)($_POST['taux_jf'] ?? 51.80),
-            (float)($_POST['taux_nf'] ?? 55.80),
-            $pid,
-        ]);
+        $db->prepare("UPDATE devis_profils SET label=?,activite=?,plage=?,taux_jn=?,taux_nn=?,taux_jd=?,taux_nd=?,taux_jf=?,taux_nf=? WHERE id=?")
+           ->execute([trim($_POST['label']??''),trim($_POST['activite']??''),trim($_POST['plage']??''),
+               (float)($_POST['taux_jn']??25.90),(float)($_POST['taux_nn']??27.90),(float)($_POST['taux_jd']??27.90),
+               (float)($_POST['taux_nd']??30.90),(float)($_POST['taux_jf']??51.80),(float)($_POST['taux_nf']??55.80),$pid]);
         flash('success', 'Profil mis à jour.');
         header('Location: edit_info.php?id='.$id);
         exit;
@@ -165,27 +201,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $src->execute([$pid, $id]);
         $src = $src->fetch();
         if (!$src) { flash('danger', 'Profil introuvable.'); header('Location: edit_info.php?id='.$id); exit; }
-
         $stmtMax = $db->prepare("SELECT COALESCE(MAX(ordre),0) FROM devis_profils WHERE devis_id = ?");
         $stmtMax->execute([$id]);
-        $ordre = (int)$stmtMax->fetchColumn() + 1;
-
-        $db->prepare("INSERT INTO devis_profils (devis_id, ordre, label, activite, plage, taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf) VALUES (?,?,?,?,?,?,?,?,?,?,?)")->execute([
-            $id, $ordre,
-            $src['label'] . ' (copie)',
-            $src['activite'], $src['plage'],
-            $src['taux_jn'], $src['taux_nn'], $src['taux_jd'],
-            $src['taux_nd'], $src['taux_jf'], $src['taux_nf'],
-        ]);
-        $newPid = (int)$db->lastInsertId();
-
-        $jours = [];
-        $cur   = strtotime($devis['periode_debut']);
-        $end   = strtotime($devis['periode_fin']);
-        while ($cur <= $end) { $jours[] = date('Y-m-d', $cur); $cur = strtotime('+1 day', $cur); }
-        $stmtL = $db->prepare("INSERT IGNORE INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf) VALUES (?,?,0,0,0,0,0,0)");
-        foreach ($jours as $jour) { $stmtL->execute([$newPid, $jour]); }
-
+        $db->prepare("INSERT INTO devis_profils (devis_id,ordre,label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+           ->execute([$id,(int)$stmtMax->fetchColumn()+1,$src['label'].' (copie)',$src['activite'],$src['plage'],
+               $src['taux_jn'],$src['taux_nn'],$src['taux_jd'],$src['taux_nd'],$src['taux_jf'],$src['taux_nf']]);
+        insertLignesProfil($db, (int)$db->lastInsertId(), buildJoursDevis($db, $id));
         flash('success', 'Profil dupliqué.');
         header('Location: edit_info.php?id='.$id);
         exit;
@@ -205,12 +226,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Charger les profils existants
+// Charger les données
 $stmtP = $db->prepare("SELECT * FROM devis_profils WHERE devis_id = ? ORDER BY ordre, id");
 $stmtP->execute([$id]);
 $profils = $stmtP->fetchAll();
 
-// Clients pour le sélecteur
+$stmtPer = $db->prepare("SELECT * FROM devis_periodes WHERE devis_id = ? ORDER BY date_debut");
+$stmtPer->execute([$id]);
+$periodes = $stmtPer->fetchAll();
+
 $clientsList = $db->query("SELECT id, nom, adresse, contact FROM clients ORDER BY nom")->fetchAll();
 
 $pageTitle     = 'Modifier — ' . $devis['numero'];
@@ -219,12 +243,12 @@ $topbarActions = '<a href="view.php?id=' . $id . '" class="btn btn-ov-secondary 
 require_once __DIR__ . '/../../includes/header.php';
 
 $PROFILS_TYPES = [
-    'agent-jour'  => ['label'=>'Profil : Agent De Jour',         'activite'=>'Agent de Sécurité', 'plage'=>'De 07h00 à 19h00', 'jn'=>25.90,'nn'=>27.90,'jd'=>27.90,'nd'=>30.90,'jf'=>51.80,'nf'=>55.80],
-    'agent-nuit'  => ['label'=>'Profil : Agent De Nuit',         'activite'=>'Agent de Sécurité', 'plage'=>'De 19h00 à 07h00', 'jn'=>25.90,'nn'=>27.90,'jd'=>27.90,'nd'=>30.90,'jf'=>51.80,'nf'=>55.80],
-    'cynophile'   => ['label'=>'Profil : Maître Chien',          'activite'=>'Agent Cynophile',   'plage'=>'De 20h00 à 06h00', 'jn'=>28.00,'nn'=>30.00,'jd'=>30.00,'nd'=>33.00,'jf'=>56.00,'nf'=>60.00],
-    'ssiap1'      => ['label'=>'Profil : Agent SSIAP 1',         'activite'=>'Agent SSIAP',       'plage'=>'De 07h00 à 19h00', 'jn'=>26.50,'nn'=>28.50,'jd'=>28.50,'nd'=>31.50,'jf'=>53.00,'nf'=>57.00],
-    'ssiap2'      => ['label'=>"Profil : Chef d'équipe SSIAP 2", 'activite'=>'Agent SSIAP',       'plage'=>'De 07h00 à 19h00', 'jn'=>28.00,'nn'=>30.00,'jd'=>30.00,'nd'=>33.00,'jf'=>56.00,'nf'=>60.00],
-    'chef-equipe' => ['label'=>"Profil : Chef D'Équipe",         'activite'=>"Chef d'Équipe",     'plage'=>'De 07h00 à 19h00', 'jn'=>27.50,'nn'=>29.50,'jd'=>29.50,'nd'=>32.50,'jf'=>55.00,'nf'=>59.00],
+    'agent-jour'  => ['label'=>'Profil : Agent De Jour',         'activite'=>'Agent de Sécurité','plage'=>'De 07h00 à 19h00','jn'=>25.90,'nn'=>27.90,'jd'=>27.90,'nd'=>30.90,'jf'=>51.80,'nf'=>55.80],
+    'agent-nuit'  => ['label'=>'Profil : Agent De Nuit',         'activite'=>'Agent de Sécurité','plage'=>'De 19h00 à 07h00','jn'=>25.90,'nn'=>27.90,'jd'=>27.90,'nd'=>30.90,'jf'=>51.80,'nf'=>55.80],
+    'cynophile'   => ['label'=>'Profil : Maître Chien',          'activite'=>'Agent Cynophile',  'plage'=>'De 20h00 à 06h00','jn'=>28.00,'nn'=>30.00,'jd'=>30.00,'nd'=>33.00,'jf'=>56.00,'nf'=>60.00],
+    'ssiap1'      => ['label'=>'Profil : Agent SSIAP 1',         'activite'=>'Agent SSIAP',      'plage'=>'De 07h00 à 19h00','jn'=>26.50,'nn'=>28.50,'jd'=>28.50,'nd'=>31.50,'jf'=>53.00,'nf'=>57.00],
+    'ssiap2'      => ['label'=>"Profil : Chef d'équipe SSIAP 2", 'activite'=>'Agent SSIAP',      'plage'=>'De 07h00 à 19h00','jn'=>28.00,'nn'=>30.00,'jd'=>30.00,'nd'=>33.00,'jf'=>56.00,'nf'=>60.00],
+    'chef-equipe' => ['label'=>"Profil : Chef D'Équipe",         'activite'=>"Chef d'Équipe",    'plage'=>'De 07h00 à 19h00','jn'=>27.50,'nn'=>29.50,'jd'=>29.50,'nd'=>32.50,'jf'=>55.00,'nf'=>59.00],
 ];
 ?>
 
@@ -234,7 +258,7 @@ $PROFILS_TYPES = [
 </div>
 <?php endif; ?>
 
-<!-- ── Infos générales ─────────────────────────────────────────────────── -->
+<!-- ── Infos générales ────────────────────────────────────────────────── -->
 <div class="ov-card mb-3">
     <div class="ov-card-header">
         <h2 class="ov-card-title">
@@ -277,18 +301,6 @@ $PROFILS_TYPES = [
                     <?php endif; ?>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label">Date début <span class="text-danger">*</span></label>
-                    <input type="date" name="periode_debut" class="form-control" value="<?= h($devis['periode_debut']) ?>" required>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Date fin <span class="text-danger">*</span></label>
-                    <input type="date" name="periode_fin" class="form-control" value="<?= h($devis['periode_fin']) ?>" required>
-                </div>
-                <div class="col-md-8">
-                    <label class="form-label">Adresse client</label>
-                    <textarea name="client_adresse" id="clientAdrInput" class="form-control" rows="2"><?= h($devis['client_adresse'] ?? '') ?></textarea>
-                </div>
-                <div class="col-md-2">
                     <label class="form-label">TVA (%)</label>
                     <input type="number" name="tva_taux" class="form-control" step="0.01" min="0" max="100" value="<?= h($devis['tva_taux']) ?>">
                 </div>
@@ -301,24 +313,90 @@ $PROFILS_TYPES = [
                         <option value="refuse"    <?= $devis['statut']==='refuse'   ?'selected':'' ?>>Refusé</option>
                     </select>
                 </div>
+                <div class="col-md-8">
+                    <label class="form-label">Adresse client</label>
+                    <textarea name="client_adresse" id="clientAdrInput" class="form-control" rows="2"><?= h($devis['client_adresse'] ?? '') ?></textarea>
+                </div>
                 <div class="col-12">
                     <label class="form-label">Description</label>
-                    <textarea name="description" class="form-control" rows="3"><?= h($devis['description'] ?? '') ?></textarea>
-                </div>
-                <div class="col-12">
-                    <div class="alert alert-info mb-0" style="font-size:0.85rem">
-                        <i class="fa fa-circle-info me-1"></i>
-                        Si vous modifiez la période, les jours manquants seront créés automatiquement et les jours hors période supprimés.
-                    </div>
+                    <textarea name="description" class="form-control" rows="2"><?= h($devis['description'] ?? '') ?></textarea>
                 </div>
                 <div class="col-12 d-flex gap-2">
-                    <button type="submit" class="btn btn-ov-primary">
-                        <i class="fa fa-save me-2"></i>Enregistrer
-                    </button>
+                    <button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Enregistrer</button>
                     <a href="view.php?id=<?= $id ?>" class="btn btn-ov-secondary">Annuler</a>
                 </div>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- ── Périodes ───────────────────────────────────────────────────────── -->
+<div class="ov-card mb-3">
+    <div class="ov-card-header">
+        <h2 class="ov-card-title">
+            <i class="fa fa-calendar-range me-2" style="color:var(--ov-gold)"></i>Périodes
+            <span class="badge bg-secondary ms-2"><?= count($periodes) ?></span>
+        </h2>
+        <form method="POST" style="display:contents">
+            <input type="hidden" name="id"     value="<?= $id ?>">
+            <input type="hidden" name="action" value="reset_jours">
+            <button type="submit" class="btn btn-sm btn-outline-warning ms-auto"
+                onclick="return confirm('Réinitialiser tous les jours depuis les périodes ? Les jours supprimés manuellement seront restaurés.')"
+                title="Efface les suppressions manuelles et recrée toutes les lignes des périodes définies">
+                <i class="fa fa-rotate-left me-1"></i>Réinitialiser les jours
+            </button>
+        </form>
+    </div>
+    <div class="ov-card-body">
+        <?php if (empty($periodes)): ?>
+        <p class="text-muted mb-3">Aucune période définie. Ajoutez-en une ci-dessous.</p>
+        <?php else: ?>
+        <div class="mb-3">
+            <?php foreach ($periodes as $p): ?>
+            <div class="d-flex align-items-center gap-3 py-2 border-bottom">
+                <i class="fa fa-calendar-days text-muted"></i>
+                <span class="fw-600">
+                    <?= h(formatDate($p['date_debut'])) ?> → <?= h(formatDate($p['date_fin'])) ?>
+                </span>
+                <?php
+                $nj = 0; $cur = strtotime($p['date_debut']); $end = strtotime($p['date_fin']);
+                while ($cur <= $end) { $nj++; $cur = strtotime('+1 day', $cur); }
+                ?>
+                <span class="text-muted" style="font-size:0.82rem"><?= $nj ?> jour(s)</span>
+                <form method="POST" class="ms-auto" style="display:inline"
+                    onsubmit="return confirm('Supprimer cette période et ses jours exclusifs ?')">
+                    <input type="hidden" name="id"         value="<?= $id ?>">
+                    <input type="hidden" name="action"     value="remove_periode">
+                    <input type="hidden" name="periode_id" value="<?= $p['id'] ?>">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="fa fa-trash"></i>
+                    </button>
+                </form>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <!-- Ajouter une période -->
+        <form method="POST" class="d-flex align-items-end gap-2 flex-wrap mt-2">
+            <input type="hidden" name="id"     value="<?= $id ?>">
+            <input type="hidden" name="action" value="add_periode">
+            <div>
+                <label class="form-label mb-1" style="font-size:0.82rem">Date début</label>
+                <input type="date" name="date_debut" class="form-control form-control-sm" required>
+            </div>
+            <div>
+                <label class="form-label mb-1" style="font-size:0.82rem">Date fin</label>
+                <input type="date" name="date_fin" class="form-control form-control-sm" required>
+            </div>
+            <button type="submit" class="btn btn-ov-primary btn-sm">
+                <i class="fa fa-plus me-1"></i>Ajouter cette période
+            </button>
+        </form>
+        <div class="form-text text-muted mt-1">
+            <i class="fa fa-circle-info me-1"></i>
+            Ajouter une période génère automatiquement les lignes dans la grille de saisie.
+        </div>
     </div>
 </div>
 
@@ -334,7 +412,6 @@ $PROFILS_TYPES = [
     <?php if (empty($profils)): ?>
         <p class="text-muted">Aucun profil. Ajoutez-en un ci-dessous.</p>
     <?php endif; ?>
-
     <?php foreach ($profils as $p): ?>
     <div class="border rounded mb-3 p-3">
         <div class="d-flex justify-content-between align-items-start mb-2">
@@ -343,66 +420,39 @@ $PROFILS_TYPES = [
                 <span class="text-muted ms-2" style="font-size:0.82rem"><?= h($p['activite']) ?> | <?= h($p['plage']) ?></span>
             </div>
             <div class="d-flex gap-1">
-                <button type="button" class="btn btn-sm btn-outline-secondary"
-                    onclick="toggleEditProfil(<?= $p['id'] ?>)" title="Modifier">
-                    <i class="fa fa-pen"></i>
-                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleEditProfil(<?= $p['id'] ?>)"><i class="fa fa-pen"></i></button>
                 <form method="POST" style="display:inline">
-                    <input type="hidden" name="id"        value="<?= $id ?>">
-                    <input type="hidden" name="action"    value="duplicate_profil">
+                    <input type="hidden" name="id" value="<?= $id ?>">
+                    <input type="hidden" name="action" value="duplicate_profil">
                     <input type="hidden" name="profil_id" value="<?= $p['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Dupliquer ce profil">
-                        <i class="fa fa-copy"></i>
-                    </button>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="Dupliquer"><i class="fa fa-copy"></i></button>
                 </form>
-                <form method="POST" style="display:inline"
-                    onsubmit="return confirm('Supprimer ce profil et toutes ses heures ?')">
-                    <input type="hidden" name="id"        value="<?= $id ?>">
-                    <input type="hidden" name="action"    value="delete_profil">
+                <form method="POST" style="display:inline" onsubmit="return confirm('Supprimer ce profil ?')">
+                    <input type="hidden" name="id" value="<?= $id ?>">
+                    <input type="hidden" name="action" value="delete_profil">
                     <input type="hidden" name="profil_id" value="<?= $p['id'] ?>">
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer">
-                        <i class="fa fa-trash"></i>
-                    </button>
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fa fa-trash"></i></button>
                 </form>
             </div>
         </div>
-
-        <!-- Taux résumé -->
         <div class="d-flex gap-3 text-muted" style="font-size:0.78rem">
-            <span>JN <strong><?= number_format($p['taux_jn'],2) ?></strong></span>
-            <span>NN <strong><?= number_format($p['taux_nn'],2) ?></strong></span>
-            <span>JD <strong><?= number_format($p['taux_jd'],2) ?></strong></span>
-            <span>ND <strong><?= number_format($p['taux_nd'],2) ?></strong></span>
-            <span>JF <strong><?= number_format($p['taux_jf'],2) ?></strong></span>
-            <span>NF <strong><?= number_format($p['taux_nf'],2) ?></strong></span>
+            <?php foreach (['jn','nn','jd','nd','jf','nf'] as $k): ?>
+            <span><?= strtoupper($k) ?> <strong><?= number_format($p['taux_'.$k],2) ?></strong></span>
+            <?php endforeach; ?>
         </div>
-
-        <!-- Formulaire d'édition (caché par défaut) -->
-        <div id="edit-profil-<?= $p['id'] ?>" style="display:none; margin-top:1rem">
+        <div id="edit-profil-<?= $p['id'] ?>" style="display:none;margin-top:1rem">
             <form method="POST">
-                <input type="hidden" name="id"        value="<?= $id ?>">
-                <input type="hidden" name="action"    value="edit_profil">
+                <input type="hidden" name="id" value="<?= $id ?>">
+                <input type="hidden" name="action" value="edit_profil">
                 <input type="hidden" name="profil_id" value="<?= $p['id'] ?>">
                 <div class="row g-2">
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size:0.8rem">Label</label>
-                        <input type="text" name="label" class="form-control form-control-sm" value="<?= h($p['label']) ?>" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size:0.8rem">Activité</label>
-                        <input type="text" name="activite" class="form-control form-control-sm" value="<?= h($p['activite']) ?>">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label" style="font-size:0.8rem">Plage horaire</label>
-                        <input type="text" name="plage" class="form-control form-control-sm" value="<?= h($p['plage']) ?>">
-                    </div>
+                    <div class="col-md-4"><label class="form-label" style="font-size:0.8rem">Label</label><input type="text" name="label" class="form-control form-control-sm" value="<?= h($p['label']) ?>" required></div>
+                    <div class="col-md-4"><label class="form-label" style="font-size:0.8rem">Activité</label><input type="text" name="activite" class="form-control form-control-sm" value="<?= h($p['activite']) ?>"></div>
+                    <div class="col-md-4"><label class="form-label" style="font-size:0.8rem">Plage</label><input type="text" name="plage" class="form-control form-control-sm" value="<?= h($p['plage']) ?>"></div>
                 </div>
                 <div class="row g-2 mt-1">
-                    <?php foreach (['jn'=>'JN Jour Normal','nn'=>'NN Nuit Normal','jd'=>'JD Dimanche','nd'=>'ND Nuit Dim.','jf'=>'JF Férié','nf'=>'NF Nuit Férié'] as $k => $lbl): ?>
-                    <div class="col">
-                        <label class="form-label text-center d-block" style="font-size:0.72rem"><?= $lbl ?></label>
-                        <input type="number" name="taux_<?= $k ?>" class="form-control form-control-sm text-center" step="0.01" min="0" value="<?= h($p['taux_'.$k]) ?>">
-                    </div>
+                    <?php foreach (['jn'=>'JN Normal','nn'=>'NN Normal','jd'=>'JD Dim.','nd'=>'ND Dim.','jf'=>'JF Férié','nf'=>'NF Férié'] as $k => $lbl): ?>
+                    <div class="col"><label class="form-label text-center d-block" style="font-size:0.72rem"><?= $lbl ?></label><input type="number" name="taux_<?= $k ?>" class="form-control form-control-sm text-center" step="0.01" min="0" value="<?= h($p['taux_'.$k]) ?>"></div>
                     <?php endforeach; ?>
                 </div>
                 <div class="mt-2 d-flex gap-2">
@@ -419,53 +469,32 @@ $PROFILS_TYPES = [
 <!-- ── Ajouter un profil ──────────────────────────────────────────────── -->
 <div class="ov-card mb-3">
     <div class="ov-card-header">
-        <h2 class="ov-card-title">
-            <i class="fa fa-plus me-2" style="color:var(--ov-gold)"></i>Ajouter un profil
-        </h2>
+        <h2 class="ov-card-title"><i class="fa fa-plus me-2" style="color:var(--ov-gold)"></i>Ajouter un profil</h2>
     </div>
     <div class="ov-card-body">
         <form method="POST" id="formAddProfil">
-            <input type="hidden" name="id"     value="<?= $id ?>">
+            <input type="hidden" name="id" value="<?= $id ?>">
             <input type="hidden" name="action" value="add_profil">
             <div class="mb-3">
                 <label class="form-label">Charger un profil type</label>
                 <select class="form-select form-select-sm" id="newTplSelect" style="max-width:280px">
-                    <option value="">— Sélectionner un profil type —</option>
-                    <option value="agent-jour">Agent de Jour (07h-19h)</option>
-                    <option value="agent-nuit">Agent de Nuit (19h-07h)</option>
-                    <option value="cynophile">Maître Chien (20h-06h)</option>
-                    <option value="ssiap1">Agent SSIAP 1</option>
-                    <option value="ssiap2">Chef d'équipe SSIAP 2</option>
-                    <option value="chef-equipe">Chef d'Équipe</option>
+                    <option value="">— Sélectionner —</option>
+                    <option value="agent-jour">Agent de Jour</option><option value="agent-nuit">Agent de Nuit</option>
+                    <option value="cynophile">Maître Chien</option><option value="ssiap1">Agent SSIAP 1</option>
+                    <option value="ssiap2">Chef d'équipe SSIAP 2</option><option value="chef-equipe">Chef d'Équipe</option>
                 </select>
             </div>
             <div class="row g-2">
-                <div class="col-md-4">
-                    <label class="form-label">Label <span class="text-danger">*</span></label>
-                    <input type="text" name="label" id="newLabel" class="form-control" placeholder="Ex: Profil A : 1 Agent De Jour" required>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Activité</label>
-                    <input type="text" name="activite" id="newActivite" class="form-control" value="Agent de Sécurité">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Plage horaire</label>
-                    <input type="text" name="plage" id="newPlage" class="form-control" value="De 07h00 à 19h00">
-                </div>
+                <div class="col-md-4"><label class="form-label">Label <span class="text-danger">*</span></label><input type="text" name="label" id="newLabel" class="form-control" required></div>
+                <div class="col-md-4"><label class="form-label">Activité</label><input type="text" name="activite" id="newActivite" class="form-control" value="Agent de Sécurité"></div>
+                <div class="col-md-4"><label class="form-label">Plage</label><input type="text" name="plage" id="newPlage" class="form-control" value="De 07h00 à 19h00"></div>
             </div>
             <div class="row g-2 mt-1">
-                <?php foreach (['jn'=>['JN','Jour Normal',25.90],'nn'=>['NN','Nuit Normal',27.90],'jd'=>['JD','Dimanche',27.90],'nd'=>['ND','Nuit Dim.',30.90],'jf'=>['JF','Férié',51.80],'nf'=>['NF','Nuit Férié',55.80]] as $k => [$abr,$lbl,$def]): ?>
-                <div class="col">
-                    <label class="form-label text-center d-block" style="font-size:0.75rem"><?= $abr ?><br><small class="text-muted"><?= $lbl ?></small></label>
-                    <input type="number" name="taux_<?= $k ?>" id="new_<?= $k ?>" class="form-control form-control-sm text-center" step="0.01" min="0" value="<?= $def ?>">
-                </div>
+                <?php foreach (['jn'=>[25.90,'JN'],'nn'=>[27.90,'NN'],'jd'=>[27.90,'JD'],'nd'=>[30.90,'ND'],'jf'=>[51.80,'JF'],'nf'=>[55.80,'NF']] as $k => [$def,$abr]): ?>
+                <div class="col"><label class="form-label text-center d-block" style="font-size:0.75rem"><?= $abr ?></label><input type="number" name="taux_<?= $k ?>" id="new_<?= $k ?>" class="form-control form-control-sm text-center" step="0.01" min="0" value="<?= $def ?>"></div>
                 <?php endforeach; ?>
             </div>
-            <div class="mt-3">
-                <button type="submit" class="btn btn-ov-primary">
-                    <i class="fa fa-plus me-2"></i>Ajouter ce profil
-                </button>
-            </div>
+            <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-plus me-2"></i>Ajouter ce profil</button></div>
         </form>
     </div>
 </div>
@@ -476,35 +505,28 @@ function toggleEditProfil(pid) {
     el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
-var PROFILS_TYPES = <?= json_encode(array_map(function($t) {
-    return ['label'=>$t['label'],'activite'=>$t['activite'],'plage'=>$t['plage'],
-            'jn'=>$t['jn'],'nn'=>$t['nn'],'jd'=>$t['jd'],'nd'=>$t['nd'],'jf'=>$t['jf'],'nf'=>$t['nf']];
-}, $PROFILS_TYPES)) ?>;
-
 // Sélecteur client
 (function() {
     var sel = document.getElementById('clientSelect');
     if (!sel) return;
     sel.addEventListener('change', function() {
         var opt = this.options[this.selectedIndex];
-        document.getElementById('clientIdHidden').value  = opt.value || '';
-        document.getElementById('clientNomInput').value  = opt.value ? opt.dataset.nom     : '';
-        document.getElementById('clientAdrInput').value  = opt.value ? opt.dataset.adresse : '';
+        document.getElementById('clientIdHidden').value = opt.value || '';
+        document.getElementById('clientNomInput').value = opt.value ? opt.dataset.nom     : '';
+        document.getElementById('clientAdrInput').value = opt.value ? opt.dataset.adresse : '';
     });
 })();
 
+var PROFILS_TYPES = <?= json_encode(array_map(fn($t) => ['label'=>$t['label'],'activite'=>$t['activite'],'plage'=>$t['plage'],'jn'=>$t['jn'],'nn'=>$t['nn'],'jd'=>$t['jd'],'nd'=>$t['nd'],'jf'=>$t['jf'],'nf'=>$t['nf']], $PROFILS_TYPES)) ?>;
+
 document.getElementById('newTplSelect').addEventListener('change', function() {
-    var t = PROFILS_TYPES[this.value];
-    if (!t) return;
+    var t = PROFILS_TYPES[this.value]; if (!t) return;
     document.getElementById('newLabel').value   = t.label;
     document.getElementById('newActivite').value = t.activite;
-    document.getElementById('newPlage').value    = t.plage;
-    document.getElementById('new_jn').value = t.jn.toFixed(2);
-    document.getElementById('new_nn').value = t.nn.toFixed(2);
-    document.getElementById('new_jd').value = t.jd.toFixed(2);
-    document.getElementById('new_nd').value = t.nd.toFixed(2);
-    document.getElementById('new_jf').value = t.jf.toFixed(2);
-    document.getElementById('new_nf').value = t.nf.toFixed(2);
+    document.getElementById('newPlage').value   = t.plage;
+    ['jn','nn','jd','nd','jf','nf'].forEach(function(k) {
+        document.getElementById('new_' + k).value = t[k].toFixed(2);
+    });
     this.value = '';
 });
 </script>
