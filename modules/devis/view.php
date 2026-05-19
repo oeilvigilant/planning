@@ -246,7 +246,10 @@ foreach ($profils as $profil):
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($jours as $jour):
+            <?php
+            // Ce profil n'affiche que ses propres dates (lignes existantes)
+            $profileJours = array_keys($lignesParProfil[$pid] ?? []);
+            foreach ($profileJours as $jour):
                 $ferie    = isFerie($jour);
                 $dimanche = isDimanche($jour);
                 $lg       = $lignes[$jour] ?? ['h_jn'=>0,'h_nn'=>0,'h_jd'=>0,'h_nd'=>0,'h_jf'=>0,'h_nf'=>0];
