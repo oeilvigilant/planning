@@ -1018,7 +1018,7 @@ if ($vue === 'semaine') {
         </div>
         <div class="mb-3">
           <label class="form-label" style="font-size:0.82rem;font-weight:600">Format</label>
-          <div class="d-flex gap-3">
+          <div class="d-flex gap-3 flex-wrap">
             <div class="form-check">
               <input class="form-check-input" type="radio" name="exportFormat" id="exportFmtPdf" value="pdf" checked>
               <label class="form-check-label" style="font-size:0.82rem" for="exportFmtPdf"><i class="fa fa-file-pdf me-1" style="color:#dc2626"></i>PDF (paysage)</label>
@@ -1026,6 +1026,10 @@ if ($vue === 'semaine') {
             <div class="form-check">
               <input class="form-check-input" type="radio" name="exportFormat" id="exportFmtExcel" value="excel">
               <label class="form-check-label" style="font-size:0.82rem" for="exportFmtExcel"><i class="fa fa-file-excel me-1" style="color:#16a34a"></i>Excel / CSV</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="exportFormat" id="exportFmtZip" value="zip">
+              <label class="form-check-label" style="font-size:0.82rem" for="exportFmtZip"><i class="fa fa-file-zipper me-1" style="color:#7c3aed"></i>PDF individuels (ZIP)</label>
             </div>
           </div>
         </div>
@@ -1420,10 +1424,14 @@ window.doExport = function() {
         return;
     }
     var url;
+    var isZip = format === 'zip';
+    var script = isZip ? 'export_zip.php' : 'export.php';
     if (exportVue === 'semaine') {
-        url = 'export.php?type=week&semaine=' + exportSemaine + '&annee=' + currentAnnee + '&format=' + format;
+        url = script + '?type=week&semaine=' + exportSemaine + '&annee=' + currentAnnee;
+        if (!isZip) url += '&format=' + format;
     } else {
-        url = 'export.php?version_id=' + exportVersionId + '&format=' + format;
+        url = script + '?version_id=' + exportVersionId;
+        if (!isZip) url += '&format=' + format;
     }
     if (agentIds)  url += '&agent_ids='   + encodeURIComponent(agentIds);
     if (dateDebut) url += '&date_debut='  + encodeURIComponent(dateDebut);
