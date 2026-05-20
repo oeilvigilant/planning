@@ -682,11 +682,11 @@ if ($vue === 'semaine') {
               ?>
               <?php if ($shift): ?>
               <div style="font-size:1.05rem;font-weight:900;color:<?= $shift['color'] ?>;line-height:1.1;padding-top:1px"><?= $shift['code'] ?></div>
-              <div style="font-size:0.52rem;color:<?= $shift['color'] ?>;opacity:0.85;font-weight:600;line-height:1.2"><?= $hDeb ?>→<?= $hFin2 ?></div>
+              <div style="font-size:0.52rem;color:<?= $shift['color'] ?>;opacity:0.85;font-weight:600;line-height:1.2"><?= formatHeureCourte($hDeb) ?> - <?= formatHeureCourte($hFin2) ?></div>
               <div style="font-size:0.52rem;color:#6b7280;opacity:0.85"><?= number_format($totH,0) ?>h</div>
               <?php else: ?>
               <?php $hasN = ($ligne['min_nuit']+$ligne['min_ferie_nuit']) > 0; ?>
-              <div style="font-size:0.6rem;font-weight:700;color:var(--ov-navy);line-height:1.2"><?= substr($hDeb,0,5) ?>→<?= substr($hFin2,0,5) ?><?= $ligne['depasse_minuit']?'<sup>+</sup>':'' ?></div>
+              <div style="font-size:0.6rem;font-weight:700;color:var(--ov-navy);line-height:1.2"><?= formatHeureCourte($hDeb) ?> - <?= formatHeureCourte($hFin2) ?></div>
               <div style="font-size:0.58rem;color:#16a34a;font-weight:600"><?= number_format($totH,1) ?>h<?= $hasN?'<i class="fa fa-moon" style="font-size:0.45rem;margin-left:1px;color:#4f46e5"></i>':'' ?></div>
               <?php endif; ?>
               <?php else: ?>
