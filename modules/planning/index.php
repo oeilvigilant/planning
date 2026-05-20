@@ -460,10 +460,10 @@ if ($vue === 'semaine') {
               ?>
               <?php if ($shift): ?>
               <div style="font-size:1.3rem;font-weight:900;color:<?= $shift['color'] ?>;line-height:1.1"><?= $shift['code'] ?></div>
-              <div style="font-size:0.65rem;color:<?= $shift['color'] ?>;opacity:0.8;font-weight:600"><?= $hDeb ?>–<?= $hFin2 ?></div>
+              <div style="font-size:0.65rem;color:<?= $shift['color'] ?>;opacity:0.8;font-weight:600"><?= formatHeureCourte($hDeb) ?> - <?= formatHeureCourte($hFin2) ?></div>
               <div style="font-size:0.7rem;color:#6b7280;font-weight:600"><?= number_format($totH, 1) ?>h</div>
               <?php else: ?>
-              <div style="font-size:0.82rem;font-weight:700;color:var(--ov-navy);line-height:1.2"><?= $hDeb ?>→<?= $hFin2 ?><?= $ligne['depasse_minuit']?'<sup style="color:#dc2626">+1</sup>':'' ?></div>
+              <div style="font-size:0.82rem;font-weight:700;color:var(--ov-navy);line-height:1.2"><?= formatHeureCourte($hDeb) ?> - <?= formatHeureCourte($hFin2) ?></div>
               <div style="font-size:0.75rem;font-weight:600;color:#16a34a"><?= number_format($totH, 1) ?>h</div>
               <?php endif; ?>
               <?php if ($ligne['note']): ?><div style="font-size:0.6rem;color:#9ca3af;margin-top:1px;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px"><?= h($ligne['note']) ?></div><?php endif; ?>

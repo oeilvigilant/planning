@@ -137,7 +137,7 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
             <div class="mb-1 p-1 rounded" style="background:rgba(0,0,0,0.04)">
                 <div style="font-size:0.68rem;font-weight:600;color:var(--ov-navy);line-height:1.2"><?= h($ag['prenom'].' '.strtoupper($ag['nom'])) ?></div>
                 <div style="font-size:0.62rem;color:#6b7280">
-                    <?= $hDeb ?>→<?= $hFin ?><?= $l['depasse_minuit']?'<sup>+1</sup>':'' ?>
+                    <?= formatHeureCourte($hDeb) ?> - <?= formatHeureCourte($hFin) ?>
                     &nbsp;·&nbsp; <?= number_format($totMin/60, 1) ?>h
                     <?php if ($hasNuit): ?><i class="fa fa-moon" style="color:#4f46e5;font-size:0.55rem"></i><?php endif; ?>
                 </div>

@@ -171,7 +171,7 @@ if ($format === 'excel') {
                     $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                     $dur  = round($minT/60).'h';
                     $code = detectShiftExport($hD, $hF, $shifts);
-                    $row[] = ($code ? $code.' ' : '').$hD.'→'.$hF.($ligne['depasse_minuit']?'+1':'').' '.$dur;
+                    $row[] = ($code ? $code.' ' : '').formatHeureCourte($hD).' - '.formatHeureCourte($hF).' '.$dur;
                     foreach (['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
                         $totMin[$t] += (int)$ligne['min_'.$t];
                     }
@@ -189,7 +189,7 @@ if ($format === 'excel') {
                     $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                     $dur  = round($minT/60).'h';
                     $code = detectShiftExport($hD, $hF, $shifts);
-                    $row[] = ($code ? $code.' ' : '').$hD.'→'.$hF.($ligne['depasse_minuit']?'+1':'').' '.$dur;
+                    $row[] = ($code ? $code.' ' : '').formatHeureCourte($hD).' - '.formatHeureCourte($hF).' '.$dur;
                     foreach (['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
                         $totMin[$t] += (int)$ligne['min_'.$t];
                     }
@@ -293,11 +293,12 @@ foreach ($agents as $ag) {
                 $code  = detectShiftExport($hDeb, $hFin, $shifts);
                 $color = $code ? $shifts[$code]['color'] : '#374151';
                 $dur   = round($minT/60).'h';
-                $hFin2 = $hFin.($ligne['depasse_minuit']?'<sup>+1</sup>':'');
+                $hDebFmt = formatHeureCourte($hDeb);
+                $hFinFmt = formatHeureCourte($hFin);
                 $row .= '<td class="'.$cls.'">'
                     .'<span class="shift-code" style="color:'.$color.'">'
-                    .($code ? $code : $hDeb.'→'.$hFin2).'</span>';
-                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDeb.'→'.$hFin2.'</span>';
+                    .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
+                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
                 $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
@@ -319,11 +320,12 @@ foreach ($agents as $ag) {
                 $code  = detectShiftExport($hDeb, $hFin, $shifts);
                 $color = $code ? $shifts[$code]['color'] : '#374151';
                 $dur   = round($minT/60).'h';
-                $hFin2 = $hFin.($ligne['depasse_minuit']?'<sup>+1</sup>':'');
+                $hDebFmt = formatHeureCourte($hDeb);
+                $hFinFmt = formatHeureCourte($hFin);
                 $row .= '<td class="'.$cls.'">'
                     .'<span class="shift-code" style="color:'.$color.'">'
-                    .($code ? $code : $hDeb.'→'.$hFin2).'</span>';
-                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDeb.'→'.$hFin2.'</span>';
+                    .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
+                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
                 $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';

@@ -411,6 +411,13 @@ function h($v): string {
     return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
 }
 
+function formatHeureCourte(string $h): string {
+    $parts = explode(':', $h);
+    $heure = (int)($parts[0] ?? 0);
+    $min   = (int)($parts[1] ?? 0);
+    return sprintf('%02d', $heure) . 'h' . ($min !== 0 ? sprintf('%02d', $min) : '');
+}
+
 function formatDate(?string $date): string {
     if (!$date) return '—';
     return date('d/m/Y', strtotime($date));
