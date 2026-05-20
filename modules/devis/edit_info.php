@@ -29,8 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $clientAdr  = trim($_POST['client_adresse'] ?? '');
         $description= trim($_POST['description'] ?? '');
         $tvaTaux    = (float)($_POST['tva_taux'] ?? 20);
-        $remiseType = in_array($_POST['remise_type'] ?? '', ['pct','val']) ? $_POST['remise_type'] : null;
-        $remiseVal  = max(0, (float)($_POST['remise_valeur'] ?? 0));
         $statut     = $_POST['statut'] ?? 'brouillon';
 
         if (empty($numero)) $errors[] = 'Le numéro est obligatoire.';
@@ -44,11 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare("
                 UPDATE devis SET
                     client_id=?, numero=?, client_nom=?, client_adresse=?,
-                    description=?, tva_taux=?, remise_type=?, remise_valeur=?, statut=?
+                    description=?, tva_taux=?, statut=?
                 WHERE id=?
             ")->execute([
                 $clientId, $numero, $clientNom, $clientAdr,
-                $description, $tvaTaux, $remiseType, $remiseVal,
+                $description, $tvaTaux,
                 in_array($statut, ['brouillon','envoye','accepte','refuse']) ? $statut : 'brouillon',
                 $id,
             ]);
