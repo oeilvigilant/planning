@@ -74,8 +74,10 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111;
 .annexe-header .sous { font-size: 8.5pt; color: #666; }
 .annexe-body { font-size: 9pt; line-height: 1.6; }
 .annexe-body p { margin: 8px 0; }
-.check-row { margin: 6px 0 6px 10px; display: flex; align-items: flex-start; gap: 8px; font-size: 9pt; }
-.check-box { font-size: 12pt; line-height: 1; flex-shrink: 0; }
+.check-row { margin: 8px 0 8px 10px; display: table; width: 100%; font-size: 9pt; }
+.check-box { display: table-cell; width: 16px; vertical-align: top; padding-top: 1px; }
+.check-box-inner { display: inline-block; width: 11px; height: 11px; border: 1.5px solid #333; background: #fff; }
+.check-label { display: table-cell; padding-left: 6px; vertical-align: top; }
 .annexe-sig { margin-top: 28px; }
 .annexe-sig .lieu { font-size: 9pt; margin-bottom: 30px; }
 .annexe-sig .sig-line { border-top: 1px solid #333; padding-top: 4px; font-size: 8pt; color: #666; width: 50%; }
@@ -342,8 +344,8 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
     <p>demande expressément et formellement à la société <strong>OEIL VIGILANT</strong> de déroger à la durée minimale légale de travail de <strong>24 heures par semaine</strong> (Article L3123-7 du Code du travail).</p>
     <p><strong>Cette demande est justifiée par la raison suivante :</strong></p>
     <div class="check-row">
-      <span class="check-box">&#9744;</span>
-      <span>Me permettre de faire face à des contraintes personnelles ou de cumuler plusieurs activités afin d'atteindre une durée globale de travail correspondant à un temps plein ou au moins égale à 24 heures par semaine.</span>
+      <span class="check-box"><span class="check-box-inner"></span></span>
+      <span class="check-label">Me permettre de faire face à des contraintes personnelles ou de cumuler plusieurs activités afin d'atteindre une durée globale de travail correspondant à un temps plein ou au moins égale à 24 heures par semaine.</span>
     </div>
     <p>J'ai bien noté que mes horaires de travail seront regroupés sur des journées ou des demi-journées régulières ou complètes.</p>
     <div class="annexe-sig">
@@ -366,12 +368,12 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
     <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, déclare sur l'honneur être informé(e) que la réglementation m'interdit de dépasser la durée maximale de travail autorisée, tous emplois confondus (10h/jour, 48h/semaine, 44h en moyenne sur 12 semaines).</p>
     <p><strong>À ce jour, je déclare :</strong></p>
     <div class="check-row">
-      <span class="check-box">&#9744;</span>
-      <span>N'exercer aucune autre activité professionnelle rémunérée.</span>
+      <span class="check-box"><span class="check-box-inner"></span></span>
+      <span class="check-label">N'exercer aucune autre activité professionnelle rémunérée.</span>
     </div>
     <div class="check-row">
-      <span class="check-box">&#9744;</span>
-      <span>Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et ailleurs ne dépasse jamais les limites légales.</span>
+      <span class="check-box"><span class="check-box-inner"></span></span>
+      <span class="check-label">Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et ailleurs ne dépasse jamais les limites légales.</span>
     </div>
     <div class="annexe-sig">
       <div class="lieu">Fait à Paris, le <?= $e($d['date_signature']) ?></div>
@@ -392,12 +394,12 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
   <div class="annexe-body">
     <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demande à être dispensé(e) d'affiliation au régime de garantie « Frais de Santé » obligatoire mis en place par <strong>OEIL VIGILANT</strong>, pour le motif suivant :</p>
     <div class="check-row">
-      <span class="check-box">&#9744;</span>
-      <span>Je suis titulaire d'un CDD très court et je justifie d'une couverture santé solidaire (CSS) ou d'un contrat individuel.</span>
+      <span class="check-box"><span class="check-box-inner"></span></span>
+      <span class="check-label">Je suis titulaire d'un CDD très court et je justifie d'une couverture santé solidaire (CSS) ou d'un contrat individuel.</span>
     </div>
     <div class="check-row">
-      <span class="check-box">&#9744;</span>
-      <span>Je bénéficie déjà d'une couverture collective et obligatoire par ailleurs (ex : autre employeur).</span>
+      <span class="check-box"><span class="check-box-inner"></span></span>
+      <span class="check-label">Je bénéficie déjà d'une couverture collective et obligatoire par ailleurs (ex : autre employeur).</span>
     </div>
     <p>Je m'engage à fournir les justificatifs correspondants et note qu'en refusant l'adhésion, je ne pourrai pas prétendre aux remboursements de frais de santé par l'entreprise.</p>
     <div class="annexe-sig">
