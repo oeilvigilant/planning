@@ -36,7 +36,11 @@ $defaults = [
                           ? "Accroissement temporaire d'activité"
                           : ($a['motif_embauche'] ?? "Accroissement temporaire d'activité"),
     'description_motif'=> "Ce contrat est conclu pour faire face à un accroissement temporaire d'activité lié à une demande urgente et imprévisible.",
-    'periode_essai'    => $a['periode_essai'] ?? '7 jours travaillés',
+    'periode_essai'    => calculerPeriodeEssai(
+                              $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
+                              $a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : ''
+                          ),
+    'total_heures_contrat' => '',
     'site_affectation' => $a['lieu_travail'] ?? '',
     'salaire_horaire'  => $a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70',
     'type_remuneration'=> $a['type_remuneration'] ?? 'Brute',
@@ -141,19 +145,26 @@ require_once __DIR__ . '/../../includes/header.php';
           </div>
           <div class="col-6">
             <label class="form-label">Date de début</label>
-            <input type="text" name="date_debut" class="form-control form-control-sm" value="<?= h($data['date_debut']) ?>" placeholder="dd/mm/yyyy" oninput="updatePreview()">
+            <input type="text" name="date_debut" id="dateDebut" class="form-control form-control-sm" value="<?= h($data['date_debut']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); updatePreview()">
           </div>
           <div class="col-6">
             <label class="form-label">Date de fin <small class="text-muted">(CDD)</small></label>
-            <input type="text" name="date_fin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="updatePreview()">
+            <input type="text" name="date_fin" id="dateFin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); updatePreview()">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Total heures contrat <small class="text-muted">(calculé planning)</small></label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="total_heures_contrat" class="form-control" step="0.5" min="0" value="<?= h($data['total_heures_contrat'] ?? '') ?>" placeholder="ex: 36" oninput="updatePreview()">
+              <span class="input-group-text">h</span>
+            </div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Période d'essai <small class="text-muted">(auto-calculée)</small></label>
+            <input type="text" name="periode_essai" id="periodeEssai" class="form-control form-control-sm" value="<?= h($data['periode_essai']) ?>" oninput="updatePreview()" readonly style="background:#f8f9fa;color:#6b7280">
           </div>
           <div class="col-6">
             <label class="form-label">Motif CDD</label>
             <input type="text" name="motif_cdd" class="form-control form-control-sm" value="<?= h($data['motif_cdd']) ?>" oninput="updatePreview()">
-          </div>
-          <div class="col-6">
-            <label class="form-label">Période d'essai</label>
-            <input type="text" name="periode_essai" class="form-control form-control-sm" value="<?= h($data['periode_essai']) ?>" oninput="updatePreview()">
           </div>
           <div class="col-12">
             <label class="form-label">Description du motif</label>
@@ -253,6 +264,27 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <script>
+function parseDate(s) {
+    if (!s) return null;
+    var p = s.split('/');
+    if (p.length === 3) return new Date(+p[2], +p[1]-1, +p[0]);
+    return null;
+}
+
+function calcPeriodeEssai() {
+    var debut = document.getElementById('dateDebut').value;
+    var fin   = document.getElementById('dateFin').value;
+    var el    = document.getElementById('periodeEssai');
+    if (!debut || !fin) { el.value = '0 jour'; return; }
+    var d1 = parseDate(debut), d2 = parseDate(fin);
+    if (!d1 || !d2 || d2 <= d1) { el.value = '0 jour'; return; }
+    var diffDays  = Math.round((d2 - d1) / 86400000);
+    var nbSem     = Math.floor(diffDays / 7);
+    if (nbSem === 0) { el.value = '0 jour'; }
+    else if (nbSem === 1) { el.value = '1 jour travaillé'; }
+    else { el.value = nbSem + ' jours travaillés'; }
+}
+
 function getFormData() {
     const form = document.getElementById('contratForm');
     const fd = new FormData(form);
