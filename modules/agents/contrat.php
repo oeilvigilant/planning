@@ -10,6 +10,31 @@ $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: index.php'); exit; }
 
+// ── AJAX : calcul total heures depuis le planning ─────────────────────────────
+if (($_GET['action'] ?? '') === 'get_heures_planning') {
+    header('Content-Type: application/json');
+    $agentId   = (int)($_GET['agent_id']   ?? $id);
+    $dateDebut = $_GET['date_debut'] ?? '';
+    $dateFin   = $_GET['date_fin']   ?? '';
+    $dD = $dateDebut ? DateTime::createFromFormat('d/m/Y', $dateDebut) : null;
+    $dF = $dateFin   ? DateTime::createFromFormat('d/m/Y', $dateFin)   : null;
+    $totalH = 0;
+    if ($agentId && $dD && $dF && $dF >= $dD) {
+        $stmt = $db->prepare("
+            SELECT COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche
+                              + pl.min_ferie_normal + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS total_min
+            FROM planning_lignes pl
+            JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+            WHERE pl.agent_id = ? AND pl.date_travail BETWEEN ? AND ?
+        ");
+        $stmt->execute([$agentId, $dD->format('Y-m-d'), $dF->format('Y-m-d')]);
+        $totalMin = (int)($stmt->fetch()['total_min'] ?? 0);
+        $totalH   = $totalMin > 0 ? round($totalMin / 60, 2) : 0;
+    }
+    echo json_encode(['ok' => true, 'total_heures' => $totalH]);
+    exit;
+}
+
 $stmt = $db->prepare("SELECT * FROM agents WHERE id = ?");
 $stmt->execute([$id]);
 $a = $stmt->fetch();
@@ -145,11 +170,11 @@ require_once __DIR__ . '/../../includes/header.php';
           </div>
           <div class="col-6">
             <label class="form-label">Date de début</label>
-            <input type="text" name="date_debut" id="dateDebut" class="form-control form-control-sm" value="<?= h($data['date_debut']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); updatePreview()">
+            <input type="text" name="date_debut" id="dateDebut" class="form-control form-control-sm" value="<?= h($data['date_debut']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); calcHeuresPlanning(); updatePreview()">
           </div>
           <div class="col-6">
             <label class="form-label">Date de fin <small class="text-muted">(CDD)</small></label>
-            <input type="text" name="date_fin" id="dateFin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); updatePreview()">
+            <input type="text" name="date_fin" id="dateFin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); calcHeuresPlanning(); updatePreview()">
           </div>
           <div class="col-6">
             <label class="form-label">Total heures contrat <small class="text-muted">(calculé planning)</small></label>
@@ -278,11 +303,33 @@ function calcPeriodeEssai() {
     if (!debut || !fin) { el.value = '0 jour'; return; }
     var d1 = parseDate(debut), d2 = parseDate(fin);
     if (!d1 || !d2 || d2 <= d1) { el.value = '0 jour'; return; }
-    var diffDays  = Math.round((d2 - d1) / 86400000);
-    var nbSem     = Math.floor(diffDays / 7);
+    var diffDays = Math.round((d2 - d1) / 86400000);
+    var nbSem    = Math.floor(diffDays / 7);
     if (nbSem === 0) { el.value = '0 jour'; }
     else if (nbSem === 1) { el.value = '1 jour travaillé'; }
     else { el.value = nbSem + ' jours travaillés'; }
+}
+
+var _heuresFetchTimer = null;
+function calcHeuresPlanning() {
+    var debut = document.getElementById('dateDebut').value;
+    var fin   = document.getElementById('dateFin').value;
+    if (!debut || !fin) return;
+    clearTimeout(_heuresFetchTimer);
+    _heuresFetchTimer = setTimeout(function() {
+        var url = 'contrat.php?id=<?= $id ?>&action=get_heures_planning&agent_id=<?= $id ?>'
+                + '&date_debut=' + encodeURIComponent(debut)
+                + '&date_fin='   + encodeURIComponent(fin);
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok && data.total_heures > 0) {
+                    document.querySelector('[name="total_heures_contrat"]').value = data.total_heures;
+                    updatePreview();
+                }
+            })
+            .catch(function() {});
+    }, 400);
 }
 
 function getFormData() {
@@ -309,7 +356,13 @@ function exportPdf() {
     document.getElementById('contratForm').submit();
 }
 
-document.addEventListener('DOMContentLoaded', updatePreview);
+document.addEventListener('DOMContentLoaded', function() {
+    updatePreview();
+    // Auto-remplir les heures si les dates sont déjà pré-remplies
+    if (document.getElementById('dateDebut').value && document.getElementById('dateFin').value) {
+        calcHeuresPlanning();
+    }
+});
 </script>
 
 <style>

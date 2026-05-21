@@ -252,8 +252,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 // ── Données communes ──────────────────────────────────────────────────────────
 $hiddenAgents = $_SESSION['planning_hidden'] ?? [];
-$allAgents    = $db->query("SELECT id, nom, prenom, matricule, poste FROM agents WHERE actif=1 ORDER BY nom, prenom")->fetchAll();
-$agents       = array_values(array_filter($allAgents, fn($ag) => !in_array($ag['id'], $hiddenAgents)));
+
+// Agents actifs + agents inactifs ayant encore des lignes dans une version courante
+$allAgents = $db->query("
+    SELECT a.id, a.nom, a.prenom, a.matricule, a.poste
+    FROM agents a
+    WHERE a.actif = 1
+    UNION
+    SELECT a.id, a.nom, a.prenom, a.matricule, a.poste
+    FROM agents a
+    INNER JOIN planning_lignes pl ON pl.agent_id = a.id
+    INNER JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+    WHERE a.actif = 0
+    ORDER BY nom, prenom
+")->fetchAll();
+
+$agents = array_values(array_filter($allAgents, fn($ag) => !in_array($ag['id'], $hiddenAgents)));
 
 $versionsMap = [];
 foreach ($db->query("SELECT id,mois,annee FROM planning_versions WHERE is_current=1 ORDER BY annee DESC, mois DESC LIMIT 24")->fetchAll() as $v) {
