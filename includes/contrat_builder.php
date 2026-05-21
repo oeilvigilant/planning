@@ -3,8 +3,6 @@ if (!defined('APP_ROOT')) exit;
 
 /**
  * Calcule la période d'essai CDD : 1 jour par semaine complète de contrat.
- * - Moins de 7 jours : 0 jour
- * - 1 semaine = 1 jour travaillé, 2 semaines = 2 jours, etc.
  */
 function calculerPeriodeEssai(string $dateDebut, string $dateFin): string {
     if (!$dateDebut || !$dateFin) return '0 jour';
@@ -22,25 +20,8 @@ function calculerPeriodeEssai(string $dateDebut, string $dateFin): string {
     return $nbSemaines . ' jour' . ($nbSemaines > 1 ? 's' : '') . ' travaillé' . ($nbSemaines > 1 ? 's' : '');
 }
 
-function buildContratHtml(array $d, array $p, array $a): string {
-    $logoB64 = '';
-    $logoFile = APP_ROOT . '/assets/img/' . ($p['logo_principal'] ?? 'logo.png');
-    if (file_exists($logoFile)) {
-        $ext  = strtolower(pathinfo($logoFile, PATHINFO_EXTENSION));
-        $mime = ($ext === 'jpg' || $ext === 'jpeg') ? 'image/jpeg' : 'image/png';
-        $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
-    }
-
-    $e        = fn($v) => htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8');
-    $typeCdd  = in_array($d['type_contrat'] ?? 'CDD', ['CDD','CDD Usage','Saisonnier']);
-    $totalH   = trim($d['total_heures_contrat'] ?? '');
-    $calcEssai = calculerPeriodeEssai($d['date_debut'] ?? '', $d['date_fin'] ?? '');
-
-    ob_start(); ?>
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
+function _contratCss(string $marginBottom = '0'): string {
+    return '
 <style>
 * { box-sizing: border-box; }
 body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111; margin: 0; padding: 0; line-height: 1.5; }
@@ -52,21 +33,19 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111;
 .header .infos { font-size: 7.5pt; color: #666; }
 .entre { margin: 16px 0; padding: 12px; background: #f8f9fa; border-left: 3px solid #c9a84c; border-radius: 0 4px 4px 0; font-size: 9pt; }
 .entre strong { color: #1a2332; }
-.partie { margin: 10px 0; }
-.partie .label { font-weight: bold; }
 .art { margin: 14px 0; }
 .art-title { font-size: 10pt; font-weight: bold; color: #1a2332; background: #f0f2f5; padding: 5px 10px; border-left: 4px solid #c9a84c; margin-bottom: 6px; }
 .art-body { padding: 0 10px; font-size: 9pt; }
 .art-body ul { margin: 4px 0; padding-left: 18px; }
 .art-body ul li { margin-bottom: 2px; }
 .blank { display: inline-block; min-width: 80px; border-bottom: 1px solid #333; }
-.blank-long { display: inline-block; min-width: 200px; border-bottom: 1px solid #333; }
 .signatures { margin-top: 25px; display: flex; justify-content: space-between; gap: 30px; }
 .sig-block { flex: 1; text-align: center; }
 .sig-block .sig-title { font-weight: bold; font-size: 9pt; margin-bottom: 5px; }
 .sig-block .sig-line { border-top: 1px solid #333; margin-top: 50px; padding-top: 4px; font-size: 8pt; color: #666; }
 .footer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 6px; font-size: 7pt; color: #999; text-align: center; }
 .highlight { background: rgba(201,168,76,0.1); padding: 1px 3px; border-radius: 3px; }
+.legal-note { font-size: 7.5pt; color: #666; font-style: italic; margin: 2px 0; }
 /* Annexes */
 .annexe-page { page-break-before: always; padding: 15mm 18mm; max-width: 210mm; margin: 0 auto; }
 .annexe-header { text-align: center; border-bottom: 2px solid #c9a84c; padding-bottom: 10px; margin-bottom: 18px; }
@@ -81,17 +60,38 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111;
 .annexe-sig { margin-top: 28px; }
 .annexe-sig .lieu { font-size: 9pt; margin-bottom: 30px; }
 .annexe-sig .sig-line { border-top: 1px solid #333; padding-top: 4px; font-size: 8pt; color: #666; width: 50%; }
-</style>
+</style>';
+}
+
+function buildContratHtml(array $d, array $p, array $a): string {
+    $logoB64 = '';
+    $logoFile = APP_ROOT . '/assets/img/' . ($p['logo_principal'] ?? 'logo.png');
+    if (file_exists($logoFile)) {
+        $ext     = strtolower(pathinfo($logoFile, PATHINFO_EXTENSION));
+        $mime    = ($ext === 'jpg' || $ext === 'jpeg') ? 'image/jpeg' : 'image/png';
+        $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
+    }
+
+    $e          = fn($v) => htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8');
+    $typeCdd    = in_array($d['type_contrat'] ?? 'CDD', ['CDD','CDD Usage','Saisonnier']);
+    $isCddUsage = ($d['type_contrat'] ?? 'CDD') === 'CDD Usage';
+    $totalH     = trim($d['total_heures_contrat'] ?? '');
+    $calcEssai  = calculerPeriodeEssai($d['date_debut'] ?? '', $d['date_fin'] ?? '');
+
+    ob_start(); ?>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<?= _contratCss() ?>
 </head>
 <body>
 <div class="page">
 
 <!-- En-tête -->
 <div class="header">
-  <?php if ($logoB64): ?>
-  <img src="<?= $logoB64 ?>"><br>
-  <?php endif; ?>
-  <h1>Contrat de Travail à Durée <?= $typeCdd ? 'Déterminée' : 'Indéterminée' ?></h1>
+  <?php if ($logoB64): ?><img src="<?= $logoB64 ?>"><br><?php endif; ?>
+  <h1>Contrat de Travail à Durée <?= $typeCdd ? 'Déterminée' : 'Indéterminée' ?><?= $isCddUsage ? ' d\'Usage' : '' ?></h1>
   <div class="sous-titre"><?= $e($d['poste']) ?></div>
   <div class="infos">
     <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — SIRET <?= $e($p['entreprise_siret'] ?? '92855270200013') ?><br>
@@ -110,7 +110,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111;
   Ci-après dénommée <em>« l'Employeur »</em>,<br><br>
 
   <strong>ET :</strong><br>
-  <strong><?= $e($d['civilite']) ?> : <?= $e($d['nom_prenom']) ?></strong>,
+  <strong><?= $e($d['civilite']) ?> <?= $e($d['nom_prenom']) ?></strong>,
   demeurant à : <?= $e($d['adresse']) ?>,<br>
   Né(e) le : <strong><?= $e($d['date_naissance']) ?></strong> à <strong><?= $e($d['lieu_naissance']) ?></strong>,<br>
   de nationalité : <strong><?= $e($d['nationalite']) ?></strong>,<br>
@@ -120,7 +120,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111;
 </div>
 
 <p style="font-size:8.5pt;color:#555;margin:8px 0">
-Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative à l'informatique, le salarié signataire dispose d'un droit d'accès et de rectification quant aux données enregistrées dans le fichier informatisé de l'organisme social.
+Conformément aux dispositions du Règlement Général sur la Protection des Données (RGPD) et de la loi n°78-17 du 6 janvier 1978 modifiée, le salarié signataire dispose d'un droit d'accès, de rectification et d'effacement des données le concernant.
 </p>
 <p style="text-align:center;font-weight:bold;font-size:9.5pt;margin:12px 0">Il a été convenu ce qui suit :</p>
 
@@ -130,12 +130,12 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
   <div class="art-body">
     Le salarié signataire est engagé sous contrat à durée <?= $typeCdd?'déterminée':'indéterminée' ?> en qualité
     de <strong><?= $e($d['poste']) ?></strong> qui relève de la catégorie « <?= $e($d['categorie']) ?> ».<br>
-    La déclaration nominative préalable à l'embauche a été remise à l'URSSAF d'Île-de-France auprès de laquelle la S.A.S <?= $e($p['entreprise_nom']??'OEIL VIGILANT') ?> est immatriculée.<br>
-    À la date de sa signature, le présent contrat est régi par les dispositions de la Convention Collective Nationale <em>« Des entreprises de prévention et de sécurité du 15 février 1985 »</em> (IDCC n°1351).
+    La déclaration préalable à l'embauche (DPAE) a été transmise à l'URSSAF d'Île-de-France avant la prise de poste effective, conformément à l'article L1221-10 du Code du travail.<br>
+    À la date de sa signature, le présent contrat est régi par les dispositions de la Convention Collective Nationale <em>« Des entreprises de prévention et de sécurité du 15 février 1985 »</em> (IDCC n°1351), ainsi que par l'ensemble des dispositions législatives et réglementaires en vigueur.
   </div>
 </div>
 
-<!-- Article 2 — Durée et période d'essai (dynamique) -->
+<!-- Article 2 — Durée et terme -->
 <div class="art">
   <div class="art-title">ARTICLE N° 02 — Objet du contrat — Durée et terme</div>
   <div class="art-body">
@@ -145,20 +145,25 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
     <?php if ($totalH): ?>
     pour une durée de travail globale de <strong class="highlight"><?= $e($totalH) ?> heures</strong> pour l'ensemble de la période, réparties selon le planning.
     <?php else: ?>
-    .<br>
+    .
     <?php endif; ?>
-    <br>
-    Ce contrat est conclu pour faire face à un <strong><?= $e($d['motif_cdd']) ?></strong>.
-    <?= $e($d['description_motif']) ?><br><br>
-    Il ne deviendra définitif qu'à l'issue d'une période d'essai de <strong><?= $e($calcEssai) ?></strong>, durant laquelle chacune des parties pourra y mettre fin sans préavis.<br>
-    <?php if (($d['non_renouvelable'] ?? '1') === '1'): ?>
-    Le présent contrat n'est pas renouvelable, sauf accord écrit des deux parties, dans la limite autorisée par la législation en vigueur.
+    <br><br>
+    <?php if ($isCddUsage): ?>
+    Il est conclu sur le fondement de l'article L1242-2-3° du Code du travail, le secteur de la sécurité privée étant expressément reconnu comme secteur d'emploi à caractère par nature temporaire par le décret n°2014-714 du 27 juin 2014. Le présent contrat n'est pas soumis à la durée maximale légale applicable aux CDD standard et peut être renouvelé sans limitation du nombre de renouvellements.
     <?php else: ?>
-    Le présent contrat pourra être renouvelé une fois par accord écrit des deux parties.
+    Ce contrat est conclu pour faire face à un <strong><?= $e($d['motif_cdd']) ?></strong>. <?= $e($d['description_motif']) ?><br>
+    Conformément à l'article L1243-13 du Code du travail, la durée totale du présent contrat, renouvellements éventuels inclus, ne peut excéder <strong>18 mois</strong>.
+    <?php endif; ?>
+    <br><br>
+    Il ne deviendra définitif qu'à l'issue d'une période d'essai de <strong><?= $e($calcEssai) ?></strong>, durant laquelle chacune des parties pourra y mettre fin sans préavis ni indemnité (Art L1243-11 CT).<br>
+    <?php if (($d['non_renouvelable'] ?? '1') === '1' && !$isCddUsage): ?>
+    Le présent contrat n'est pas renouvelable.
+    <?php elseif (!$isCddUsage): ?>
+    Le présent contrat pourra être renouvelé une fois, dans la limite de la durée maximale légale, par accord écrit signé avant le terme initial.
     <?php endif; ?>
     <?php else: ?>
     Le présent contrat est conclu à durée indéterminée à compter du <strong><?= $e($d['date_debut']) ?></strong>.<br>
-    Il ne deviendra définitif qu'à l'issue d'une période d'essai de <strong><?= $e($calcEssai) ?></strong>.
+    Il ne deviendra définitif qu'à l'issue d'une période d'essai de <strong><?= $e($calcEssai) ?></strong>, renouvelable une fois avec l'accord du salarié.
     <?php endif; ?>
   </div>
 </div>
@@ -177,12 +182,12 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
       <li>Gérer l'utilisation des équipements de surveillance et d'alarme</li>
     </ul>
     Le salarié sera affecté sur le site : <strong><?= $e($d['site_affectation']) ?></strong>, mais reste rattaché à l'établissement situé <?= $e($p['entreprise_adresse']??'58 RUE DE MONCEAU') ?> à <?= $e($p['entreprise_ville']??'PARIS') ?>.<br><br>
-    <strong>Usage du téléphone portable :</strong> Sauf circonstances exceptionnelles revêtant un caractère d'urgence, l'usage du téléphone portable personnel pendant les heures de travail est formellement interdit compte tenu de la nature des missions.<br><br>
-    <strong>Stupéfiants et alcool :</strong> Compte tenu des fonctions exercées, il est formellement interdit d'introduire ou de consommer toute boisson alcoolisée ou tout stupéfiant dans le cadre des fonctions exercées.
+    <strong>Usage du téléphone portable :</strong> Sauf circonstances exceptionnelles d'urgence, l'usage du téléphone personnel pendant les heures de travail est interdit au regard des impératifs de sécurité des missions.<br><br>
+    <strong>Stupéfiants et alcool :</strong> Il est formellement interdit d'introduire ou de consommer toute boisson alcoolisée ou tout stupéfiant dans le cadre des fonctions. Tout manquement pourra entraîner une sanction disciplinaire pouvant aller jusqu'au licenciement pour faute grave.
   </div>
 </div>
 
-<!-- Article 4 — Horaires et heures complémentaires (mis à jour) -->
+<!-- Article 4 — Horaires -->
 <div class="art">
   <div class="art-title">ARTICLE N° 04 — Horaires de travail</div>
   <div class="art-body">
@@ -190,24 +195,24 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
     La durée globale de travail est fixée à <strong class="highlight"><?= $e($totalH) ?> heures</strong> pour la durée du contrat.
     <?php endif; ?>
     Les horaires de travail seront définis selon le planning communiqué au salarié. Le salarié s'engage à respecter scrupuleusement les vacations prévues.<br><br>
-    En fonction des nécessités du service, le salarié pourra être amené à effectuer des heures complémentaires. Le volume total de ces heures complémentaires ne pourra en aucun cas excéder le <strong>tiers (1/3)</strong> de la durée globale fixée au présent contrat.<br><br>
+    En fonction des nécessités du service, le salarié pourra être amené à effectuer des heures complémentaires. Le volume total de ces heures complémentaires ne pourra en aucun cas excéder le <strong>tiers (1/3)</strong> de la durée globale fixée au présent contrat (Art L3123-28 CT).<br><br>
     L'Employeur s'engage à respecter un délai de prévenance de <strong>7 jours</strong> pour toute modification du planning. En cas de circonstances exceptionnelles (remplacement d'un salarié défaillant, urgence client), ce délai pourra être réduit à moins de 3 jours ouvrés, en contrepartie d'un <strong>repos compensateur équivalent à 10%</strong> des heures effectuées sur la vacation modifiée.<br><br>
     L'amplitude horaire sur laquelle le salarié est susceptible de travailler est comprise entre 00h00 et 23h59.<br><br>
     En dehors des vacations fixées par le planning qui lui est communiqué, le salarié n'est pas tenu de se tenir à la disposition permanente de l'employeur et peut vaquer librement à ses occupations personnelles.
   </div>
 </div>
 
-<!-- Article 5 -->
+<!-- Article 5 — Rémunération -->
 <div class="art">
   <div class="art-title">ARTICLE N° 05 — Rémunération</div>
   <div class="art-body">
     Le salarié signataire percevra un salaire <?= $e(strtolower($d['type_remuneration']??'brut')) ?> horaire de
-    <strong class="highlight"><?= $e($d['salaire_horaire']) ?> €</strong> par heure effective de travail.<br>
-    Une majoration concernant les heures de nuit de <strong><?= $e($d['majoration_nuit']) ?>%</strong>,
-    dimanche de <strong><?= $e($d['majoration_dim']) ?>%</strong>
-    et jours fériés de <strong><?= $e($d['majoration_ferie']) ?>%</strong>.<br>
-    <?php if ($typeCdd): ?>
-    Une prime de précarité de 10% du salaire brut sera versée en fin de contrat, conformément aux dispositions légales.
+    <strong class="highlight"><?= $e($d['salaire_horaire']) ?> €</strong> par heure effective de travail, supérieur au minimum conventionnel applicable au coefficient <?= $e(preg_match('/\d+/', $d['categorie']??'', $m) ? $m[0] : '140') ?> de la CCN n°1351.<br>
+    Majorations applicables : heures de nuit <strong><?= $e($d['majoration_nuit']) ?>%</strong>, dimanche <strong><?= $e($d['majoration_dim']) ?>%</strong>, jours fériés <strong><?= $e($d['majoration_ferie']) ?>%</strong>.<br>
+    <?php if ($typeCdd && !$isCddUsage): ?>
+    Conformément à l'article L1243-8 du Code du travail, une <strong>indemnité de fin de contrat (précarité) de 10%</strong> de la rémunération brute totale sera versée à l'échéance du contrat. Cette indemnité ne sera pas due en cas de requalification en CDI, de faute grave ou de force majeure (Art L1243-10 CT).
+    <?php elseif ($isCddUsage): ?>
+    <span class="legal-note">Le CDD d'Usage n'ouvre pas droit à l'indemnité de fin de contrat (Art L1243-10-3° CT — secteur de la sécurité privée).</span>
     <?php endif; ?>
   </div>
 </div>
@@ -215,97 +220,123 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
 <div class="art">
   <div class="art-title">ARTICLE N° 06 — Confidentialité</div>
   <div class="art-body">
-    Le salarié s'engage à observer la discrétion la plus stricte sur les informations se rapportant aux activités de la S.A.S <?= $e($p['entreprise_nom']??'OEIL VIGILANT') ?> auxquelles il aura accès dans le cadre de ses fonctions. Cette obligation s'applique pendant toute la durée du contrat et se prolonge après la rupture de celui-ci.
+    Le salarié s'engage à observer la discrétion la plus stricte sur les informations se rapportant aux activités de la S.A.S <?= $e($p['entreprise_nom']??'OEIL VIGILANT') ?>, à ses clients et à leurs installations, auxquelles il aura accès dans le cadre de ses fonctions. Cette obligation de confidentialité s'applique pendant toute la durée du contrat et se prolonge pendant une durée de 2 ans après sa rupture, quelle qu'en soit la cause.
   </div>
 </div>
 
 <div class="art">
   <div class="art-title">ARTICLE N° 07 — Port de l'uniforme et carte professionnelle</div>
   <div class="art-body">
-    Dans l'exercice de ses fonctions, le salarié devra : toujours être en possession de sa carte professionnelle, porter obligatoirement l'uniforme pendant toute la durée du service, et restituer l'uniforme et la carte professionnelle au terme du contrat.
+    Dans l'exercice de ses fonctions, le salarié devra : être en possession de sa carte professionnelle en cours de validité (Art L612-16 CSI), porter obligatoirement la tenue vestimentaire réglementaire pendant toute la durée du service, et restituer l'ensemble des équipements et la carte professionnelle à l'Employeur au terme du contrat, sous peine de retenue sur salaire dans les limites légales.
   </div>
 </div>
 
 <div class="art">
-  <div class="art-title">ARTICLE N° 08 — Absences</div>
+  <div class="art-title">ARTICLE N° 08 — Absences et arrêts de travail</div>
   <div class="art-body">
-    En cas d'absence, le salarié est tenu de prévenir immédiatement la S.A.S <?= $e($p['entreprise_nom']??'OEIL VIGILANT') ?> et devra transmettre dans un délai de 48 heures un justificatif. En cas d'arrêt maladie, un certificat médical devra être transmis dans les 48 heures.
+    En cas d'absence, le salarié est tenu de prévenir l'Employeur <strong>dès que possible et au plus tard dans l'heure</strong> suivant l'horaire de prise de poste prévu. Un justificatif devra être transmis dans un délai de <strong>48 heures</strong>. En cas d'arrêt maladie, le volet destiné à l'employeur du certificat médical devra être transmis dans les 48 heures.<br>
+    Tout abandon de poste non justifié dans le délai imparti pourra faire l'objet d'une procédure disciplinaire.
   </div>
 </div>
 
 <div class="art">
   <div class="art-title">ARTICLE N° 09 — Traitement des données personnelles (RGPD)</div>
   <div class="art-body">
-    Les données personnelles collectées sont strictement nécessaires à la gestion du contrat de travail. Elles sont traitées dans le respect du RGPD. Le salarié peut exercer ses droits (accès, rectification, opposition, effacement) auprès du référent RGPD.
+    Les données personnelles collectées sont traitées sur le fondement de l'exécution du contrat de travail (Art 6-1-b RGPD) et des obligations légales de l'Employeur (Art 6-1-c RGPD). Elles sont conservées pendant toute la durée du contrat et 5 ans après sa fin. Le salarié peut exercer ses droits (accès, rectification, portabilité, opposition, effacement, limitation) en contactant l'Employeur par écrit.
   </div>
 </div>
 
 <div class="art">
-  <div class="art-title">ARTICLE N° 10 — Dispositions diverses</div>
+  <div class="art-title">ARTICLE N° 10 — Droit à la déconnexion</div>
   <div class="art-body">
-    Le salarié s'engage à aviser la société de tout changement dans sa situation personnelle. Il sera inscrit au registre unique du personnel dès le jour de son embauche.
+    Conformément à l'article L2242-17 du Code du travail (Loi n°2016-1088 du 8 août 2016), le salarié bénéficie d'un <strong>droit à la déconnexion</strong> en dehors de ses heures de travail planifiées, les week-ends, jours fériés et pendant ses congés.<br>
+    Sauf situation d'urgence avérée et dûment justifiée par la nature des missions de sécurité, le salarié n'est pas tenu de répondre aux sollicitations professionnelles (appels, SMS, e-mails) en dehors de ses vacations. L'Employeur s'engage à ne pas exercer de pression pour que le salarié se connecte en dehors des plages planifiées.
   </div>
 </div>
 
 <div class="art">
-  <div class="art-title">ARTICLE N° 11 — Déclaration sur l'honneur</div>
+  <div class="art-title">ARTICLE N° 11 — Dispositions diverses</div>
   <div class="art-body">
-    Conformément aux dispositions des articles 6 et 18 de la loi 83-629 du 12 juillet 1983, le salarié signataire déclare sur l'honneur ne pas avoir fait l'objet d'une condamnation non amnistiée et n'être l'objet d'aucune poursuite pénale en cours.
+    Le salarié s'engage à aviser l'Employeur de tout changement dans sa situation personnelle susceptible d'avoir une incidence sur l'exécution du contrat (changement d'adresse, d'état civil, de situation vis-à-vis de la sécurité sociale, renouvellement de la carte professionnelle CNAPS). Il sera inscrit au registre unique du personnel dès le premier jour de travail effectif.
   </div>
 </div>
 
 <div class="art">
-  <div class="art-title">ARTICLE N° 12 — Acceptation des lettres recommandées électroniques</div>
+  <div class="art-title">ARTICLE N° 12 — Formation professionnelle</div>
   <div class="art-body">
-    Le Salarié accepte l'envoi par voie électronique des courriers recommandés de l'Entreprise relatifs à son Contrat.
+    Le salarié bénéficie des droits à la formation professionnelle attachés à son contrat de travail, notamment au titre du <strong>Compte Personnel de Formation (CPF)</strong> (Art L6323-1 CT). L'Employeur s'engage à assurer l'adaptation du salarié à son poste de travail et à veiller au maintien de sa capacité à occuper l'emploi.<br>
+    Les formations obligatoires liées à l'exercice de l'activité de sécurité privée (recyclage CNAPS, SST, etc.) sont à la charge de l'Employeur et se déroulent pendant le temps de travail.
   </div>
 </div>
 
 <div class="art">
-  <div class="art-title">ARTICLE N° 13 — Droit à l'image</div>
+  <div class="art-title">ARTICLE N° 13 — Déclaration sur l'honneur</div>
   <div class="art-body">
-    Le salarié accepte et donne son accord à la Société pour capter et diffuser son image dans un cadre professionnel, pour les supports de communication de l'entreprise.
+    Conformément aux articles L612-20 et L612-22 du Code de la Sécurité Intérieure (CSI), le salarié signataire déclare sur l'honneur :<br>
+    — ne pas avoir fait l'objet d'une condamnation pénale, d'une incapacité ou déchéance mentionnées à l'article L612-20 du CSI ;<br>
+    — ne faire l'objet d'aucune poursuite pénale en cours pouvant entraîner une telle incapacité ;<br>
+    — être titulaire d'une carte professionnelle CNAPS en cours de validité.<br>
+    Toute fausse déclaration entraînera la nullité du contrat et pourra faire l'objet de poursuites pénales.
+  </div>
+</div>
+
+<div class="art">
+  <div class="art-title">ARTICLE N° 14 — Acceptation des lettres recommandées électroniques</div>
+  <div class="art-body">
+    Le Salarié accepte expressément l'envoi par voie électronique des courriers recommandés de l'Entreprise relatifs à son Contrat, conformément aux dispositions de l'article L100 du Code des postes et des communications électroniques.
+  </div>
+</div>
+
+<div class="art">
+  <div class="art-title">ARTICLE N° 15 — Droit à l'image</div>
+  <div class="art-body">
+    Le salarié autorise la Société à utiliser son image, captée dans un cadre strictement professionnel (rapports d'activité, supports de communication internes, site internet de l'entreprise). Cette autorisation ne vaut pas pour une utilisation commerciale de l'image du salarié. Elle peut être révoquée à tout moment par écrit.
   </div>
 </div>
 
 <?php if ($typeCdd): ?>
 <div class="art">
-  <div class="art-title">ARTICLE N° 14 — Fin du contrat</div>
+  <div class="art-title">ARTICLE N° 16 — Fin du contrat</div>
   <div class="art-body">
-    Le contrat prendra fin automatiquement à la dernière vacation prévue au planning, sauf rupture anticipée pour faute grave, cas de force majeure ou accord des parties. Il donne lieu au versement d'une indemnité de fin de contrat égale à 10% de la rémunération brute totale.
+    Le contrat prendra fin automatiquement au terme fixé, à la dernière vacation planifiée, sauf rupture anticipée pour faute grave, force majeure ou accord écrit des parties (Art L1243-1 CT).<br>
+    <?php if (!$isCddUsage): ?>
+    À l'échéance du contrat, l'Employeur versera au salarié l'indemnité de fin de contrat prévue à l'article 5, sauf cas d'exclusion légaux (faute grave, force majeure, proposition de CDI, refus du salarié d'accepter un CDI aux mêmes conditions — Art L1243-10 CT).
+    <?php else: ?>
+    À l'échéance du contrat, aucune indemnité de précarité n'est due, le présent contrat relevant du régime du CDD d'Usage (Art L1243-10-3° CT).
+    <?php endif; ?>
   </div>
 </div>
 <?php endif; ?>
 
 <div class="art">
-  <div class="art-title">ARTICLE N° 15 — Mutuelle</div>
+  <div class="art-title">ARTICLE N° 17 — Mutuelle et prévoyance</div>
   <div class="art-body">
-    Conformément à la réglementation, le salarié bénéficie de la couverture santé collective obligatoire, sauf s'il justifie d'un droit à dispense.
+    Conformément à l'accord de branche de la CCN n°1351 et à la loi n°2013-504 du 14 juin 2013, le salarié est affilié au régime de complémentaire santé collectif et obligatoire mis en place par l'Entreprise, sauf justification d'un cas de dispense légal (Art R2421-2 CT). La cotisation est partagée entre l'Employeur et le Salarié selon les modalités en vigueur dans l'Entreprise.
   </div>
 </div>
 
-<!-- Article 16 — Documents annexes obligatoires -->
+<!-- Article 18 — Documents annexes -->
 <div class="art">
-  <div class="art-title">ARTICLE N° 16 — Documents annexes obligatoires</div>
+  <div class="art-title">ARTICLE N° 18 — Documents annexes obligatoires</div>
   <div class="art-body">
-    À la date de signature du présent contrat, le salarié valide et signe électroniquement les documents annexés à la suite de ce contrat, sans lesquels celui-ci ne peut produire ses effets :
+    À la date de signature du présent contrat, le salarié signe les documents annexés à la suite de ce contrat, sans lesquels celui-ci ne peut produire ses effets :
     <ul>
-      <li>Une demande expresse de dérogation à la durée minimale légale de travail de 24 heures par semaine.</li>
-      <li>Une attestation sur l'honneur de cumul d'emplois.</li>
-      <li>Sa demande de dispense d'adhésion à la mutuelle d'entreprise.</li>
+      <li>Une demande expresse de dérogation à la durée minimale légale de travail de 24 heures par semaine (Art L3123-7 CT).</li>
+      <li>Une déclaration sur l'honneur relative au cumul d'emplois et au respect des durées maximales de travail.</li>
+      <li>Sa demande de dispense d'adhésion à la mutuelle d'entreprise, le cas échéant.</li>
     </ul>
   </div>
 </div>
 
 <!-- Badge -->
 <div style="margin:14px 0;padding:10px;border:1px solid #e5e7eb;border-radius:6px;font-size:8.5pt">
-  <strong>Badge professionnel :</strong> J'atteste sur l'honneur avoir reçu mon badge professionnel et mes équipements, je m'engage à les remettre à l'employeur en fin de mission sous peine de poursuites disciplinaires et pénales.
+  <strong>Attestation de remise des équipements :</strong> Je soussigné(e) <?= $e($d['nom_prenom']) ?> atteste avoir reçu l'ensemble des équipements nécessaires à l'exercice de mes fonctions (badge, uniforme, équipements de protection). Je m'engage à les restituer à l'Employeur en fin de mission, en bon état d'usage, sous peine de poursuites disciplinaires et de retenue sur salaire dans les limites légales.
 </div>
 
-<!-- Signatures contrat principal -->
+<!-- Signatures -->
 <div style="margin:16px 0;font-size:8.5pt">
   Fait à <strong><?= $e($d['lieu_signature']) ?></strong>, le <strong><?= $e($d['date_signature']) ?></strong>
-  &nbsp;&nbsp;(En deux exemplaires dont l'un a été remis au salarié signataire)<br>
+  &nbsp;&nbsp;(En deux exemplaires originaux dont un a été remis au salarié signataire)<br>
   <em>Signature précédée de la mention manuscrite « Lu et Approuvé - Bon pour accord »</em>
 </div>
 
@@ -326,14 +357,12 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
 </div>
 
 <div class="footer">
-  Document généré le <?= date('d/m/Y à H:i') ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Usage interne confidentiel
+  Document généré le <?= date('d/m/Y à H:i') ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Confidentiel
 </div>
 
 </div><!-- /page -->
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     ANNEXE 1 — Dérogation durée minimale de travail
-     ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- ANNEXE 1 -->
 <div class="annexe-page">
   <div class="annexe-header">
     <div class="sous"><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> &nbsp;·&nbsp; SIREN 928 552 702</div>
@@ -342,23 +371,21 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
   </div>
   <div class="annexe-body">
     <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demeurant au : <strong><?= $e($d['adresse']) ?></strong>,</p>
-    <p>demande expressément et formellement à la société <strong>OEIL VIGILANT</strong> de déroger à la durée minimale légale de travail de <strong>24 heures par semaine</strong> (Article L3123-7 du Code du travail).</p>
+    <p>demande expressément et en mon nom propre à la société <strong>OEIL VIGILANT</strong> de déroger à la durée minimale légale de travail de <strong>24 heures par semaine</strong>, conformément à l'article L3123-7 du Code du travail. Je reconnais que cette demande émane exclusivement de ma propre initiative et n'a pas été sollicitée par l'Employeur.</p>
     <p><strong>Cette demande est justifiée par la raison suivante :</strong></p>
     <div class="check-row">
       <span class="check-box"><span class="check-box-inner"></span></span>
       <span class="check-label">Me permettre de faire face à des contraintes personnelles ou de cumuler plusieurs activités afin d'atteindre une durée globale de travail correspondant à un temps plein ou au moins égale à 24 heures par semaine.</span>
     </div>
-    <p>J'ai bien noté que mes horaires de travail seront regroupés sur des journées ou des demi-journées régulières ou complètes.</p>
+    <p>J'ai bien noté que mes horaires de travail seront regroupés sur des journées ou des demi-journées régulières ou complètes. Je reconnais avoir été informé(e) de mon droit à revenir sur cette dérogation à tout moment, avec un préavis raisonnable.</p>
     <div class="annexe-sig">
-      <div class="lieu">Fait à Paris, le <?= $e($d['date_signature']) ?></div>
+      <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
       <div class="sig-line"><?= $e($d['civilite']) ?> <?= $e($d['nom_prenom']) ?><br><span style="font-style:italic;font-size:7.5pt">Lu et approuvé — Signature</span></div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     ANNEXE 2 — Déclaration sur l'honneur de cumul d'emplois
-     ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- ANNEXE 2 -->
 <div class="annexe-page">
   <div class="annexe-header">
     <div class="sous"><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> &nbsp;·&nbsp; SIREN 928 552 702</div>
@@ -366,7 +393,12 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
     <div class="sous">Annexe obligatoire au contrat de travail signé le <?= $e($d['date_signature']) ?></div>
   </div>
   <div class="annexe-body">
-    <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, déclare sur l'honneur être informé(e) que la réglementation m'interdit de dépasser la durée maximale de travail autorisée, tous emplois confondus (10h/jour, 48h/semaine, 44h en moyenne sur 12 semaines).</p>
+    <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, déclare sur l'honneur être informé(e) que la réglementation m'interdit de dépasser les durées maximales de travail autorisées, tous employeurs confondus :</p>
+    <ul>
+      <li>10 heures par jour (Art L3121-18 CT)</li>
+      <li>48 heures par semaine (Art L3121-20 CT)</li>
+      <li>44 heures en moyenne sur 12 semaines consécutives (Art L3121-22 CT)</li>
+    </ul>
     <p><strong>À ce jour, je déclare :</strong></p>
     <div class="check-row">
       <span class="check-box"><span class="check-box-inner"></span></span>
@@ -374,18 +406,17 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
     </div>
     <div class="check-row">
       <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et ailleurs ne dépasse jamais les limites légales.</span>
+      <span class="check-label">Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et chez tout autre employeur ne dépasse jamais les limites légales susmentionnées, et à informer immédiatement l'Employeur de tout changement de situation.</span>
     </div>
+    <p style="font-size:8pt;color:#666;font-style:italic">Je reconnais être informé(e) que toute fausse déclaration m'expose à des sanctions disciplinaires et peut engager ma responsabilité personnelle en cas d'accident du travail imputable à un dépassement des durées maximales.</p>
     <div class="annexe-sig">
-      <div class="lieu">Fait à Paris, le <?= $e($d['date_signature']) ?></div>
+      <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
       <div class="sig-line"><?= $e($d['civilite']) ?> <?= $e($d['nom_prenom']) ?><br><span style="font-style:italic;font-size:7.5pt">Lu et approuvé — Signature</span></div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════════════
-     ANNEXE 3 — Demande de dispense d'affiliation à la mutuelle
-     ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- ANNEXE 3 -->
 <div class="annexe-page">
   <div class="annexe-header">
     <div class="sous"><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> &nbsp;·&nbsp; SIREN 928 552 702</div>
@@ -393,23 +424,190 @@ Conformément aux dispositions de la loi n° 078-17 du 06 janvier 1978, relative
     <div class="sous">Annexe obligatoire au contrat de travail signé le <?= $e($d['date_signature']) ?></div>
   </div>
   <div class="annexe-body">
-    <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demande à être dispensé(e) d'affiliation au régime de garantie « Frais de Santé » obligatoire mis en place par <strong>OEIL VIGILANT</strong>, pour le motif suivant :</p>
+    <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demande à être dispensé(e) d'affiliation au régime de garantie « Frais de Santé » collectif et obligatoire mis en place par <strong>OEIL VIGILANT</strong>, pour le motif suivant (Art R2421-2 CT) :</p>
     <div class="check-row">
       <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">Je suis titulaire d'un CDD très court et je justifie d'une couverture santé solidaire (CSS) ou d'un contrat individuel.</span>
+      <span class="check-label">Je suis titulaire d'un CDD ou contrat de mission de moins de 3 mois, et justifie d'une couverture responsable individuelle (CSS, AMC individuelle).</span>
     </div>
     <div class="check-row">
       <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">Je bénéficie déjà d'une couverture collective et obligatoire par ailleurs (ex : autre employeur).</span>
+      <span class="check-label">Je bénéficie déjà d'une couverture collective et obligatoire en tant qu'ayant droit ou en tant que salarié d'un autre employeur.</span>
     </div>
-    <p>Je m'engage à fournir les justificatifs correspondants et note qu'en refusant l'adhésion, je ne pourrai pas prétendre aux remboursements de frais de santé par l'entreprise.</p>
+    <div class="check-row">
+      <span class="check-box"><span class="check-box-inner"></span></span>
+      <span class="check-label">Je bénéficie de la Complémentaire Santé Solidaire (CSS) ou de l'Aide médicale d'État (AME).</span>
+    </div>
+    <p>Je m'engage à fournir les justificatifs correspondants à l'Employeur et reconnais qu'en cas de dispense, je ne pourrai pas prétendre à la prise en charge employeur des frais de santé. Cette dispense prend fin automatiquement en cas de perte du motif qui la justifie.</p>
     <div class="annexe-sig">
-      <div class="lieu">Fait à Paris, le <?= $e($d['date_signature']) ?></div>
+      <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
       <div class="sig-line"><?= $e($d['civilite']) ?> <?= $e($d['nom_prenom']) ?><br><span style="font-style:italic;font-size:7.5pt">Lu et approuvé — Signature</span></div>
     </div>
   </div>
 </div>
 
+</body>
+</html>
+<?php
+    return ob_get_clean();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AVENANT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function buildAvenantHtml(array $d, array $p, array $a): string {
+    $logoB64 = '';
+    $logoFile = APP_ROOT . '/assets/img/' . ($p['logo_principal'] ?? 'logo.png');
+    if (file_exists($logoFile)) {
+        $ext     = strtolower(pathinfo($logoFile, PATHINFO_EXTENSION));
+        $mime    = ($ext === 'jpg' || $ext === 'jpeg') ? 'image/jpeg' : 'image/png';
+        $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
+    }
+
+    $e       = fn($v) => htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8');
+    $types   = $d['types_modification'] ?? [];
+    $numAv   = trim($d['avenant_numero'] ?? '1');
+    $dateRef = trim($d['date_contrat_reference'] ?? '');
+
+    ob_start(); ?>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<?= _contratCss() ?>
+<style>
+.avenant-ref { background:#f0f2f5; border-left:4px solid #c9a84c; padding:8px 12px; font-size:8.5pt; margin:12px 0; border-radius:0 4px 4px 0; }
+.mod-block { margin:12px 0; padding:10px; border:1px solid #e5e7eb; border-radius:6px; }
+.mod-block-title { font-weight:700; font-size:9pt; color:#1a2332; margin-bottom:6px; border-bottom:1px solid #f0f2f5; padding-bottom:4px; }
+.inchange { margin-top:14px; padding:8px 12px; background:#f8f9fa; font-size:8.5pt; font-style:italic; color:#555; border-radius:4px; text-align:center; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <?php if ($logoB64): ?><img src="<?= $logoB64 ?>"><br><?php endif; ?>
+  <h1>Avenant n°<?= $e($numAv) ?> au Contrat de Travail</h1>
+  <div class="sous-titre"><?= $e($d['poste'] ?? ($a['poste'] ?? 'Agent de sécurité')) ?></div>
+  <div class="infos">
+    <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — SIRET <?= $e($p['entreprise_siret'] ?? '92855270200013') ?><br>
+    <?= $e($p['entreprise_adresse'] ?? '58 rue de Monceau') ?>, <?= $e($p['entreprise_cp'] ?? '75008') ?> <?= $e($p['entreprise_ville'] ?? 'Paris') ?>
+  </div>
+</div>
+
+<div class="entre">
+  <strong>ENTRE :</strong><br>
+  La société <strong><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> (SAS)</strong>,
+  représentée par <strong>M. <?= $e($p['entreprise_dirigeant'] ?? 'TRAORE Ibrahim') ?></strong>, Président,<br>
+  Ci-après dénommée <em>« l'Employeur »</em>,<br><br>
+  <strong>ET :</strong><br>
+  <strong><?= $e($d['civilite'] ?? '') ?> <?= $e($d['nom_prenom']) ?></strong>, demeurant à : <?= $e($d['adresse'] ?? '') ?>,<br>
+  Ci-après dénommé <em>« le Salarié »</em>.
+</div>
+
+<div class="avenant-ref">
+  Le présent avenant modifie et complète le contrat de travail à durée <?= (($d['type_contrat']??'CDD')==='CDI')?'indéterminée':'déterminée' ?>
+  conclu entre les parties<?= $dateRef ? ' en date du <strong>'.$e($dateRef).'</strong>' : '' ?>.
+  Il prend effet à compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>.
+  Toutes les dispositions du contrat initial non modifiées par le présent avenant demeurent pleinement applicables.
+</div>
+
+<p style="text-align:center;font-weight:bold;font-size:9.5pt;margin:12px 0">Les parties conviennent des modifications suivantes :</p>
+
+<?php if (in_array('site', $types) && !empty($d['nouveau_site'])): ?>
+<div class="mod-block">
+  <div class="mod-block-title">Modification du site d'affectation</div>
+  <p style="font-size:9pt">À compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>, le salarié est affecté sur le site : <strong><?= $e($d['nouveau_site']) ?></strong>.</p>
+  <?php if (!empty($d['ancien_site'])): ?>
+  <p style="font-size:8.5pt;color:#666">Site précédent : <?= $e($d['ancien_site']) ?></p>
+  <?php endif; ?>
+  <p style="font-size:8.5pt">Cette modification est effectuée dans le cadre du pouvoir de direction de l'Employeur (Art L1121-1 CT), le salarié restant rattaché au même établissement. Le salarié reconnaît que cette affectation entre dans les limites de sa zone géographique habituelle de travail.</p>
+</div>
+<?php endif; ?>
+
+<?php if (in_array('salaire', $types) && !empty($d['nouveau_salaire'])): ?>
+<div class="mod-block">
+  <div class="mod-block-title">Modification de la rémunération</div>
+  <p style="font-size:9pt">À compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>, le salaire horaire <?= $e(strtolower($d['type_remuneration']??'brut')) ?> du salarié est fixé à <strong class="highlight"><?= $e($d['nouveau_salaire']) ?> € / heure</strong>.</p>
+  <?php if (!empty($d['ancien_salaire'])): ?>
+  <p style="font-size:8.5pt;color:#666">Salaire précédent : <?= $e($d['ancien_salaire']) ?> € / heure</p>
+  <?php endif; ?>
+  <p style="font-size:8.5pt">Ce nouveau taux est supérieur au minimum conventionnel applicable à la catégorie du salarié (CCN n°1351). Toutes les autres dispositions relatives à la rémunération (majorations, primes) restent inchangées.</p>
+</div>
+<?php endif; ?>
+
+<?php if (in_array('prolongation', $types) && !empty($d['nouvelle_date_fin'])): ?>
+<div class="mod-block">
+  <div class="mod-block-title">Prolongation du contrat à durée déterminée</div>
+  <p style="font-size:9pt">Le terme du contrat initialement prévu est reporté au <strong><?= $e($d['nouvelle_date_fin']) ?></strong>.</p>
+  <?php if (!empty($d['ancienne_date_fin'])): ?>
+  <p style="font-size:8.5pt;color:#666">Terme précédent : <?= $e($d['ancienne_date_fin']) ?></p>
+  <?php endif; ?>
+  <?php if (!empty($d['total_heures_nouveau'])): ?>
+  <p style="font-size:9pt">La durée totale de travail pour l'ensemble de la période est portée à <strong><?= $e($d['total_heures_nouveau']) ?> heures</strong>.</p>
+  <?php endif; ?>
+  <p style="font-size:8.5pt">Cette prolongation intervient conformément aux dispositions de l'article L1243-13 du Code du travail. La durée totale du contrat, renouvellements inclus, reste dans les limites légales.</p>
+</div>
+<?php endif; ?>
+
+<?php if (in_array('poste', $types) && !empty($d['nouveau_poste'])): ?>
+<div class="mod-block">
+  <div class="mod-block-title">Modification du poste et des fonctions</div>
+  <p style="font-size:9pt">À compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>, le salarié exerce les fonctions de <strong><?= $e($d['nouveau_poste']) ?></strong><?= !empty($d['nouvelle_categorie']) ? ', relevant de la catégorie « '.$e($d['nouvelle_categorie']).' »' : '' ?>.</p>
+  <?php if (!empty($d['poste_precedent'])): ?>
+  <p style="font-size:8.5pt;color:#666">Poste précédent : <?= $e($d['poste_precedent']) ?></p>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if (in_array('horaires', $types) && !empty($d['nouveau_total_heures'])): ?>
+<div class="mod-block">
+  <div class="mod-block-title">Modification de la durée du travail</div>
+  <p style="font-size:9pt">À compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>, la durée globale de travail est modifiée et fixée à <strong class="highlight"><?= $e($d['nouveau_total_heures']) ?> heures</strong> pour la durée restante du contrat, réparties selon le planning communiqué.</p>
+  <?php if (!empty($d['ancien_total_heures'])): ?>
+  <p style="font-size:8.5pt;color:#666">Durée précédente : <?= $e($d['ancien_total_heures']) ?> heures</p>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if (in_array('autre', $types) && !empty($d['contenu_autre'])): ?>
+<div class="mod-block">
+  <div class="mod-block-title"><?= $e($d['titre_autre'] ?? 'Modification diverse') ?></div>
+  <div style="font-size:9pt"><?= nl2br($e($d['contenu_autre'])) ?></div>
+</div>
+<?php endif; ?>
+
+<div class="inchange">
+  Toutes les autres clauses et conditions du contrat de travail initial demeurent inchangées et continuent à produire leurs effets.
+</div>
+
+<div style="margin:20px 0;font-size:8.5pt">
+  Fait à <strong><?= $e($d['lieu_signature'] ?? ($p['entreprise_ville']??'Paris')) ?></strong>, le <strong><?= $e($d['date_signature']) ?></strong>
+  &nbsp;&nbsp;(En deux exemplaires originaux dont un remis au salarié)<br>
+  <em>Signature précédée de la mention manuscrite « Lu et Approuvé - Bon pour accord »</em>
+</div>
+
+<div class="signatures">
+  <div class="sig-block">
+    <div class="sig-title">L'Employeur</div>
+    <div class="sig-line">
+      M. <?= $e($p['entreprise_dirigeant'] ?? 'TRAORE Ibrahim') ?><br>
+      Président — S.A.S <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?>
+    </div>
+  </div>
+  <div class="sig-block">
+    <div class="sig-title">Le Salarié</div>
+    <div class="sig-line">
+      <?= $e($d['civilite'] ?? '') ?> <?= $e($d['nom_prenom']) ?>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Avenant n°<?= $e($numAv) ?> — Généré le <?= date('d/m/Y à H:i') ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Confidentiel
+</div>
+
+</div>
 </body>
 </html>
 <?php
