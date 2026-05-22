@@ -1,4 +1,5 @@
 <?php
+ob_start(); // capture les notices/warnings PHP pour ne pas corrompre les réponses JSON
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../includes/contrat_builder.php';
@@ -88,6 +89,7 @@ function runPython(string $cmd): string {
 }
 
 function jsonOut(array $data): void {
+    if (ob_get_level() > 0) ob_end_clean(); // supprimer toute notice/warning PHP avant le JSON
     header('Content-Type: application/json; charset=UTF-8');
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($json === false) {
@@ -659,11 +661,11 @@ function runPreanalyse() {
                 document.getElementById('analyseEmpty').classList.remove('d-none');
             }
         })
-        .catch(() => {
+        .catch(e => {
             document.getElementById('analyseLoading').classList.add('d-none');
             document.getElementById('btnRunAnalyse').disabled = false;
             document.getElementById('analyseEmpty').classList.remove('d-none');
-            alert('Erreur réseau.');
+            alert('Erreur : ' + (e.message || 'réponse non-JSON du serveur'));
         });
 }
 
@@ -702,11 +704,11 @@ function runCalculCCN() {
                 document.getElementById('calcEmpty').classList.remove('d-none');
             }
         })
-        .catch(() => {
+        .catch(e => {
             document.getElementById('calcLoading').classList.add('d-none');
             document.getElementById('btnCalcCcn').disabled = false;
             document.getElementById('calcEmpty').classList.remove('d-none');
-            alert('Erreur réseau.');
+            alert('Erreur : ' + (e.message || 'réponse non-JSON du serveur'));
         });
 }
 </script>
