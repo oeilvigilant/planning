@@ -15,25 +15,53 @@ $a = $stmt->fetch();
 if (!$a) { flash('danger', 'Agent introuvable.'); header('Location: index.php'); exit; }
 
 define('SKILL_SCRIPTS', 'C:\\Users\\admin\\.claude\\skills\\contrat-analyzer-skill\\scripts\\');
+// Chemin complet Python (Apache n'a pas forcément le PATH utilisateur)
+define('PYTHON_BIN', 'C:\\Users\\admin\\AppData\\Local\\Python\\bin\\python.exe');
+
+// Force Python à sortir en UTF-8 (évite le problème d'encodage Windows cp1252)
+putenv('PYTHONIOENCODING=utf-8');
+putenv('PYTHONUTF8=1');
+
+function runPython(string $cmd): string {
+    $result = shell_exec($cmd);
+    if ($result === null || $result === '') {
+        return '(Erreur : aucun résultat. Vérifiez que Python est accessible depuis Apache/WAMP.)';
+    }
+    // Convertir en UTF-8 propre si nécessaire
+    if (!mb_check_encoding($result, 'UTF-8')) {
+        $result = mb_convert_encoding($result, 'UTF-8', 'CP1252');
+    }
+    return $result;
+}
+
+function jsonOut(array $data): void {
+    header('Content-Type: application/json; charset=UTF-8');
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        // Fallback : nettoyer les caractères non-UTF-8
+        array_walk_recursive($data, function(&$v) {
+            if (is_string($v)) $v = mb_convert_encoding($v, 'UTF-8', 'UTF-8');
+        });
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+    }
+    echo $json;
+}
 
 // ── AJAX : pré-analyse structurelle ──────────────────────────────────────────
 if (($_POST['action'] ?? '') === 'run_preanalyse') {
-    header('Content-Type: application/json; charset=UTF-8');
     $text = trim($_POST['contract_text'] ?? '');
-    if (!$text) { echo json_encode(['ok' => false, 'error' => 'Texte vide']); exit; }
+    if (!$text) { jsonOut(['ok' => false, 'error' => 'Texte vide']); exit; }
     $tmp = tempnam(sys_get_temp_dir(), 'ov_ca_');
-    file_put_contents($tmp, $text);
+    file_put_contents($tmp, $text, LOCK_EX);
     $script = SKILL_SCRIPTS . 'analyze_contract.py';
-    $output = [];
-    exec('python ' . escapeshellarg($script) . ' ' . escapeshellarg($tmp) . ' --ccn 1351 2>&1', $output);
+    $result = runPython(escapeshellarg(PYTHON_BIN) . ' ' . escapeshellarg($script) . ' ' . escapeshellarg($tmp) . ' --ccn 1351 2>&1');
     @unlink($tmp);
-    echo json_encode(['ok' => true, 'result' => implode("\n", $output)]);
+    jsonOut(['ok' => true, 'result' => $result]);
     exit;
 }
 
 // ── AJAX : calculateur CCN 1351 ───────────────────────────────────────────────
 if (($_POST['action'] ?? '') === 'calcul_ccn') {
-    header('Content-Type: application/json; charset=UTF-8');
     $salaire    = (float)($_POST['salaire']    ?? 0);
     $coeff      = (int)  ($_POST['coeff']      ?? 150);
     $heures     = (float)($_POST['heures']     ?? 151.67);
@@ -44,10 +72,10 @@ if (($_POST['action'] ?? '') === 'calcul_ccn') {
     $totalCdd   = (float)($_POST['total_cdd']  ?? 0);
     $tauxHs     = (float)($_POST['taux_hs']    ?? 0);
 
-    if ($salaire <= 0) { echo json_encode(['ok' => false, 'error' => 'Salaire requis']); exit; }
+    if ($salaire <= 0) { jsonOut(['ok' => false, 'error' => 'Salaire requis']); exit; }
 
     $script = SKILL_SCRIPTS . 'calculs_securite.py';
-    $cmd    = 'python ' . escapeshellarg($script)
+    $cmd    = escapeshellarg(PYTHON_BIN) . ' ' . escapeshellarg($script)
             . ' --salaire '  . $salaire
             . ' --coeff '    . $coeff
             . ' --heures '   . $heures
@@ -59,9 +87,8 @@ if (($_POST['action'] ?? '') === 'calcul_ccn') {
     if ($tauxHs > 0)     $cmd .= ' --taux-hs '    . $tauxHs;
     $cmd .= ' 2>&1';
 
-    $output = [];
-    exec($cmd, $output);
-    echo json_encode(['ok' => true, 'result' => implode("\n", $output)]);
+    $result = runPython($cmd);
+    jsonOut(['ok' => true, 'result' => $result]);
     exit;
 }
 
@@ -105,11 +132,17 @@ $defaultData = [
 ];
 
 $contractHtml = buildContratHtml($defaultData, $params, $a);
-$contractText = html_entity_decode(
-    strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>', '</div>', '</li>', '</h1>', '</h2>', '</h3>'], "\n", $contractHtml)),
-    ENT_QUOTES | ENT_HTML5, 'UTF-8'
+// Supprimer les blocs <style> et <script> AVANT strip_tags (sinon leur contenu reste en clair)
+$contractHtml = preg_replace('/<style\b[^>]*>.*?<\/style>/si', '', $contractHtml);
+$contractHtml = preg_replace('/<script\b[^>]*>.*?<\/script>/si', '', $contractHtml);
+// Transformer les balises de structure en sauts de ligne
+$contractHtml = str_replace(
+    ['<br>', '<br/>', '<br />', '</p>', '</div>', '</li>', '</h1>', '</h2>', '</h3>', '</tr>'],
+    "\n", $contractHtml
 );
+$contractText = html_entity_decode(strip_tags($contractHtml), ENT_QUOTES | ENT_HTML5, 'UTF-8');
 $contractText = preg_replace('/[ \t]+/', ' ', $contractText);
+$contractText = preg_replace('/\n[ \t]+/', "\n", $contractText);
 $contractText = preg_replace('/\n{3,}/', "\n\n", trim($contractText));
 
 $pageTitle  = 'Analyse du contrat';
