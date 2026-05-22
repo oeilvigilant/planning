@@ -77,6 +77,82 @@ $defaults = [
     'non_renouvelable' => '1',
 ];
 
+// ── Sauvegarder les données du contrat ───────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
+    $dateDebut = null;
+    $dateFin   = null;
+    if (!empty($_POST['date_debut'])) {
+        $d = DateTime::createFromFormat('d/m/Y', trim($_POST['date_debut']));
+        if ($d) $dateDebut = $d->format('Y-m-d');
+    }
+    if (!empty($_POST['date_fin'])) {
+        $d = DateTime::createFromFormat('d/m/Y', trim($_POST['date_fin']));
+        if ($d) $dateFin = $d->format('Y-m-d');
+    }
+    $stmt = $db->prepare("
+        UPDATE agents SET
+            type_contrat       = ?,
+            date_debut_contrat = ?,
+            date_fin_contrat   = ?,
+            remuneration       = ?,
+            type_remuneration  = ?,
+            periode_essai      = ?,
+            lieu_travail       = ?,
+            poste              = ?
+        WHERE id = ?
+    ");
+    $stmt->execute([
+        $_POST['type_contrat']      ?? null,
+        $dateDebut,
+        $dateFin,
+        $_POST['salaire_horaire']   ?? null,
+        $_POST['type_remuneration'] ?? 'Brute',
+        $_POST['periode_essai']     ?? null,
+        $_POST['site_affectation']  ?? null,
+        $_POST['poste']             ?? null,
+        $id,
+    ]);
+    flash('success', 'Données du contrat sauvegardées dans la fiche agent.');
+    header('Location: contrat.php?id=' . $id);
+    exit;
+}
+
+// ── Auto-détecter dates depuis le planning si absentes de la fiche agent ──────
+if (!$defaults['date_debut'] || !$defaults['date_fin']) {
+    $stmt = $db->prepare("
+        SELECT MIN(pl.date_travail) AS min_date, MAX(pl.date_travail) AS max_date
+        FROM planning_lignes pl
+        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+        WHERE pl.agent_id = ?
+    ");
+    $stmt->execute([$id]);
+    $planRow = $stmt->fetch();
+    if ($planRow && $planRow['min_date']) {
+        if (!$defaults['date_debut']) $defaults['date_debut'] = date('d/m/Y', strtotime($planRow['min_date']));
+        if (!$defaults['date_fin'])   $defaults['date_fin']   = date('d/m/Y', strtotime($planRow['max_date']));
+        // Recalculer la période d'essai avec les dates détectées
+        $defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
+    }
+}
+
+// ── Pré-calculer les heures contrat depuis le planning ─────────────────────────
+if (empty($defaults['total_heures_contrat']) && $defaults['date_debut'] && $defaults['date_fin']) {
+    $dD = DateTime::createFromFormat('d/m/Y', $defaults['date_debut']);
+    $dF = DateTime::createFromFormat('d/m/Y', $defaults['date_fin']);
+    if ($dD && $dF && $dF >= $dD) {
+        $stmt = $db->prepare("
+            SELECT COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche
+                              + pl.min_ferie_normal + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS total_min
+            FROM planning_lignes pl
+            JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+            WHERE pl.agent_id = ? AND pl.date_travail BETWEEN ? AND ?
+        ");
+        $stmt->execute([$id, $dD->format('Y-m-d'), $dF->format('Y-m-d')]);
+        $totalMin = (int)($stmt->fetch()['total_min'] ?? 0);
+        if ($totalMin > 0) $defaults['total_heures_contrat'] = round($totalMin / 60, 2);
+    }
+}
+
 $data      = $_SERVER['REQUEST_METHOD'] === 'POST' ? array_merge($defaults, $_POST) : $defaults;
 $exportPdf = $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['export_pdf']) && $_POST['export_pdf'] === '1';
 
@@ -100,7 +176,8 @@ require_once __DIR__ . '/../../includes/header.php';
 <!-- Formulaire gauche -->
 <div class="col-lg-5">
   <form method="POST" id="contratForm">
-    <input type="hidden" name="export_pdf" value="0" id="exportFlag">
+    <input type="hidden" name="export_pdf"  value="0" id="exportFlag">
+    <input type="hidden" name="save_contrat" value="0" id="saveFlag">
 
     <!-- Parties -->
     <div class="ov-card mb-3">
@@ -263,8 +340,11 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 
     <div class="d-grid gap-2">
+      <button type="button" onclick="saveContrat()" class="btn" style="background:rgba(16,185,129,0.1);color:#065f46;border:1px solid rgba(16,185,129,0.4);font-weight:500">
+        <i class="fa fa-floppy-disk me-2"></i>Sauvegarder dans la fiche agent
+      </button>
       <button type="button" onclick="exportPdf()" class="btn btn-ov-primary">
-        <i class="fa fa-file-pdf me-2"></i>Générer & Télécharger le contrat PDF
+        <i class="fa fa-file-pdf me-2"></i>Générer &amp; Télécharger le contrat PDF
       </button>
       <button type="button" onclick="window.print()" class="btn btn-ov-secondary">
         <i class="fa fa-print me-2"></i>Imprimer l'aperçu
@@ -351,7 +431,14 @@ function updatePreview() {
     });
 }
 
+function saveContrat() {
+    document.getElementById('saveFlag').value  = '1';
+    document.getElementById('exportFlag').value = '0';
+    document.getElementById('contratForm').submit();
+}
+
 function exportPdf() {
+    document.getElementById('saveFlag').value  = '0';
     document.getElementById('exportFlag').value = '1';
     document.getElementById('contratForm').submit();
 }

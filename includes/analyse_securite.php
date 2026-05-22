@@ -104,7 +104,7 @@ function analyseStructurelle(string $text): string {
 
     // Type de contrat
     $typeDetecte = '⚠️  Non détecté';
-    if (preg_match('/\b(contrat\s+)?CDD\s+d[\'' ]?usage\b/i', $text)) $typeDetecte = 'CDD d\'Usage ✅';
+    if (preg_match('/\bCDD\s+d.usage\b/i', $text)) $typeDetecte = 'CDD d\'Usage ✅';
     elseif (preg_match('/\b(contrat\s+[àa]\s+dur[ée]{1,2}e?\s+)?d[ée]termin[ée]e?\b/i', $text)) $typeDetecte = 'CDD ✅';
     elseif (preg_match('/\b(contrat\s+[àa]\s+dur[ée]{1,2}e?\s+)?ind[ée]termin[ée]e?\b/i', $text)) $typeDetecte = 'CDI ✅';
     elseif (preg_match('/\bCDI\b/', $text)) $typeDetecte = 'CDI ✅';
@@ -122,7 +122,7 @@ function analyseStructurelle(string $text): string {
 
     // Période d'essai
     $peDetectee = '⚠️  Non détectée';
-    if (preg_match('/p[eé]riode\s+d[\'']essai\s+de\s+(\d+)\s*(jours?|semaines?|mois)/i', $text, $m)) {
+    if (preg_match('/p[eé]riode\s+d.essai\s+de\s+(\d+)\s*(jours?|semaines?|mois)/i', $text, $m)) {
         $peDetectee = $m[1] . ' ' . $m[2] . ' ✅';
     } elseif (preg_match('/(\d+)\s*(jours?\s+travaill[ée]s?)/i', $text, $m) && str_contains(as_norm($text), 'essai')) {
         $peDetectee = $m[1] . ' ' . $m[2] . ' ✅';
