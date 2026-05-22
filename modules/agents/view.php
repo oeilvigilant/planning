@@ -65,6 +65,7 @@ if (canDo('agents','delete')) {
     <a href="export_pdf.php?id=<?= $id ?>" class="btn" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-file-pdf me-1"></i>Export PDF comptable</a>
     <a href="contrat.php?id=<?= $id ?>" class="btn" style="background:rgba(201,168,76,0.1);color:#92400e;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-file-contract me-1"></i>Contrat</a>
     <a href="avenant.php?id=<?= $id ?>" class="btn" style="background:rgba(16,185,129,0.1);color:#065f46;border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-file-pen me-1"></i>Avenant</a>
+    <a href="analyse_contrat.php?id=<?= $id ?>" class="btn" style="background:rgba(99,102,241,0.1);color:#3730a3;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-magnifying-glass-chart me-1"></i>Analyser</a>
     <?php if (canDo('agents','create')): ?>
     <a href="token.php?id=<?= $id ?>" class="btn" style="background:rgba(99,102,241,0.1);color:#4f46e5;border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-link me-1"></i>Lien auto-remplissage</a>
     <?php endif; ?>
