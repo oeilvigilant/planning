@@ -119,13 +119,16 @@ function analyseStructurelle(string $text): string {
     $out[] = '   📊 VALEURS EXTRAITES DU CONTRAT';
     $out[] = as_sep('-');
 
-    // Type de contrat
+    // Type de contrat — utiliser $n (normalisé) pour éviter les erreurs UTF-8 sans flag /u
     $typeDetecte = '⚠️  Non détecté';
-    if (preg_match('/\bCDD\s+d.usage\b/i', $text)) $typeDetecte = 'CDD d\'Usage ✅';
-    elseif (preg_match('/\b(contrat\s+[àa]\s+dur[ée]{1,2}e?\s+)?d[ée]termin[ée]e?\b/i', $text)) $typeDetecte = 'CDD ✅';
-    elseif (preg_match('/\b(contrat\s+[àa]\s+dur[ée]{1,2}e?\s+)?ind[ée]termin[ée]e?\b/i', $text)) $typeDetecte = 'CDI ✅';
-    elseif (preg_match('/\bCDI\b/', $text)) $typeDetecte = 'CDI ✅';
-    elseif (preg_match('/\bCDD\b/', $text)) $typeDetecte = 'CDD ✅';
+    if (str_contains($n, "cdd d'usage") || str_contains($n, 'cdd d usage')) {
+        $typeDetecte = "CDD d'Usage ✅";
+    } elseif (str_contains($n, 'indeterminee')) {
+        // "indéterminée" → CDI (vérifié avant "déterminée" car "indeterminee" ⊃ "determinee")
+        $typeDetecte = 'CDI ✅';
+    } elseif (str_contains($n, 'determinee')) {
+        $typeDetecte = 'CDD ✅';
+    }
     $out[] = '  Type de contrat      : ' . $typeDetecte;
 
     // Dates du contrat
@@ -137,29 +140,33 @@ function analyseStructurelle(string $text): string {
     }
     $out[] = '  Période              : ' . $datesDetectees;
 
-    // Période d'essai
+    // Période d'essai — utiliser $n pour les patterns avec accents
     $peDetectee = '⚠️  Non détectée';
-    if (preg_match('/p[eé]riode\s+d.essai\s+de\s+(\d+)\s*(jours?|semaines?|mois)/i', $text, $m)) {
+    if (preg_match('/periode\s+d.essai\s+de\s+(\d+)\s*(jours?|semaines?|mois)/i', $n, $m)) {
         $peDetectee = $m[1] . ' ' . $m[2] . ' ✅';
-    } elseif (preg_match('/(\d+)\s*(jours?\s+travaill[ée]s?)/i', $text, $m) && str_contains(as_norm($text), 'essai')) {
+    } elseif (preg_match('/(\d+)\s*(jours?\s+travailles?)/i', $n, $m) && str_contains($n, 'essai')) {
         $peDetectee = $m[1] . ' ' . $m[2] . ' ✅';
     } elseif (str_contains($n, 'pas de periode d essai') || str_contains($n, 'sans periode d essai') || str_contains($n, '0 jour')) {
         $peDetectee = 'Aucune (contrat < 7 jours) ✅';
     }
     $out[] = '  Période d\'essai      : ' . $peDetectee;
 
-    // Taux horaire / salaire
+    // Taux horaire — chercher "X € par heure" sans inclure € dans la classe de caractères
     $salaireDetecte = '⚠️  Non détecté';
-    if (preg_match('/(\d{1,2}[,\.]\d{2})\s*[€E]?\s*(?:\/h|par\s+heure|horaire)/i', $text, $m)) {
+    if (preg_match('/(\d{1,2}[,.]\d{2})[^\d\n]{0,8}par\s+heure/i', $text, $m)) {
+        $salaireDetecte = str_replace('.', ',', $m[1]) . ' €/h ✅';
+    } elseif (preg_match('/(\d{1,2}[,.]\d{2})\s*\/h/i', $text, $m)) {
         $salaireDetecte = str_replace('.', ',', $m[1]) . ' €/h ✅';
     }
     $out[] = '  Taux horaire         : ' . $salaireDetecte;
 
-    // Total heures contrat
-    $totalHDetecte = '⚠️  Non détecté';
-    if (preg_match('/(\d+(?:[,\.]\d+)?)\s*heures?\s+(?:pour|globale|total|sur\s+la\s+p[eé]riode)/i', $text, $m)) {
+    // Total heures contrat — utiliser $n pour éviter les accents dans le pattern
+    $totalHDetecte = '⚠️  Non défini dans le contrat';
+    if (preg_match('/duree\s+(?:globale|totale)(?:\s+de\s+travail)?\s+(?:est\s+fixee?\s+a\s+)?(\d+(?:[,.]\d+)?)\s*heures?/i', $n, $m)) {
         $totalHDetecte = str_replace('.', ',', $m[1]) . ' h ✅';
-    } elseif (preg_match('/dur[ée]e?\s+globale\s+de\s+travail.*?(\d+(?:[,\.]\d+)?)\s*heures?/i', $text, $m)) {
+    } elseif (preg_match('/(\d+(?:[,.]\d+)?)\s*heures?\s+pour\s+(?:l.ensemble|la\s+duree|l.integralite)/i', $n, $m)) {
+        $totalHDetecte = str_replace('.', ',', $m[1]) . ' h ✅';
+    } elseif (preg_match('/duree\s+globale.*?(\d+(?:[,.]\d+)?)\s*heures?/i', $n, $m)) {
         $totalHDetecte = str_replace('.', ',', $m[1]) . ' h ✅';
     }
     $out[] = '  Total heures contrat : ' . $totalHDetecte;
@@ -175,10 +182,24 @@ function analyseStructurelle(string $text): string {
     }
     $out[] = '  Coefficient CCN      : ' . $coeffDetecte;
 
-    // Qualification
+    // Qualification — utiliser $n pour les termes accentués
     $qualifDetectee = '⚠️  Non détectée';
-    if (preg_match('/\b(SSIAP\s*\d?|APS|Agent\s+de\s+(?:pr[ée]vention|s[ée]curit[ée])|Chef\s+de\s+poste|Chef\s+de\s+site|Agent\s+cynophile|Rondier)\b/i', $text, $m)) {
-        $qualifDetectee = $m[1] . ' ✅';
+    if (str_contains($n, 'chef de site')) {
+        $qualifDetectee = 'Chef de site ✅';
+    } elseif (str_contains($n, 'chef de poste')) {
+        $qualifDetectee = 'Chef de poste ✅';
+    } elseif (str_contains($n, 'agent de securite') || str_contains($n, 'agent securite')) {
+        $qualifDetectee = 'Agent de sécurité ✅';
+    } elseif (str_contains($n, 'agent de prevention')) {
+        $qualifDetectee = 'Agent de prévention ✅';
+    } elseif (str_contains($n, 'ssiap')) {
+        $qualifDetectee = preg_match('/ssiap\s*(\d)/i', $n, $mq) ? 'SSIAP ' . $mq[1] . ' ✅' : 'SSIAP ✅';
+    } elseif (preg_match('/\baps\b/i', $n)) {
+        $qualifDetectee = 'APS ✅';
+    } elseif (str_contains($n, 'cynophile')) {
+        $qualifDetectee = 'Agent cynophile ✅';
+    } elseif (str_contains($n, 'rondier')) {
+        $qualifDetectee = 'Rondier ✅';
     }
     $out[] = '  Qualification        : ' . $qualifDetectee;
 
@@ -191,11 +212,13 @@ function analyseStructurelle(string $text): string {
     }
     $out[] = '  N° autorisation CNAPS: ' . $cnapsDetecte;
 
-    // Lieu / site
+    // Lieu / site — template écrit "affecté sur le site : X," → chercher dans $n
     $lieuDetecte = '⚠️  Non détecté';
-    if (preg_match('/[Ll]ieu\s+de\s+travail\s*[:\.]\s*(.{3,60}?)(?:\n|\.)/s', $text, $m)) {
+    if (preg_match('/affecte\s+sur\s+le\s+site\s*:\s*(.{3,80}?)(?:,|\.| mais| mais)/i', $n, $m)) {
         $lieuDetecte = trim($m[1]) . ' ✅';
-    } elseif (preg_match('/[Ss]ite\s+d\'affectation\s*[:\.]\s*(.{3,60}?)(?:\n|\.)/s', $text, $m)) {
+    } elseif (preg_match('/lieu\s+de\s+travail\s*[:\.]\s*(.{3,60}?)(?:\n|\.)/i', $n, $m)) {
+        $lieuDetecte = trim($m[1]) . ' ✅';
+    } elseif (preg_match('/site\s+d.affectation\s*[:\.]\s*(.{3,60}?)(?:\n|\.)/i', $n, $m)) {
         $lieuDetecte = trim($m[1]) . ' ✅';
     }
     $out[] = '  Lieu / site          : ' . $lieuDetecte;
