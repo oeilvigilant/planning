@@ -14,9 +14,63 @@ $stmt->execute([$id]);
 $a = $stmt->fetch();
 if (!$a) { flash('danger', 'Agent introuvable.'); header('Location: index.php'); exit; }
 
-define('SKILL_SCRIPTS', 'C:\\Users\\admin\\.claude\\skills\\contrat-analyzer-skill\\scripts\\');
+define('SKILL_SCRIPTS',    'C:\\Users\\admin\\.claude\\skills\\contrat-analyzer-skill\\scripts\\');
+define('SKILL_MD_PATH',    'C:\\Users\\admin\\.claude\\skills\\contrat-analyzer-skill\\SKILL.md');
+define('CREDENTIALS_PATH', 'C:\\Users\\admin\\.claude\\.credentials.json');
 // Chemin complet Python (Apache n'a pas forcément le PATH utilisateur)
 define('PYTHON_BIN', 'C:\\Users\\admin\\AppData\\Local\\Python\\bin\\python.exe');
+
+function getAnthropicToken(): ?string {
+    if (!file_exists(CREDENTIALS_PATH)) return null;
+    $creds = json_decode(file_get_contents(CREDENTIALS_PATH), true);
+    return $creds['claudeAiOauth']['accessToken'] ?? null;
+}
+
+function getSkillSystemPrompt(): string {
+    if (!file_exists(SKILL_MD_PATH)) return '';
+    $content = file_get_contents(SKILL_MD_PATH);
+    // Supprimer le frontmatter YAML (--- ... ---)
+    $content = preg_replace('/^---\s*\n.*?\n---\s*\n/s', '', $content);
+    return trim($content);
+}
+
+function callAnthropicApi(string $token, string $systemPrompt, string $userMessage): array {
+    $payload = json_encode([
+        'model'      => 'claude-sonnet-4-6',
+        'max_tokens' => 4096,
+        'system'     => $systemPrompt,
+        'messages'   => [['role' => 'user', 'content' => $userMessage]],
+    ], JSON_UNESCAPED_UNICODE);
+
+    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_TIMEOUT        => 120,
+        CURLOPT_HTTPHEADER     => [
+            'Content-Type: application/json',
+            'x-api-key: ' . $token,
+            'anthropic-version: 2023-06-01',
+        ],
+    ]);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+    curl_close($ch);
+
+    if ($curlErr)      return ['ok' => false, 'error' => 'cURL : ' . $curlErr];
+    if (!$response)    return ['ok' => false, 'error' => 'Aucune réponse du serveur'];
+
+    $data = json_decode($response, true);
+    if ($httpCode !== 200) {
+        $msg = $data['error']['message'] ?? $response;
+        return ['ok' => false, 'error' => "API ($httpCode) : $msg"];
+    }
+
+    $text = $data['content'][0]['text'] ?? '';
+    return ['ok' => true, 'result' => $text];
+}
 
 // Force Python à sortir en UTF-8 (évite le problème d'encodage Windows cp1252)
 putenv('PYTHONIOENCODING=utf-8');
@@ -89,6 +143,23 @@ if (($_POST['action'] ?? '') === 'calcul_ccn') {
 
     $result = runPython($cmd);
     jsonOut(['ok' => true, 'result' => $result]);
+    exit;
+}
+
+// ── AJAX : analyse 4 experts via Claude API ───────────────────────────────────
+if (($_POST['action'] ?? '') === 'analyse_experts') {
+    $text = trim($_POST['contract_text'] ?? '');
+    if (!$text) { jsonOut(['ok' => false, 'error' => 'Texte vide']); exit; }
+
+    $token = getAnthropicToken();
+    if (!$token) { jsonOut(['ok' => false, 'error' => 'Token Anthropic introuvable (~/.claude/.credentials.json)']); exit; }
+
+    $systemPrompt = getSkillSystemPrompt();
+    if (!$systemPrompt) { jsonOut(['ok' => false, 'error' => 'SKILL.md introuvable']); exit; }
+
+    $userMsg = "Voici le contrat à analyser. Applique les 8 étapes du processus d'analyse complet.\n\n---\n\n" . $text;
+    $result  = callAnthropicApi($token, $systemPrompt, $userMsg);
+    jsonOut($result);
     exit;
 }
 
@@ -199,6 +270,11 @@ require_once __DIR__ . '/../../includes/header.php';
     <li class="nav-item" role="presentation">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-calculateur" type="button">
             <i class="fa fa-calculator me-1"></i>Calculateur CCN 1351
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-experts" type="button">
+            <i class="fa fa-users me-1"></i>Analyse 4 experts <span class="badge ms-1" style="background:var(--ov-gold);color:#000;font-size:9px">Claude</span>
         </button>
     </li>
     <li class="nav-item" role="presentation">
@@ -346,7 +422,61 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<!-- ══════════════ TAB 3 : À PROPOS ══════════════ -->
+<!-- ══════════════ TAB 3 : ANALYSE 4 EXPERTS ══════════════ -->
+<div class="tab-pane fade" id="tab-experts" role="tabpanel">
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="ov-card">
+                <div class="ov-card-body">
+                    <h6 class="mb-3"><i class="fa fa-users me-1 text-muted"></i>Panel d'experts</h6>
+                    <div class="d-flex flex-column gap-2 mb-4">
+                        <div class="p-2 rounded small" style="background:rgba(239,68,68,0.08);border-left:3px solid #ef4444">
+                            <span class="fw-bold" style="color:#ef4444">⚖️ URSSAF</span><br>
+                            <span class="text-muted">Cotisations, Fillon, DPAE, primes non déclarées</span>
+                        </div>
+                        <div class="p-2 rounded small" style="background:rgba(249,115,22,0.08);border-left:3px solid #f97316">
+                            <span class="fw-bold" style="color:#f97316">🏛️ Juriste</span><br>
+                            <span class="text-muted">Conformité CCN 1351, CNAPS, clauses, période d'essai</span>
+                        </div>
+                        <div class="p-2 rounded small" style="background:rgba(139,92,246,0.08);border-left:3px solid #8b5cf6">
+                            <span class="fw-bold" style="color:#8b5cf6">🛡️ Pôle Social</span><br>
+                            <span class="text-muted">Prévoyance, mutuelle, CPF, portabilité</span>
+                        </div>
+                        <div class="p-2 rounded small" style="background:rgba(16,185,129,0.08);border-left:3px solid #10b981">
+                            <span class="fw-bold" style="color:#10b981">🧮 Expert-Comptable</span><br>
+                            <span class="text-muted">Recalcul salaire, HS, primes, cotisations, écarts</span>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning py-2 small mb-3">
+                        <i class="fa fa-clock me-1"></i>Durée : <strong>20 à 40 secondes</strong> (analyse approfondie via Claude API)
+                    </div>
+                    <button class="btn btn-ov-primary w-100" id="btnExperts" onclick="runExpertsAnalysis()">
+                        <i class="fa fa-wand-magic-sparkles me-1"></i>Lancer l'analyse complète
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-8">
+            <div class="ov-card h-100">
+                <div class="ov-card-body">
+                    <h6 class="mb-3"><i class="fa fa-file-invoice me-1 text-muted"></i>Rapport complet</h6>
+                    <div id="expertsLoading" class="d-none text-center py-5">
+                        <div class="spinner-border" style="color:var(--ov-gold);width:2.5rem;height:2.5rem" role="status"></div>
+                        <div class="mt-3 fw-semibold">4 experts analysent le contrat…</div>
+                        <div class="text-muted small mt-1">URSSAF · Juriste · Pôle Social · Expert-Comptable</div>
+                    </div>
+                    <div id="expertsEmpty" class="text-center py-5 text-muted">
+                        <i class="fa fa-users fa-3x mb-3 d-block" style="opacity:.15"></i>
+                        Cliquez sur "Lancer l'analyse complète" pour activer le panel d'experts
+                    </div>
+                    <div id="expertsResult" class="d-none" style="max-height:560px;overflow-y:auto"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════ TAB 4 : À PROPOS ══════════════ -->
 <div class="tab-pane fade" id="tab-about" role="tabpanel">
     <div class="ov-card">
         <div class="ov-card-body">
@@ -421,6 +551,71 @@ document.getElementById('calcType').addEventListener('change', function() {
 // Init
 if (document.getElementById('calcType').value === 'CDD') {
     document.getElementById('blockCdd').style.display = 'block';
+}
+
+function runExpertsAnalysis() {
+    // Récupère le texte depuis l'onglet 1 (pré-analyse)
+    var text = document.getElementById('contractText').value.trim();
+    if (!text) { alert('Le texte du contrat est vide. Allez d\'abord sur l\'onglet "Analyse structurelle".'); return; }
+    document.getElementById('expertsEmpty').classList.add('d-none');
+    document.getElementById('expertsResult').classList.add('d-none');
+    document.getElementById('expertsLoading').classList.remove('d-none');
+    document.getElementById('btnExperts').disabled = true;
+
+    var fd = new FormData();
+    fd.append('action', 'analyse_experts');
+    fd.append('contract_text', text);
+
+    fetch('analyse_contrat.php?id=<?= $id ?>', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('expertsLoading').classList.add('d-none');
+            document.getElementById('btnExperts').disabled = false;
+            if (data.ok) {
+                document.getElementById('expertsResult').innerHTML = markdownToHtml(data.result);
+                document.getElementById('expertsResult').classList.remove('d-none');
+            } else {
+                alert('Erreur : ' + (data.error || 'inconnue'));
+                document.getElementById('expertsEmpty').classList.remove('d-none');
+            }
+        })
+        .catch(e => {
+            document.getElementById('expertsLoading').classList.add('d-none');
+            document.getElementById('btnExperts').disabled = false;
+            document.getElementById('expertsEmpty').classList.remove('d-none');
+            alert('Erreur réseau : ' + e.message);
+        });
+}
+
+function markdownToHtml(md) {
+    // Conversion Markdown basique vers HTML lisible
+    return md
+        // Titres
+        .replace(/^### (.+)$/gm, '<h5 class="mt-3 mb-2">$1</h5>')
+        .replace(/^## (.+)$/gm,  '<h4 class="mt-4 mb-2 border-bottom pb-1">$1</h4>')
+        .replace(/^# (.+)$/gm,   '<h3 class="mt-4 mb-2">$1</h3>')
+        // Blocs de code (```)
+        .replace(/```[\w]*\n([\s\S]*?)```/gm, '<pre class="result-terminal mt-2">$1</pre>')
+        // Gras
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        // Italique
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Lignes séparatrices
+        .replace(/^={3,}$/gm, '<hr>')
+        .replace(/^-{3,}$/gm, '<hr class="my-1">')
+        // Listes à puces
+        .replace(/^\s*[-*•] (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul class="mb-2">$&</ul>')
+        // Emojis + badges d'alerte
+        .replace(/(🔴\s*\S+-CRITIQUE[^\n]*)/g, '<span class="badge bg-danger me-1">$1</span>')
+        .replace(/(🟠\s*\S+-MAJEUR[^\n]*)/g,   '<span class="badge bg-warning text-dark me-1">$1</span>')
+        .replace(/(🟡\s*\S+-VIGILANCE[^\n]*)/g,'<span class="badge bg-info text-dark me-1">$1</span>')
+        .replace(/(✅[^\n]+)/g, '<span class="text-success">$1</span>')
+        // Sauts de ligne
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g,   '<br>')
+        .replace(/^/, '<p>')
+        .replace(/$/, '</p>');
 }
 
 function runPreanalyse() {
