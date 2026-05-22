@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../includes/contrat_builder.php';
+require_once __DIR__ . '/../../includes/analyse_securite.php';
 requireLogin();
 requirePerm('agents', 'view');
 
@@ -14,11 +15,9 @@ $stmt->execute([$id]);
 $a = $stmt->fetch();
 if (!$a) { flash('danger', 'Agent introuvable.'); header('Location: index.php'); exit; }
 
-define('SKILL_SCRIPTS',    'C:\\Users\\admin\\.claude\\skills\\contrat-analyzer-skill\\scripts\\');
+// Chemins pour l'onglet "4 experts" (Claude API)
 define('SKILL_MD_PATH',    'C:\\Users\\admin\\.claude\\skills\\contrat-analyzer-skill\\SKILL.md');
 define('CREDENTIALS_PATH', 'C:\\Users\\admin\\.claude\\.credentials.json');
-// Chemin complet Python (Apache n'a pas forcément le PATH utilisateur)
-define('PYTHON_BIN', 'C:\\Users\\admin\\AppData\\Local\\Python\\bin\\python.exe');
 
 function getAnthropicToken(): ?string {
     if (!file_exists(CREDENTIALS_PATH)) return null;
@@ -101,47 +100,29 @@ function jsonOut(array $data): void {
     echo $json;
 }
 
-// ── AJAX : pré-analyse structurelle ──────────────────────────────────────────
+// ── AJAX : pré-analyse structurelle (PHP pur) ────────────────────────────────
 if (($_POST['action'] ?? '') === 'run_preanalyse') {
     $text = trim($_POST['contract_text'] ?? '');
     if (!$text) { jsonOut(['ok' => false, 'error' => 'Texte vide']); exit; }
-    $tmp = tempnam(sys_get_temp_dir(), 'ov_ca_');
-    file_put_contents($tmp, $text, LOCK_EX);
-    $script = SKILL_SCRIPTS . 'analyze_contract.py';
-    $result = runPython(escapeshellarg(PYTHON_BIN) . ' ' . escapeshellarg($script) . ' ' . escapeshellarg($tmp) . ' --ccn 1351 2>&1');
-    @unlink($tmp);
-    jsonOut(['ok' => true, 'result' => $result]);
+    jsonOut(['ok' => true, 'result' => analyseStructurelle($text)]);
     exit;
 }
 
-// ── AJAX : calculateur CCN 1351 ───────────────────────────────────────────────
+// ── AJAX : calculateur CCN 1351 (PHP pur) ────────────────────────────────────
 if (($_POST['action'] ?? '') === 'calcul_ccn') {
-    $salaire    = (float)($_POST['salaire']    ?? 0);
-    $coeff      = (int)  ($_POST['coeff']      ?? 150);
-    $heures     = (float)($_POST['heures']     ?? 151.67);
-    $nuit       = (float)($_POST['nuit']       ?? 0);
-    $dimanche   = (float)($_POST['dimanche']   ?? 0);
-    $anciennete = (float)($_POST['anciennete'] ?? 0);
-    $type       = in_array($_POST['type'] ?? '', ['CDI','CDD']) ? $_POST['type'] : 'CDI';
-    $totalCdd   = (float)($_POST['total_cdd']  ?? 0);
-    $tauxHs     = (float)($_POST['taux_hs']    ?? 0);
-
+    $salaire = (float)($_POST['salaire'] ?? 0);
     if ($salaire <= 0) { jsonOut(['ok' => false, 'error' => 'Salaire requis']); exit; }
-
-    $script = SKILL_SCRIPTS . 'calculs_securite.py';
-    $cmd    = escapeshellarg(PYTHON_BIN) . ' ' . escapeshellarg($script)
-            . ' --salaire '  . $salaire
-            . ' --coeff '    . $coeff
-            . ' --heures '   . $heures
-            . ' --type '     . escapeshellarg($type);
-    if ($nuit > 0)       $cmd .= ' --nuit '       . $nuit;
-    if ($dimanche > 0)   $cmd .= ' --dimanche '   . $dimanche;
-    if ($anciennete > 0) $cmd .= ' --anciennete ' . $anciennete;
-    if ($totalCdd > 0)   $cmd .= ' --total-cdd '  . $totalCdd;
-    if ($tauxHs > 0)     $cmd .= ' --taux-hs '    . $tauxHs;
-    $cmd .= ' 2>&1';
-
-    $result = runPython($cmd);
+    $result = calculCCN1351([
+        'salaire'    => $salaire,
+        'coeff'      => (int)  ($_POST['coeff']      ?? 150),
+        'heures'     => (float)($_POST['heures']     ?? 151.67),
+        'nuit'       => (float)($_POST['nuit']       ?? 0),
+        'dimanche'   => (float)($_POST['dimanche']   ?? 0),
+        'anciennete' => (float)($_POST['anciennete'] ?? 0),
+        'type'       => in_array($_POST['type'] ?? '', ['CDI','CDD']) ? $_POST['type'] : 'CDI',
+        'total_cdd'  => (float)($_POST['total_cdd']  ?? 0),
+        'taux_hs'    => ($_POST['taux_hs'] ?? '') !== '' ? (float)$_POST['taux_hs'] : null,
+    ]);
     jsonOut(['ok' => true, 'result' => $result]);
     exit;
 }
