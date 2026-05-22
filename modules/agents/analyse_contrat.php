@@ -148,8 +148,40 @@ if (($_POST['action'] ?? '') === 'analyse_experts') {
 $params = getAllParams();
 
 $salaireHoraire = (float)($a['remuneration'] ?? 12.70);
-$salaireMensuel = round($salaireHoraire * 151.67, 2);
 $typeContrat    = $a['type_contrat'] ?? 'CDD';
+
+// Heures réelles depuis le planning pour la période du contrat
+$totalHeuresPlanning = 0;
+$heuresNuitPlanning  = 0;
+$heuresDimPlanning   = 0;
+if ($a['date_debut_contrat'] && $a['date_fin_contrat']) {
+    $stmt = $db->prepare("
+        SELECT
+            COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche
+                       + pl.min_ferie_normal + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS total_min,
+            COALESCE(SUM(pl.min_nuit + pl.min_ferie_nuit), 0)    AS nuit_min,
+            COALESCE(SUM(pl.min_dimanche + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS dim_min
+        FROM planning_lignes pl
+        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+        WHERE pl.agent_id = ? AND pl.date_travail BETWEEN ? AND ?
+    ");
+    $stmt->execute([$id, $a['date_debut_contrat'], $a['date_fin_contrat']]);
+    $row = $stmt->fetch();
+    $totalHeuresPlanning = $row['total_min'] > 0 ? round($row['total_min'] / 60, 2) : 0;
+    $heuresNuitPlanning  = $row['nuit_min']  > 0 ? round($row['nuit_min']  / 60, 2) : 0;
+    $heuresDimPlanning   = $row['dim_min']   > 0 ? round($row['dim_min']   / 60, 2) : 0;
+}
+// Si heures planning disponibles, utiliser le total contrat ; sinon mensuel théorique
+$calcHeures  = $totalHeuresPlanning > 0 ? $totalHeuresPlanning : 151.67;
+$calcSalaire = round($salaireHoraire * $calcHeures, 2);
+$calcSource  = $totalHeuresPlanning > 0 ? 'planning (' . $a['date_debut_contrat'] . ' → ' . $a['date_fin_contrat'] . ')' : 'valeur théorique 35h/sem';
+
+// Extraire le coefficient de la catégorie ou du champ poste
+$calcCoeffDefault = 150;
+$categorieStr = $a['categorie_emploi'] ?? $a['poste'] ?? '';
+if (preg_match('/[Cc]oefficient\s*(\d{3})/i', $categorieStr, $mCoeff)) {
+    $calcCoeffDefault = (int)$mCoeff[1];
+}
 
 $defaultData = [
     'civilite'             => 'M.',
@@ -310,16 +342,19 @@ require_once __DIR__ . '/../../includes/header.php';
                     <h6 class="mb-3"><i class="fa fa-sliders me-1 text-muted"></i>Paramètres</h6>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small">Salaire brut mensuel (€) <span class="text-danger">*</span></label>
-                        <input type="number" id="calcSalaire" class="form-control" step="0.01" value="<?= h(number_format($salaireMensuel, 2, '.', '')) ?>" min="1">
-                        <div class="form-text">Taux horaire : <?= h(number_format($salaireHoraire, 2, ',', ' ')) ?> €/h</div>
+                        <label class="form-label fw-semibold small">Salaire brut total (€) <span class="text-danger">*</span></label>
+                        <input type="number" id="calcSalaire" class="form-control" step="0.01" value="<?= h(number_format($calcSalaire, 2, '.', '')) ?>" min="1">
+                        <div class="form-text">
+                            Taux horaire : <?= h(number_format($salaireHoraire, 2, ',', ' ')) ?> €/h —
+                            Source : <em><?= h($calcSource) ?></em>
+                        </div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold small">Coefficient CCN 1351 <span class="text-danger">*</span></label>
                         <select id="calcCoeff" class="form-select">
-                            <option value="140">140 — APS sans expérience</option>
-                            <option value="150" selected>150 — APS (TFP ou 6 mois exp.)</option>
+                            <option value="140" <?= $calcCoeffDefault===140?'selected':'' ?>>140 — APS sans expérience</option>
+                            <option value="150" <?= $calcCoeffDefault===150?'selected':'' ?>>150 — APS (TFP ou 6 mois exp.)</option>
                             <option value="160">160 — APS expérimenté / Adj. CP</option>
                             <option value="170">170 — Chef de poste</option>
                             <option value="175">175 — Chef de poste exp.</option>
@@ -334,15 +369,15 @@ require_once __DIR__ . '/../../includes/header.php';
 
                     <div class="row g-2 mb-3">
                         <div class="col-6">
-                            <label class="form-label fw-semibold small">Heures / mois <span class="text-danger">*</span></label>
-                            <input type="number" id="calcHeures" class="form-control" step="0.5" value="151.67" min="1">
-                            <div class="form-text">151,67 = 35h/sem</div>
+                            <label class="form-label fw-semibold small">Heures (contrat ou mois) <span class="text-danger">*</span></label>
+                            <input type="number" id="calcHeures" class="form-control" step="0.5" value="<?= h($calcHeures) ?>" min="1">
+                            <div class="form-text"><?= $totalHeuresPlanning > 0 ? 'Heures planning' : '151,67 = 35h/sem' ?></div>
                         </div>
                         <div class="col-6">
                             <label class="form-label fw-semibold small">Type de contrat</label>
                             <select id="calcType" class="form-select">
-                                <option value="CDI">CDI</option>
-                                <option value="CDD" <?= $typeContrat === 'CDD' ? 'selected' : '' ?>>CDD</option>
+                                <option value="CDI" <?= !in_array($typeContrat,['CDD','CDD Usage','Saisonnier'])?'selected':'' ?>>CDI</option>
+                                <option value="CDD" <?= in_array($typeContrat,['CDD','CDD Usage','Saisonnier'])?'selected':'' ?>>CDD</option>
                             </select>
                         </div>
                     </div>
@@ -357,11 +392,11 @@ require_once __DIR__ . '/../../includes/header.php';
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label small">Nuit (21h–6h)</label>
-                            <input type="number" id="calcNuit" class="form-control form-control-sm" step="0.5" value="0" min="0">
+                            <input type="number" id="calcNuit" class="form-control form-control-sm" step="0.5" value="<?= $heuresNuitPlanning ?>" min="0">
                         </div>
                         <div class="col-6">
                             <label class="form-label small">Dimanche</label>
-                            <input type="number" id="calcDimanche" class="form-control form-control-sm" step="0.5" value="0" min="0">
+                            <input type="number" id="calcDimanche" class="form-control form-control-sm" step="0.5" value="<?= $heuresDimPlanning ?>" min="0">
                         </div>
                     </div>
 
@@ -374,7 +409,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
                     <div class="mb-3" id="blockCdd" style="display:none">
                         <label class="form-label small">Rémunération totale brute CDD (€) — pour prime précarité</label>
-                        <input type="number" id="calcTotalCdd" class="form-control form-control-sm" step="0.01" value="" min="0">
+                        <input type="number" id="calcTotalCdd" class="form-control form-control-sm" step="0.01" value="<?= in_array($typeContrat,['CDD','CDD Usage','Saisonnier']) ? h($calcSalaire) : '' ?>" min="0">
                     </div>
 
                     <button class="btn btn-ov-primary w-100" id="btnCalcCcn" onclick="runCalculCCN()">

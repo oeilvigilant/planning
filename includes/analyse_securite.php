@@ -97,6 +97,94 @@ function analyseStructurelle(string $text): string {
     $out[] = '📚 Référentiel CCN : IDCC 1351 — Prévention et Sécurité';
     $out[] = '';
 
+    // ── 0. Valeurs extraites du texte ─────────────────────────────────────────
+    $out[] = as_sep('-');
+    $out[] = '   📊 VALEURS EXTRAITES DU CONTRAT';
+    $out[] = as_sep('-');
+
+    // Type de contrat
+    $typeDetecte = '⚠️  Non détecté';
+    if (preg_match('/\b(contrat\s+)?CDD\s+d[\'' ]?usage\b/i', $text)) $typeDetecte = 'CDD d\'Usage ✅';
+    elseif (preg_match('/\b(contrat\s+[àa]\s+dur[ée]{1,2}e?\s+)?d[ée]termin[ée]e?\b/i', $text)) $typeDetecte = 'CDD ✅';
+    elseif (preg_match('/\b(contrat\s+[àa]\s+dur[ée]{1,2}e?\s+)?ind[ée]termin[ée]e?\b/i', $text)) $typeDetecte = 'CDI ✅';
+    elseif (preg_match('/\bCDI\b/', $text)) $typeDetecte = 'CDI ✅';
+    elseif (preg_match('/\bCDD\b/', $text)) $typeDetecte = 'CDD ✅';
+    $out[] = '  Type de contrat      : ' . $typeDetecte;
+
+    // Dates du contrat
+    $datesDetectees = '⚠️  Non détectées';
+    if (preg_match('/du\s+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})\s+au\s+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i', $text, $m)) {
+        $datesDetectees = $m[1] . ' → ' . $m[2] . ' ✅';
+    } elseif (preg_match('/[àa]\s+compter\s+du\s+(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i', $text, $m)) {
+        $datesDetectees = 'À compter du ' . $m[1] . ' ✅';
+    }
+    $out[] = '  Période              : ' . $datesDetectees;
+
+    // Période d'essai
+    $peDetectee = '⚠️  Non détectée';
+    if (preg_match('/p[eé]riode\s+d[\'']essai\s+de\s+(\d+)\s*(jours?|semaines?|mois)/i', $text, $m)) {
+        $peDetectee = $m[1] . ' ' . $m[2] . ' ✅';
+    } elseif (preg_match('/(\d+)\s*(jours?\s+travaill[ée]s?)/i', $text, $m) && str_contains(as_norm($text), 'essai')) {
+        $peDetectee = $m[1] . ' ' . $m[2] . ' ✅';
+    } elseif (str_contains($n, 'pas de periode d essai') || str_contains($n, 'sans periode d essai') || str_contains($n, '0 jour')) {
+        $peDetectee = 'Aucune (contrat < 7 jours) ✅';
+    }
+    $out[] = '  Période d\'essai      : ' . $peDetectee;
+
+    // Taux horaire / salaire
+    $salaireDetecte = '⚠️  Non détecté';
+    if (preg_match('/(\d{1,2}[,\.]\d{2})\s*[€E]?\s*(?:\/h|par\s+heure|horaire)/i', $text, $m)) {
+        $salaireDetecte = str_replace('.', ',', $m[1]) . ' €/h ✅';
+    }
+    $out[] = '  Taux horaire         : ' . $salaireDetecte;
+
+    // Total heures contrat
+    $totalHDetecte = '⚠️  Non détecté';
+    if (preg_match('/(\d+(?:[,\.]\d+)?)\s*heures?\s+(?:pour|globale|total|sur\s+la\s+p[eé]riode)/i', $text, $m)) {
+        $totalHDetecte = str_replace('.', ',', $m[1]) . ' h ✅';
+    } elseif (preg_match('/dur[ée]e?\s+globale\s+de\s+travail.*?(\d+(?:[,\.]\d+)?)\s*heures?/i', $text, $m)) {
+        $totalHDetecte = str_replace('.', ',', $m[1]) . ' h ✅';
+    }
+    $out[] = '  Total heures contrat : ' . $totalHDetecte;
+
+    // Coefficient / classification
+    $coeffDetecte = '⚠️  Non détecté';
+    if (preg_match('/[Cc]oefficient\s+(\d{3})/i', $text, $m)) {
+        $coeffDetecte = $m[1];
+        $ccnInfo = as_ccnMin((int)$m[1]);
+        $coeffDetecte .= ' — ' . $ccnInfo['label'] . ' ✅';
+    } elseif (preg_match('/[Cc]oeff\.?\s*:?\s*(\d{3})/i', $text, $m)) {
+        $coeffDetecte = $m[1] . ' ✅';
+    }
+    $out[] = '  Coefficient CCN      : ' . $coeffDetecte;
+
+    // Qualification
+    $qualifDetectee = '⚠️  Non détectée';
+    if (preg_match('/\b(SSIAP\s*\d?|APS|Agent\s+de\s+(?:pr[ée]vention|s[ée]curit[ée])|Chef\s+de\s+poste|Chef\s+de\s+site|Agent\s+cynophile|Rondier)\b/i', $text, $m)) {
+        $qualifDetectee = $m[1] . ' ✅';
+    }
+    $out[] = '  Qualification        : ' . $qualifDetectee;
+
+    // CNAPS
+    $cnapsDetecte = '⚠️  Absent du texte';
+    if (preg_match('/[A-Z]{3}-\d{3}-\d{3}-\d{3}/i', $text, $m)) {
+        $cnapsDetecte = $m[0] . ' ✅';
+    } elseif (str_contains($n, 'cnaps') || str_contains($n, 'carte professionnelle')) {
+        $cnapsDetecte = 'Mentionné ✅ (numéro à vérifier)';
+    }
+    $out[] = '  N° autorisation CNAPS: ' . $cnapsDetecte;
+
+    // Lieu / site
+    $lieuDetecte = '⚠️  Non détecté';
+    if (preg_match('/[Ll]ieu\s+de\s+travail\s*[:\.]\s*(.{3,60}?)(?:\n|\.)/s', $text, $m)) {
+        $lieuDetecte = trim($m[1]) . ' ✅';
+    } elseif (preg_match('/[Ss]ite\s+d\'affectation\s*[:\.]\s*(.{3,60}?)(?:\n|\.)/s', $text, $m)) {
+        $lieuDetecte = trim($m[1]) . ' ✅';
+    }
+    $out[] = '  Lieu / site          : ' . $lieuDetecte;
+
+    $out[] = '';
+
     // ── 1. Mentions obligatoires ──────────────────────────────────────────────
     $mentions = [
         'Identité des parties'          => ['employeur','salarie','societe','siret','siren','rcs','sas','sarl',' sa ','m.','mme'],
@@ -256,13 +344,23 @@ function calculCCN1351(array $p): string {
     $out[] = '';
     $out[] = '📋 DONNÉES DU CONTRAT ANALYSÉ';
     $out[] = $sep;
-    $out[] = '  Salaire brut mensuel     : ' . number_format($salaire, 2, ',', ' ') . ' €';
+    $contratCourt = $heures < AS_HEURES_LEGALES; // CDD court ou temps partiel
+    $modeLabel    = $contratCourt
+        ? '(total contrat ou période — pas mensuel)'
+        : '(mensuel — 35h/semaine)';
+
+    $out[] = '  Salaire brut             : ' . number_format($salaire, 2, ',', ' ') . ' € ' . $modeLabel;
     $out[] = '  Coefficient CCN          : ' . $coeff;
     $out[] = '  Qualification            : ' . $ccnInfo['label'];
-    $out[] = '  Heures mensuelles        : ' . number_format($heures, 2, ',', ' ') . ' h';
+    $out[] = '  Heures contractuelles    : ' . number_format($heures, 2, ',', ' ') . ' h ' . $modeLabel;
     $out[] = '  Taux horaire calculé     : ' . number_format($tauxHoraire, 4, ',', ' ') . ' €/h';
     $out[] = '  Type de contrat          : ' . $type;
     if ($anciennete > 0) $out[] = '  Ancienneté               : ' . $anciennete . ' an(s)';
+    if ($contratCourt) {
+        $out[] = '';
+        $out[] = '  ℹ️  Contrat court / temps partiel détecté (' . number_format($heures, 2, ',', ' ') . ' h < 151,67 h)';
+        $out[] = '     Vérification basée sur le taux horaire — pas sur le salaire mensuel brut.';
+    }
 
     // ── Conformité SMIC ────────────────────────────────────────────────────────
     $out[] = '';
@@ -271,30 +369,56 @@ function calculCCN1351(array $p): string {
     $out[] = $SEP;
     $out[] = '';
 
-    $smicOk = $salaire >= AS_SMIC_MENSUEL;
-    $out[] = ($smicOk ? '  ✅' : '  🔴') . ' SMIC mensuel (' . number_format(AS_SMIC_MENSUEL, 2, ',', ' ') . ' €)';
-    if (!$smicOk) {
-        $ecart = AS_SMIC_MENSUEL - $salaire;
-        $out[]    = '     → Écart : ' . number_format($ecart, 2, ',', ' ') . ' € manquants';
-        $alertes[] = ['CRITIQUE','COMPTA','Salaire inférieur au SMIC',
-            'Salaire ' . number_format($salaire, 2) . '€ < SMIC ' . number_format(AS_SMIC_MENSUEL, 2) . '€',
-            $ecart, 'Porter le salaire à ' . number_format(AS_SMIC_MENSUEL, 2) . ' €/mois minimum'];
-    }
+    if ($contratCourt) {
+        // Pour un contrat court : vérifier le taux horaire vs SMIC horaire uniquement
+        $thSmicOk = $tauxHoraire >= AS_SMIC_HORAIRE;
+        $out[] = ($thSmicOk ? '  ✅' : '  🔴') . ' Taux horaire ≥ SMIC horaire (' . AS_SMIC_HORAIRE . ' €/h)';
+        if (!$thSmicOk) {
+            $ecartH = AS_SMIC_HORAIRE - $tauxHoraire;
+            $alertes[] = ['CRITIQUE','COMPTA','Taux horaire inférieur au SMIC',
+                'Taux ' . number_format($tauxHoraire, 4) . ' €/h < SMIC horaire ' . AS_SMIC_HORAIRE . ' €/h',
+                round($ecartH * $heures, 2), 'Porter le taux à ' . AS_SMIC_HORAIRE . ' €/h minimum'];
+        }
+        // Vérifier aussi le taux horaire vs minimum CCN
+        $minCCN      = $ccnInfo['min'];
+        $thMinCCN    = $minCCN / AS_HEURES_LEGALES;
+        $thCcnOk     = $tauxHoraire >= $thMinCCN;
+        $out[] = ($thCcnOk ? '  ✅' : '  🔴') . ' Taux horaire ≥ minimum CCN coeff ' . $coeff . ' (' . number_format($thMinCCN, 4, ',', ' ') . ' €/h)';
+        if (!$thCcnOk) {
+            $ecartH = $thMinCCN - $tauxHoraire;
+            $alertes[] = ['CRITIQUE','COMPTA','Taux horaire inférieur au minimum CCN 1351',
+                'Taux ' . number_format($tauxHoraire, 4) . ' €/h < minimum CCN coeff ' . $coeff . ' (' . number_format($thMinCCN, 4) . ' €/h)',
+                round($ecartH * $heures, 2), 'Porter le taux horaire à ' . number_format($thMinCCN, 4) . ' €/h minimum'];
+        }
+        $out[] = '  ℹ️  Salaire total contrat : ' . number_format($salaire, 2, ',', ' ') . ' € (pour ' . number_format($heures, 2, ',', ' ') . ' h)';
+    } else {
+        // Contrat temps plein mensuel : vérifier le salaire mensuel
+        $smicOk = $salaire >= AS_SMIC_MENSUEL;
+        $out[] = ($smicOk ? '  ✅' : '  🔴') . ' SMIC mensuel (' . number_format(AS_SMIC_MENSUEL, 2, ',', ' ') . ' €)';
+        if (!$smicOk) {
+            $ecart = AS_SMIC_MENSUEL - $salaire;
+            $out[]    = '     → Écart : ' . number_format($ecart, 2, ',', ' ') . ' € manquants';
+            $alertes[] = ['CRITIQUE','COMPTA','Salaire inférieur au SMIC',
+                'Salaire ' . number_format($salaire, 2) . '€ < SMIC ' . number_format(AS_SMIC_MENSUEL, 2) . '€',
+                $ecart, 'Porter le salaire à ' . number_format(AS_SMIC_MENSUEL, 2) . ' €/mois minimum'];
+        }
 
-    // ── Minimum CCN ────────────────────────────────────────────────────────────
-    $minCCN  = $ccnInfo['min'];
-    $ccnOk   = $salaire >= $minCCN;
-    $out[] = ($ccnOk ? '  ✅' : '  🔴') . ' Minimum CCN coeff ' . $coeff . ' (' . number_format($minCCN, 2, ',', ' ') . ' €)';
-    if (!$ccnOk) {
-        $ecart = $minCCN - $salaire;
-        $out[]    = '     → Écart : ' . number_format($ecart, 2, ',', ' ') . ' € manquants';
-        $alertes[] = ['CRITIQUE','COMPTA','Salaire inférieur au minimum CCN 1351',
-            'Coeff ' . $coeff . ' → minimum ' . number_format($minCCN, 2) . ' € — salaire ' . number_format($salaire, 2) . ' €',
-            $ecart, 'Porter le salaire à ' . number_format($minCCN, 2) . ' €/mois (min CCN coeff ' . $coeff . ')'];
+        $minCCN = $ccnInfo['min'];
+        $ccnOk  = $salaire >= $minCCN;
+        $out[] = ($ccnOk ? '  ✅' : '  🔴') . ' Minimum CCN coeff ' . $coeff . ' (' . number_format($minCCN, 2, ',', ' ') . ' €/mois)';
+        if (!$ccnOk) {
+            $ecart = $minCCN - $salaire;
+            $out[]    = '     → Écart : ' . number_format($ecart, 2, ',', ' ') . ' € manquants';
+            $alertes[] = ['CRITIQUE','COMPTA','Salaire inférieur au minimum CCN 1351',
+                'Coeff ' . $coeff . ' → minimum ' . number_format($minCCN, 2) . ' € — salaire ' . number_format($salaire, 2) . ' €',
+                $ecart, 'Porter le salaire à ' . number_format($minCCN, 2) . ' €/mois (min CCN coeff ' . $coeff . ')'];
+        }
     }
 
     $thOk = $tauxHoraire >= AS_SMIC_HORAIRE;
-    $out[] = ($thOk ? '  ✅' : '  🔴') . ' Taux horaire ≥ SMIC (' . AS_SMIC_HORAIRE . ' €/h)';
+    if (!$contratCourt) {
+        $out[] = ($thOk ? '  ✅' : '  🔴') . ' Taux horaire ≥ SMIC (' . AS_SMIC_HORAIRE . ' €/h)';
+    }
 
     // ── Heures supplémentaires ─────────────────────────────────────────────────
     if ($heures > AS_HEURES_LEGALES) {
