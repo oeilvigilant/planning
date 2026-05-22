@@ -64,7 +64,14 @@ function callAnthropicApi(string $token, string $systemPrompt, string $userMessa
 
     $data = json_decode($response, true);
     if ($httpCode !== 200) {
-        $msg = $data['error']['message'] ?? $response;
+        if ($httpCode === 429) {
+            return ['ok' => false, 'error' => "Limite d'utilisation atteinte (429 rate limit). Le token OAuth Claude Code est soumis à des quotas stricts pour l'API directe. Ajoutez une clé API Anthropic (sk-ant-api...) dans Paramètres → API pour lever cette restriction."];
+        }
+        if (is_array($data)) {
+            $msg = $data['error']['message'] ?? (is_string($data['error'] ?? null) ? $data['error'] : json_encode($data));
+        } else {
+            $msg = substr($response, 0, 300);
+        }
         return ['ok' => false, 'error' => "API ($httpCode) : $msg"];
     }
 

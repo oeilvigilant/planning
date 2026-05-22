@@ -5,6 +5,23 @@
  * Constantes 2025 — mettre à jour annuellement
  */
 
+// Polyfill PHP 7.x → compatible PHP 7.4 (WAMP)
+if (!function_exists('str_contains')) {
+    function str_contains(string $haystack, string $needle): bool {
+        return $needle === '' || strpos($haystack, $needle) !== false;
+    }
+}
+if (!function_exists('str_starts_with')) {
+    function str_starts_with(string $haystack, string $needle): bool {
+        return strncmp($haystack, $needle, strlen($needle)) === 0;
+    }
+}
+if (!function_exists('str_ends_with')) {
+    function str_ends_with(string $haystack, string $needle): bool {
+        return $needle === '' || substr($haystack, -strlen($needle)) === $needle;
+    }
+}
+
 const AS_SMIC_HORAIRE   = 11.88;
 const AS_HEURES_LEGALES = 151.67;
 const AS_SMIC_MENSUEL   = 1801.84;   // 11.88 × 151.67
