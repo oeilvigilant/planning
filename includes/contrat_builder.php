@@ -198,7 +198,19 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     En fonction des nécessités du service, le salarié pourra être amené à effectuer des heures complémentaires. Le volume total de ces heures complémentaires ne pourra en aucun cas excéder le <strong>tiers (1/3)</strong> de la durée globale fixée au présent contrat (Art L3123-28 CT).<br><br>
     L'Employeur s'engage à respecter un délai de prévenance de <strong>7 jours</strong> pour toute modification du planning. En cas de circonstances exceptionnelles (remplacement d'un salarié défaillant, urgence client), ce délai pourra être réduit à moins de 3 jours ouvrés, en contrepartie d'un <strong>repos compensateur équivalent à 10%</strong> des heures effectuées sur la vacation modifiée.<br><br>
     L'amplitude horaire sur laquelle le salarié est susceptible de travailler est comprise entre 00h00 et 23h59.<br><br>
-    En dehors des vacations fixées par le planning qui lui est communiqué, le salarié n'est pas tenu de se tenir à la disposition permanente de l'employeur et peut vaquer librement à ses occupations personnelles.
+
+    <strong>Clause de non-disposition permanente — Protection contre la requalification à temps plein</strong><br>
+    Conformément aux articles <strong>L3121-1</strong> et <strong>L3123-14</strong> du Code du travail, les heures de travail du salarié sont <em>exclusivement</em> celles figurant sur le planning qui lui est communiqué dans les délais prévus ci-dessus. En dehors de ces vacations planifiées, le salarié <strong>n'est en aucun cas tenu de se tenir à la disposition permanente ou partielle de l'Employeur</strong> ; il peut vaquer librement à ses occupations personnelles et organiser son temps comme il l'entend, y compris exercer toute autre activité compatible avec ses obligations légales et conventionnelles.<br><br>
+
+    Il est expressément rappelé que :<br>
+    <ul>
+      <li>Aucun appel, message ou sollicitation de l'Employeur en dehors des vacations planifiées ne crée d'obligation de disponibilité ou de réponse immédiate, sauf situation d'urgence dûment caractérisée ;</li>
+      <li>La variation du nombre d'heures entre plusieurs semaines est inhérente au régime des <em>CDD d'Usage</em> du secteur de la sécurité privée et ne saurait, à elle seule, caractériser un emploi à temps complet ;</li>
+      <li>L'absence de planning préétabli pour une période donnée signifie que le salarié ne travaille pas et n'est soumis à aucune contrainte professionnelle durant cette période ;</li>
+      <li>Les parties reconnaissent expressément que le présent contrat ne constitue pas, ni de fait ni de droit, un emploi à temps complet, et que le salarié ne se trouve pas dans l'impossibilité de prévoir à quel rythme il doit travailler.</li>
+    </ul>
+
+    Toute demande de disponibilité en dehors des vacations planifiées ne peut intervenir qu'avec l'accord <strong>exprès et préalable</strong> du salarié. L'absence de réponse ou le refus d'une telle demande ne saurait constituer une faute ni un motif de sanction disciplinaire (Cass. Soc. 4 déc. 2013, n°12-22.344 ; Cass. Soc. 25 nov. 2020, n°18-24.272).
   </div>
 </div>
 
