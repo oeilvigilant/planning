@@ -16,14 +16,17 @@ $stmt->execute([$id]);
 $a = $stmt->fetch();
 if (!$a) { flash('danger', 'Agent introuvable.'); header('Location: index.php'); exit; }
 
-// Chemins pour l'onglet "4 experts" (Claude API)
-define('SKILL_MD_PATH',    'C:\\Users\\admin\\.claude\\skills\\contrat-analyzer-skill\\SKILL.md');
-define('CREDENTIALS_PATH', 'C:\\Users\\admin\\.claude\\.credentials.json');
+// Chemin du fichier SKILL.md
+define('SKILL_MD_PATH', 'C:\\Users\\admin\\.claude\\skills\\contrat-analyzer-skill\\SKILL.md');
 
-function getAnthropicToken(): ?string {
-    if (!file_exists(CREDENTIALS_PATH)) return null;
-    $creds = json_decode(file_get_contents(CREDENTIALS_PATH), true);
-    return $creds['claudeAiOauth']['accessToken'] ?? null;
+function getAnthropicApiKey(): ?string {
+    // Priorité 1 : clé configurée dans les paramètres de l'application
+    try {
+        $db = getDB();
+        $key = $db->query("SELECT valeur FROM parametres WHERE cle='anthropic_api_key'")->fetchColumn();
+        if ($key && strpos($key, 'sk-ant-api') === 0) return $key;
+    } catch (Exception $e) {}
+    return null;
 }
 
 function getSkillSystemPrompt(): string {
@@ -141,8 +144,8 @@ if (($_POST['action'] ?? '') === 'analyse_experts') {
     $text = trim($_POST['contract_text'] ?? '');
     if (!$text) { jsonOut(['ok' => false, 'error' => 'Texte vide']); exit; }
 
-    $token = getAnthropicToken();
-    if (!$token) { jsonOut(['ok' => false, 'error' => 'Token Anthropic introuvable (~/.claude/.credentials.json)']); exit; }
+    $token = getAnthropicApiKey();
+    if (!$token) { jsonOut(['ok' => false, 'error' => 'Clé API Anthropic non configurée. Allez dans Paramètres → API pour l\'ajouter (sk-ant-api...).']); exit; }
 
     $systemPrompt = getSkillSystemPrompt();
     if (!$systemPrompt) { jsonOut(['ok' => false, 'error' => 'SKILL.md introuvable']); exit; }

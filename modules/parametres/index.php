@@ -139,6 +139,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         flash('success','Champs personnalisés mis à jour.');
         header('Location: index.php?tab=champs-agents'); exit;
     }
+
+    if ($action === 'save_api') {
+        $key = trim($_POST['anthropic_api_key'] ?? '');
+        if ($key && strpos($key, 'sk-ant-api') !== 0) {
+            flash('danger', 'Clé invalide — doit commencer par sk-ant-api...');
+        } else {
+            setParam('anthropic_api_key', $key);
+            flash('success', $key ? 'Clé API Anthropic sauvegardée.' : 'Clé API supprimée.');
+        }
+        header('Location: index.php?tab=api'); exit;
+    }
 }
 
 $pageTitle    = 'Paramètres';
@@ -160,6 +171,7 @@ $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll()
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-carte">Carte agent</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-pdf">PDF comptable</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-champs-agents">Champs agents</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-api">API</a></li>
 </ul>
 
 <div class="tab-content">
@@ -503,6 +515,47 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+</div>
+
+<!-- API -->
+<div class="tab-pane fade" id="tab-api">
+<div class="ov-card">
+  <div class="ov-card-body">
+    <h5 class="mb-3"><i class="fa fa-key me-2 text-warning"></i>Clé API Anthropic</h5>
+    <p class="text-muted small mb-3">
+      Utilisée pour la fonctionnalité <strong>Analyse 4 experts</strong> sur les contrats agents.<br>
+      Obtenez votre clé sur <code>console.anthropic.com</code> → <em>API Keys</em>.<br>
+      Format attendu : <code>sk-ant-api03-...</code>
+    </p>
+    <form method="post">
+      <input type="hidden" name="action" value="save_api">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Clé API Anthropic</label>
+        <?php $apiKey = $params['anthropic_api_key'] ?? ''; ?>
+        <?php if ($apiKey): ?>
+          <div class="alert alert-success py-2 mb-2 small">
+            <i class="fa fa-check-circle me-1"></i>
+            Clé configurée : <code><?= h(substr($apiKey,0,20)) ?>...<?= h(substr($apiKey,-4)) ?></code>
+          </div>
+        <?php else: ?>
+          <div class="alert alert-warning py-2 mb-2 small">
+            <i class="fa fa-exclamation-triangle me-1"></i>
+            Aucune clé configurée — l'analyse 4 experts est désactivée.
+          </div>
+        <?php endif; ?>
+        <input type="password" name="anthropic_api_key" class="form-control font-monospace"
+               placeholder="sk-ant-api03-..."
+               value="<?= h($apiKey) ?>" autocomplete="off">
+        <div class="form-text">Laissez vide pour supprimer la clé.</div>
+      </div>
+      <?php if (canDo('parametres','edit')): ?>
+      <button type="submit" class="btn btn-ov-primary">
+        <i class="fa fa-save me-1"></i>Enregistrer
+      </button>
+      <?php endif; ?>
+    </form>
+  </div>
+</div>
 </div>
 
 </div><!-- /tab-content -->
