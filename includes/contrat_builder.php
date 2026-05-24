@@ -151,7 +151,7 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <?php if ($isCddUsage): ?>
     Il est conclu sur le fondement de l'article L1242-2-3° du Code du travail, le secteur de la sécurité privée étant expressément reconnu comme secteur d'emploi à caractère par nature temporaire par le décret n°2014-714 du 27 juin 2014. Le présent contrat n'est pas soumis à la durée maximale légale applicable aux CDD standard et peut être renouvelé sans limitation du nombre de renouvellements.
     <?php else: ?>
-    Ce contrat est conclu pour faire face à un <strong><?= $e($d['motif_cdd']) ?></strong>. <?= $e($d['description_motif']) ?><br>
+    Ce contrat est conclu pour faire face à un <strong><?= $e($d['motif_cdd']) ?></strong>, <?= $e($d['description_motif']) ?><br>
     Conformément à l'article L1243-13 du Code du travail, la durée totale du présent contrat, renouvellements éventuels inclus, ne peut excéder <strong>18 mois</strong>.
     <?php endif; ?>
     <br><br>
@@ -205,7 +205,7 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     Il est expressément rappelé que :<br>
     <ul>
       <li>Aucun appel, message ou sollicitation de l'Employeur en dehors des vacations planifiées ne crée d'obligation de disponibilité ou de réponse immédiate, sauf situation d'urgence dûment caractérisée ;</li>
-      <li>La variation du nombre d'heures entre plusieurs semaines est inhérente au régime des <em>CDD d'Usage</em> du secteur de la sécurité privée et ne saurait, à elle seule, caractériser un emploi à temps complet ;</li>
+      <li>La variation du nombre d'heures entre plusieurs semaines est inhérente aux contrats à temps partiel dans le secteur de la sécurité privée et ne saurait, à elle seule, caractériser un emploi à temps complet ;</li>
       <li>L'absence de planning préétabli pour une période donnée signifie que le salarié ne travaille pas et n'est soumis à aucune contrainte professionnelle durant cette période ;</li>
       <li>Les parties reconnaissent expressément que le présent contrat ne constitue pas, ni de fait ni de droit, un emploi à temps complet, et que le salarié ne se trouve pas dans l'impossibilité de prévoir à quel rythme il doit travailler.</li>
     </ul>
@@ -222,9 +222,9 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <strong class="highlight"><?= $e($d['salaire_horaire']) ?> €</strong> par heure effective de travail, supérieur au minimum conventionnel applicable au coefficient <?= $e(preg_match('/\d+/', $d['categorie']??'', $m) ? $m[0] : '140') ?> de la CCN n°1351.<br>
     Majorations applicables : heures de nuit <strong><?= $e($d['majoration_nuit']) ?>%</strong>, dimanche <strong><?= $e($d['majoration_dim']) ?>%</strong>, jours fériés <strong><?= $e($d['majoration_ferie']) ?>%</strong>.<br>
     <?php if ($typeCdd && !$isCddUsage): ?>
-    Conformément à l'article L1243-8 du Code du travail, une <strong>indemnité de fin de contrat (précarité) de 10%</strong> de la rémunération brute totale sera versée à l'échéance du contrat. Cette indemnité ne sera pas due en cas de requalification en CDI, de faute grave ou de force majeure (Art L1243-10 CT).
+    Conformément à l'article L1243-8 du Code du travail, une <strong>prime de précarité de 10%</strong> de la rémunération brute totale sera versée en fin de contrat. Cette indemnité ne sera pas due en cas de requalification en CDI, de faute grave ou de force majeure (Art L1243-10 CT).
     <?php elseif ($isCddUsage): ?>
-    <span class="legal-note">Le CDD d'Usage n'ouvre pas droit à l'indemnité de fin de contrat (Art L1243-10-3° CT — secteur de la sécurité privée).</span>
+    <span class="legal-note">Le présent contrat relevant du régime du CDD d'Usage, il ne donne pas droit à l'indemnité de fin de contrat (Art L1243-10-3° CT). Vérifier la compatibilité avec la CCN applicable.</span>
     <?php endif; ?>
   </div>
 </div>
@@ -312,9 +312,9 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
   <div class="art-body">
     Le contrat prendra fin automatiquement au terme fixé, à la dernière vacation planifiée, sauf rupture anticipée pour faute grave, force majeure ou accord écrit des parties (Art L1243-1 CT).<br>
     <?php if (!$isCddUsage): ?>
-    À l'échéance du contrat, l'Employeur versera au salarié l'indemnité de fin de contrat prévue à l'article 5, sauf cas d'exclusion légaux (faute grave, force majeure, proposition de CDI, refus du salarié d'accepter un CDI aux mêmes conditions — Art L1243-10 CT).
+    Le présent contrat donne lieu au versement d'une <strong>indemnité de fin de contrat égale à 10% de la rémunération brute totale</strong>, versée à l'échéance par l'Employeur, sauf cas d'exclusion légaux (faute grave, force majeure, proposition de CDI refusée — Art L1243-10 CT).
     <?php else: ?>
-    À l'échéance du contrat, aucune indemnité de précarité n'est due, le présent contrat relevant du régime du CDD d'Usage (Art L1243-10-3° CT).
+    Le présent contrat relevant du régime du CDD d'Usage, aucune indemnité de précarité n'est due à son terme (Art L1243-10-3° CT). Vérifier la compatibilité avec la CCN applicable avant signature.
     <?php endif; ?>
   </div>
 </div>
@@ -385,10 +385,7 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demeurant au : <strong><?= $e($d['adresse']) ?></strong>,</p>
     <p>demande expressément et en mon nom propre à la société <strong>OEIL VIGILANT</strong> de déroger à la durée minimale légale de travail de <strong>24 heures par semaine</strong>, conformément à l'article L3123-7 du Code du travail. Je reconnais que cette demande émane exclusivement de ma propre initiative et n'a pas été sollicitée par l'Employeur.</p>
     <p><strong>Cette demande est justifiée par la raison suivante :</strong></p>
-    <div class="check-row">
-      <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">Me permettre de faire face à des contraintes personnelles ou de cumuler plusieurs activités afin d'atteindre une durée globale de travail correspondant à un temps plein ou au moins égale à 24 heures par semaine.</span>
-    </div>
+    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Me permettre de faire face à des contraintes personnelles ou de cumuler plusieurs activités afin d'atteindre une durée globale de travail correspondant à un temps plein ou au moins égale à 24 heures par semaine.</div>
     <p>J'ai bien noté que mes horaires de travail seront regroupés sur des journées ou des demi-journées régulières ou complètes. Je reconnais avoir été informé(e) de mon droit à revenir sur cette dérogation à tout moment, avec un préavis raisonnable.</p>
     <div class="annexe-sig">
       <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
@@ -412,14 +409,8 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
       <li>44 heures en moyenne sur 12 semaines consécutives (Art L3121-22 CT)</li>
     </ul>
     <p><strong>À ce jour, je déclare :</strong></p>
-    <div class="check-row">
-      <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">N'exercer aucune autre activité professionnelle rémunérée.</span>
-    </div>
-    <div class="check-row">
-      <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et chez tout autre employeur ne dépasse jamais les limites légales susmentionnées, et à informer immédiatement l'Employeur de tout changement de situation.</span>
-    </div>
+    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;N'exercer aucune autre activité professionnelle rémunérée.</div>
+    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et chez tout autre employeur ne dépasse jamais les limites légales susmentionnées, et à informer immédiatement l'Employeur de tout changement de situation.</div>
     <p style="font-size:8pt;color:#666;font-style:italic">Je reconnais être informé(e) que toute fausse déclaration m'expose à des sanctions disciplinaires et peut engager ma responsabilité personnelle en cas d'accident du travail imputable à un dépassement des durées maximales.</p>
     <div class="annexe-sig">
       <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
@@ -437,18 +428,9 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
   </div>
   <div class="annexe-body">
     <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demande à être dispensé(e) d'affiliation au régime de garantie « Frais de Santé » collectif et obligatoire mis en place par <strong>OEIL VIGILANT</strong>, pour le motif suivant (Art R2421-2 CT) :</p>
-    <div class="check-row">
-      <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">Je suis titulaire d'un CDD ou contrat de mission de moins de 3 mois, et justifie d'une couverture responsable individuelle (CSS, AMC individuelle).</span>
-    </div>
-    <div class="check-row">
-      <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">Je bénéficie déjà d'une couverture collective et obligatoire en tant qu'ayant droit ou en tant que salarié d'un autre employeur.</span>
-    </div>
-    <div class="check-row">
-      <span class="check-box"><span class="check-box-inner"></span></span>
-      <span class="check-label">Je bénéficie de la Complémentaire Santé Solidaire (CSS) ou de l'Aide médicale d'État (AME).</span>
-    </div>
+    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je suis titulaire d'un CDD ou contrat de mission de moins de 3 mois, et justifie d'une couverture responsable individuelle (CSS, AMC individuelle).</div>
+    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je bénéficie déjà d'une couverture collective et obligatoire en tant qu'ayant droit ou en tant que salarié d'un autre employeur.</div>
+    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je bénéficie de la Complémentaire Santé Solidaire (CSS) ou de l'Aide médicale d'État (AME).</div>
     <p>Je m'engage à fournir les justificatifs correspondants à l'Employeur et reconnais qu'en cas de dispense, je ne pourrai pas prétendre à la prise en charge employeur des frais de santé. Cette dispense prend fin automatiquement en cas de perte du motif qui la justifie.</p>
     <div class="annexe-sig">
       <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>

@@ -228,8 +228,8 @@ $defaultData = [
     'categorie'            => 'Employé - Niveau III - Échelon 2 - Coefficient 140',
     'date_debut'           => $dateDebutContrat ? date('d/m/Y', strtotime($dateDebutContrat)) : '',
     'date_fin'             => $dateFinContrat   ? date('d/m/Y', strtotime($dateFinContrat))   : '',
-    'motif_cdd'            => "Accroissement temporaire d'activité",
-    'description_motif'    => "Ce contrat est conclu pour faire face à un accroissement temporaire d'activité lié à une demande urgente et imprévisible.",
+    'motif_cdd'            => "accroissement temporaire d'activité",
+    'description_motif'    => "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
     'periode_essai'        => calculerPeriodeEssai(
                                   $dateDebutContrat ? date('d/m/Y', strtotime($dateDebutContrat)) : '',
                                   $dateFinContrat   ? date('d/m/Y', strtotime($dateFinContrat))   : ''

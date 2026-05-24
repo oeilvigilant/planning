@@ -58,9 +58,9 @@ $defaults = [
     'date_debut'       => $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
     'date_fin'         => $a['date_fin_contrat'] ? date('d/m/Y', strtotime($a['date_fin_contrat'])) : '',
     'motif_cdd'        => $a['motif_embauche'] === 'Accroissement activité'
-                          ? "Accroissement temporaire d'activité"
-                          : ($a['motif_embauche'] ?? "Accroissement temporaire d'activité"),
-    'description_motif'=> "Ce contrat est conclu pour faire face à un accroissement temporaire d'activité lié à une demande urgente et imprévisible.",
+                          ? "accroissement temporaire d'activité"
+                          : ($a['motif_embauche'] ?? "accroissement temporaire d'activité"),
+    'description_motif'=> "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
     'periode_essai'    => calculerPeriodeEssai(
                               $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
                               $a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : ''
