@@ -162,11 +162,30 @@ $params = getAllParams();
 $salaireHoraire = (float)($a['remuneration'] ?? 12.70);
 $typeContrat    = $a['type_contrat'] ?? 'CDD';
 
+// Dates du contrat — priorité DB, sinon auto-détection depuis le planning
+$dateDebutContrat = $a['date_debut_contrat'] ?? null;
+$dateFinContrat   = $a['date_fin_contrat']   ?? null;
+
+if (!$dateDebutContrat || !$dateFinContrat) {
+    $stmtD = $db->prepare("
+        SELECT MIN(pl.date_travail) AS min_date, MAX(pl.date_travail) AS max_date
+        FROM planning_lignes pl
+        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+        WHERE pl.agent_id = ?
+    ");
+    $stmtD->execute([$id]);
+    $planRow = $stmtD->fetch();
+    if ($planRow && $planRow['min_date']) {
+        if (!$dateDebutContrat) $dateDebutContrat = $planRow['min_date'];
+        if (!$dateFinContrat)   $dateFinContrat   = $planRow['max_date'];
+    }
+}
+
 // Heures réelles depuis le planning pour la période du contrat
 $totalHeuresPlanning = 0;
 $heuresNuitPlanning  = 0;
 $heuresDimPlanning   = 0;
-if ($a['date_debut_contrat'] && $a['date_fin_contrat']) {
+if ($dateDebutContrat && $dateFinContrat) {
     $stmt = $db->prepare("
         SELECT
             COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche
@@ -177,7 +196,7 @@ if ($a['date_debut_contrat'] && $a['date_fin_contrat']) {
         JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
         WHERE pl.agent_id = ? AND pl.date_travail BETWEEN ? AND ?
     ");
-    $stmt->execute([$id, $a['date_debut_contrat'], $a['date_fin_contrat']]);
+    $stmt->execute([$id, $dateDebutContrat, $dateFinContrat]);
     $row = $stmt->fetch();
     $totalHeuresPlanning = $row['total_min'] > 0 ? round($row['total_min'] / 60, 2) : 0;
     $heuresNuitPlanning  = $row['nuit_min']  > 0 ? round($row['nuit_min']  / 60, 2) : 0;
@@ -186,7 +205,7 @@ if ($a['date_debut_contrat'] && $a['date_fin_contrat']) {
 // Si heures planning disponibles, utiliser le total contrat ; sinon mensuel théorique
 $calcHeures  = $totalHeuresPlanning > 0 ? $totalHeuresPlanning : 151.67;
 $calcSalaire = round($salaireHoraire * $calcHeures, 2);
-$calcSource  = $totalHeuresPlanning > 0 ? 'planning (' . $a['date_debut_contrat'] . ' → ' . $a['date_fin_contrat'] . ')' : 'valeur théorique 35h/sem';
+$calcSource  = $totalHeuresPlanning > 0 ? 'planning (' . $dateDebutContrat . ' → ' . $dateFinContrat . ')' : 'valeur théorique 35h/sem';
 
 // Extraire le coefficient de la catégorie ou du champ poste
 $calcCoeffDefault = 150;
@@ -207,15 +226,15 @@ $defaultData = [
     'type_contrat'         => $typeContrat,
     'poste'                => $a['poste']             ?? 'Agent de sécurité',
     'categorie'            => 'Employé - Niveau III - Échelon 2 - Coefficient 140',
-    'date_debut'           => $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
-    'date_fin'             => $a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : '',
+    'date_debut'           => $dateDebutContrat ? date('d/m/Y', strtotime($dateDebutContrat)) : '',
+    'date_fin'             => $dateFinContrat   ? date('d/m/Y', strtotime($dateFinContrat))   : '',
     'motif_cdd'            => "Accroissement temporaire d'activité",
     'description_motif'    => "Ce contrat est conclu pour faire face à un accroissement temporaire d'activité lié à une demande urgente et imprévisible.",
     'periode_essai'        => calculerPeriodeEssai(
-                                  $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
-                                  $a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : ''
+                                  $dateDebutContrat ? date('d/m/Y', strtotime($dateDebutContrat)) : '',
+                                  $dateFinContrat   ? date('d/m/Y', strtotime($dateFinContrat))   : ''
                               ),
-    'total_heures_contrat' => '',
+    'total_heures_contrat' => $totalHeuresPlanning > 0 ? (string)round($totalHeuresPlanning, 2) : '',
     'site_affectation'     => $a['lieu_travail']     ?? '',
     'salaire_horaire'      => number_format($salaireHoraire, 2, '.', ''),
     'type_remuneration'    => $a['type_remuneration'] ?? 'Brute',
