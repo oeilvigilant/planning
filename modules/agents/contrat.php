@@ -142,7 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature']
         flash('danger', 'Adresse email invalide.');
     } else {
         $token     = bin2hex(random_bytes(32));
-        $expiresAt = date('Y-m-d H:i:s', strtotime('+7 days'));
+        $nbJours   = max(1, min(30, (int)($_POST['sig_expiry_jours'] ?? 7)));
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $nbJours . ' days'));
         $dataSnap  = json_encode($defaults, JSON_UNESCAPED_UNICODE);
         $db->prepare("INSERT INTO signature_tokens (agent_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?)")
            ->execute([$id, $token, $emailDest, $dataSnap, $expiresAt]);
@@ -521,18 +522,29 @@ require_once __DIR__ . '/../../includes/header.php';
       </div>
       <?php endif; ?>
 
-      <form method="post" class="d-flex gap-2 align-items-end">
+      <form method="post">
         <input type="hidden" name="send_for_signature" value="1">
-        <div class="flex-grow-1">
-          <label class="form-label mb-1 small">Email du salarié</label>
-          <input type="email" name="sig_email" class="form-control form-control-sm"
-                 value="<?= h($a['email'] ?? '') ?>" placeholder="prenom.nom@email.com" required>
+        <div class="row g-2 align-items-end">
+          <div class="col">
+            <label class="form-label mb-1 small">Email du salarié</label>
+            <input type="email" name="sig_email" class="form-control form-control-sm"
+                   value="<?= h($a['email'] ?? '') ?>" placeholder="prenom.nom@email.com" required>
+          </div>
+          <div class="col-auto">
+            <label class="form-label mb-1 small">Validité</label>
+            <div class="input-group input-group-sm" style="width:100px">
+              <input type="number" name="sig_expiry_jours" class="form-control" value="7" min="1" max="30">
+              <span class="input-group-text">j</span>
+            </div>
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-sm" style="background:#1a2332;color:#c9a84c;border-color:#1a2332;white-space:nowrap">
+              <i class="fa fa-paper-plane me-1"></i>Envoyer
+            </button>
+          </div>
         </div>
-        <button type="submit" class="btn btn-sm" style="background:#1a2332;color:#c9a84c;border-color:#1a2332;white-space:nowrap">
-          <i class="fa fa-paper-plane me-1"></i>Envoyer
-        </button>
       </form>
-      <p class="text-muted mt-1 mb-0" style="font-size:10px">Le lien est valable 7 jours. Le salarié lit le contrat et signe directement depuis son téléphone ou PC.</p>
+      <p class="text-muted mt-1 mb-0" style="font-size:10px">Le salarié lit le contrat et signe directement depuis son téléphone ou PC. Validité de 1 à 30 jours.</p>
     </div>
   </div>
 </div>

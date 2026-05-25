@@ -11,7 +11,7 @@ require_once __DIR__ . '/../../includes/header.php';
 $db = getDB();
 
 $search = trim($_GET['q'] ?? '');
-$filtre = $_GET['filtre'] ?? 'tous';
+$filtre = $_GET['filtre'] ?? 'actif';
 
 $where  = ['1=1'];
 $params = [];
