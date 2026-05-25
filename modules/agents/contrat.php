@@ -49,6 +49,20 @@ try {
         signed_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_agent (agent_id)
     )");
+    $db->exec("CREATE TABLE IF NOT EXISTS signature_tokens (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        agent_id     INT NOT NULL,
+        token        VARCHAR(64) NOT NULL UNIQUE,
+        email        VARCHAR(255) NOT NULL,
+        contrat_data LONGTEXT NULL,
+        sent_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at   DATETIME NOT NULL,
+        signed_at    DATETIME NULL,
+        ip_signed    VARCHAR(45) NULL,
+        ua_signed    TEXT NULL,
+        INDEX idx_token (token),
+        INDEX idx_agent_sig (agent_id)
+    )");
 } catch (Exception $e) {}
 
 $stmt = $db->prepare("SELECT * FROM agents WHERE id = ?");
@@ -117,6 +131,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_signature'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['delete_signature'])) {
     $db->prepare("UPDATE agents SET signature=NULL, signature_date=NULL, signature_ip=NULL WHERE id=?")->execute([$id]);
     flash('success', 'Signature supprimée.');
+    header('Location: contrat.php?id=' . $id); exit;
+}
+
+// ── Envoyer un lien de signature par email ───────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature'])) {
+    require_once __DIR__ . '/../../includes/mailer.php';
+    $emailDest = trim($_POST['sig_email'] ?? $a['email'] ?? '');
+    if (!filter_var($emailDest, FILTER_VALIDATE_EMAIL)) {
+        flash('danger', 'Adresse email invalide.');
+    } else {
+        $token     = bin2hex(random_bytes(32));
+        $expiresAt = date('Y-m-d H:i:s', strtotime('+7 days'));
+        $dataSnap  = json_encode($defaults, JSON_UNESCAPED_UNICODE);
+        $db->prepare("INSERT INTO signature_tokens (agent_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?)")
+           ->execute([$id, $token, $emailDest, $dataSnap, $expiresAt]);
+        $sigLink   = rtrim(APP_URL, '/') . '/token/signer.php?t=' . $token;
+        $expiryFmt = date('d/m/Y à H:i', strtotime($expiresAt));
+        $result    = sendMail(
+            $emailDest,
+            trim($a['prenom'] . ' ' . strtoupper($a['nom'])),
+            'Signature de votre contrat — ' . ($params['entreprise_nom'] ?? 'Oeil Vigilant'),
+            buildSignatureEmailHtml($a, $params, $sigLink, $expiryFmt)
+        );
+        if ($result['ok']) {
+            flash('success', "Lien de signature envoyé à <strong>" . htmlspecialchars($emailDest) . "</strong>. Expire le $expiryFmt.");
+        } else {
+            // Email failed → show link manually
+            flash('danger', 'Envoi email impossible (' . htmlspecialchars($result['error'] ?? '?') . '). Copiez ce lien manuellement : <br><code>' . htmlspecialchars($sigLink) . '</code>');
+        }
+    }
     header('Location: contrat.php?id=' . $id); exit;
 }
 
@@ -446,6 +490,49 @@ require_once __DIR__ . '/../../includes/header.php';
         <i class="fa fa-shield-halved me-1 text-success"></i>
         Signature électronique simple — règlement eIDAS (UE 910/2014). Horodatage + IP conservés à des fins probatoires.
       </p>
+
+      <hr class="my-3">
+
+      <!-- Envoi par email -->
+      <h6 class="mb-2"><i class="fa fa-envelope me-2 text-warning"></i>Envoyer pour signature par email</h6>
+      <?php
+        // Récupérer le dernier token envoyé pour cet agent
+        $lastToken = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? ORDER BY sent_at DESC LIMIT 1");
+        $lastToken->execute([$id]);
+        $lastTok = $lastToken->fetch();
+      ?>
+      <?php if ($lastTok): ?>
+      <div class="mb-2 p-2 rounded small <?= $lastTok['signed_at'] ? 'bg-success bg-opacity-10 border border-success border-opacity-25' : (strtotime($lastTok['expires_at']) < time() ? 'bg-secondary bg-opacity-10' : 'bg-warning bg-opacity-10 border border-warning border-opacity-25') ?>">
+        <?php if ($lastTok['signed_at']): ?>
+          <i class="fa fa-check-circle text-success me-1"></i>
+          <strong>Signé</strong> le <?= date('d/m/Y à H:i', strtotime($lastTok['signed_at'])) ?> — envoyé à <?= h($lastTok['email']) ?>
+        <?php elseif (strtotime($lastTok['expires_at']) < time()): ?>
+          <i class="fa fa-clock text-muted me-1"></i>
+          <strong>Lien expiré</strong> — envoyé à <?= h($lastTok['email']) ?> le <?= date('d/m/Y', strtotime($lastTok['sent_at'])) ?>
+        <?php else: ?>
+          <i class="fa fa-hourglass-half text-warning me-1"></i>
+          <strong>En attente</strong> — envoyé à <?= h($lastTok['email']) ?> le <?= date('d/m/Y à H:i', strtotime($lastTok['sent_at'])) ?>,
+          expire le <?= date('d/m/Y à H:i', strtotime($lastTok['expires_at'])) ?>
+          <button type="button" class="btn btn-xs btn-outline-secondary ms-2 py-0 px-1" style="font-size:10px"
+            onclick="navigator.clipboard.writeText('<?= rtrim(APP_URL,'/') ?>/token/signer.php?t=<?= h($lastTok['token']) ?>').then(()=>this.textContent='✓ Copié!')">
+            <i class="fa fa-copy"></i> Copier lien
+          </button>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
+
+      <form method="post" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="send_for_signature" value="1">
+        <div class="flex-grow-1">
+          <label class="form-label mb-1 small">Email du salarié</label>
+          <input type="email" name="sig_email" class="form-control form-control-sm"
+                 value="<?= h($a['email'] ?? '') ?>" placeholder="prenom.nom@email.com" required>
+        </div>
+        <button type="submit" class="btn btn-sm" style="background:#1a2332;color:#c9a84c;border-color:#1a2332;white-space:nowrap">
+          <i class="fa fa-paper-plane me-1"></i>Envoyer
+        </button>
+      </form>
+      <p class="text-muted mt-1 mb-0" style="font-size:10px">Le lien est valable 7 jours. Le salarié lit le contrat et signe directement depuis son téléphone ou PC.</p>
     </div>
   </div>
 </div>

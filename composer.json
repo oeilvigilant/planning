@@ -1,6 +1,7 @@
 {
     "require": {
-        "dompdf/dompdf": "^2.0"
+        "dompdf/dompdf": "^2.0",
+        "phpmailer/phpmailer": "^7.1"
     },
     "config": {
         "platform-check": false
