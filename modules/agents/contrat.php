@@ -40,6 +40,8 @@ try {
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature LONGTEXT NULL");
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature_date DATETIME NULL");
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature_ip VARCHAR(45) NULL");
+    $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS lieu_signature VARCHAR(100) NULL");
+    $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS date_signature VARCHAR(10) NULL");
     $db->exec("CREATE TABLE IF NOT EXISTS signatures_log (
         id        INT AUTO_INCREMENT PRIMARY KEY,
         agent_id  INT NOT NULL,
@@ -102,8 +104,8 @@ $defaults = [
     'majoration_nuit'  => '10',
     'majoration_dim'   => '10',
     'majoration_ferie' => '100',
-    'date_signature'   => date('d/m/Y'),
-    'lieu_signature'   => $params['entreprise_ville'] ?? 'Paris',
+    'date_signature'   => $a['date_signature'] ?? date('d/m/Y'),
+    'lieu_signature'   => $a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris'),
     'non_renouvelable' => '1',
 ];
 
@@ -220,7 +222,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
             type_remuneration  = ?,
             periode_essai      = ?,
             lieu_travail       = ?,
-            poste              = ?
+            poste              = ?,
+            lieu_signature     = ?,
+            date_signature     = ?
         WHERE id = ?
     ");
     $stmt->execute([
@@ -232,6 +236,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
         $_POST['periode_essai']     ?? null,
         $_POST['site_affectation']  ?? null,
         $_POST['poste']             ?? null,
+        trim($_POST['lieu_signature'] ?? ''),
+        trim($_POST['date_signature'] ?? ''),
         $id,
     ]);
     flash('success', 'Données du contrat sauvegardées dans la fiche agent.');
