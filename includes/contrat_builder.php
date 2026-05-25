@@ -43,6 +43,9 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111;
 .sig-block { flex: 1; text-align: center; }
 .sig-block .sig-title { font-weight: bold; font-size: 9pt; margin-bottom: 5px; }
 .sig-block .sig-line { border-top: 1px solid #333; margin-top: 50px; padding-top: 4px; font-size: 8pt; color: #666; }
+.sig-block.has-sig .sig-line { margin-top: 8px; }
+.sig-img-box { display:inline-block; min-width:130px; min-height:60px; border:1px solid #ddd; border-radius:4px; background:#fff; padding:4px; }
+.sig-img-box img { height:56px; max-width:200px; display:block; margin:0 auto; object-fit:contain; mix-blend-mode:multiply; }
 .footer { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 6px; font-size: 7pt; color: #999; text-align: center; }
 .highlight { background: rgba(201,168,76,0.1); padding: 1px 3px; border-radius: 3px; }
 .legal-note { font-size: 7.5pt; color: #666; font-style: italic; margin: 2px 0; }
@@ -361,10 +364,10 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
 </div>
 
 <div class="signatures">
-  <div class="sig-block">
+  <div class="sig-block <?= $sigPresB64 ? 'has-sig' : '' ?>">
     <div class="sig-title">L'Employeur</div>
     <?php if ($sigPresB64): ?>
-    <img src="<?= $sigPresB64 ?>" style="height:60px;max-width:180px;display:block;margin:6px auto 4px;object-fit:contain">
+    <div class="sig-img-box"><img src="<?= $sigPresB64 ?>"></div>
     <?php else: ?>
     <div style="height:60px"></div>
     <?php endif; ?>
@@ -373,10 +376,10 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
       Président — S.A.S <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?>
     </div>
   </div>
-  <div class="sig-block">
+  <div class="sig-block <?= !empty($a['signature']) ? 'has-sig' : '' ?>">
     <div class="sig-title">Le Salarié</div>
     <?php if (!empty($a['signature'])): ?>
-    <img src="<?= $a['signature'] ?>" style="height:60px;max-width:180px;display:block;margin:6px auto 4px;object-fit:contain">
+    <div class="sig-img-box"><img src="<?= $a['signature'] ?>"></div>
     <?php else: ?>
     <div style="height:60px"></div>
     <?php endif; ?>
@@ -611,10 +614,10 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
 </div>
 
 <div class="signatures">
-  <div class="sig-block">
+  <div class="sig-block <?= $sigPresB64 ? 'has-sig' : '' ?>">
     <div class="sig-title">L'Employeur</div>
     <?php if ($sigPresB64): ?>
-    <img src="<?= $sigPresB64 ?>" style="height:60px;max-width:180px;display:block;margin:6px auto 4px;object-fit:contain">
+    <div class="sig-img-box"><img src="<?= $sigPresB64 ?>"></div>
     <?php else: ?>
     <div style="height:60px"></div>
     <?php endif; ?>
@@ -625,6 +628,7 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
   </div>
   <div class="sig-block">
     <div class="sig-title">Le Salarié</div>
+    <div style="height:60px"></div>
     <div class="sig-line">
       <?= $e($d['civilite'] ?? '') ?> <?= $e($d['nom_prenom']) ?>
     </div>

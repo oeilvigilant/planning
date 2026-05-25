@@ -171,6 +171,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature']
     header('Location: contrat.php?id=' . $id); exit;
 }
 
+// ── Regénérer un lien de signature (sans envoyer par email) ──────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['regenerate_token'])) {
+    // Auto-détecter les dates depuis le planning si absentes
+    if (!$defaults['date_debut'] || !$defaults['date_fin']) {
+        $stR = $db->prepare("SELECT MIN(pl.date_travail) AS min_date, MAX(pl.date_travail) AS max_date
+            FROM planning_lignes pl JOIN planning_versions pv ON pv.id=pl.version_id AND pv.is_current=1
+            WHERE pl.agent_id=?");
+        $stR->execute([$id]);
+        $pr = $stR->fetch();
+        if ($pr && $pr['min_date']) {
+            if (!$defaults['date_debut']) $defaults['date_debut'] = date('d/m/Y', strtotime($pr['min_date']));
+            if (!$defaults['date_fin'])   $defaults['date_fin']   = date('d/m/Y', strtotime($pr['max_date']));
+            $defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
+        }
+    }
+    $nbJours   = max(1, min(30, (int)($_POST['regen_expiry_jours'] ?? 7)));
+    $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $nbJours . ' days'));
+    $token     = bin2hex(random_bytes(32));
+    $dataSnap  = json_encode($defaults, JSON_UNESCAPED_UNICODE);
+    $db->prepare("INSERT INTO signature_tokens (agent_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?)")
+       ->execute([$id, $token, $a['email'] ?? '', $dataSnap, $expiresAt]);
+    $sigLink   = rtrim(APP_URL, '/') . '/token/signer.php?t=' . $token;
+    $expiryFmt = date('d/m/Y à H:i', strtotime($expiresAt));
+    $linkHtml  = '<div class="mt-2 p-2" style="background:#f8f9fa;border-radius:4px;word-break:break-all;font-size:12px"><strong>Lien à copier :</strong><br><a href="' . htmlspecialchars($sigLink) . '" target="_blank">' . htmlspecialchars($sigLink) . '</a></div>';
+    flash('success', '<i class="fa fa-link me-1"></i>Nouveau lien généré — données du contrat à jour. Valide jusqu\'au ' . $expiryFmt . '.' . $linkHtml);
+    header('Location: contrat.php?id=' . $id); exit;
+}
+
 // ── Sauvegarder les données du contrat ───────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
     $dateDebut = null;
@@ -528,6 +556,25 @@ require_once __DIR__ . '/../../includes/header.php';
       </div>
       <?php endif; ?>
 
+      <!-- Regénérer le lien -->
+      <form method="post" class="mb-2">
+        <input type="hidden" name="regenerate_token" value="1">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label mb-1 small">Validité</label>
+            <div class="input-group input-group-sm" style="width:90px">
+              <input type="number" name="regen_expiry_jours" class="form-control" value="7" min="1" max="30">
+              <span class="input-group-text">j</span>
+            </div>
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-outline-secondary" style="white-space:nowrap" title="Génère un nouveau lien avec les données du contrat actuellement sauvegardées">
+              <i class="fa fa-rotate me-1"></i>Regénérer le lien
+            </button>
+          </div>
+        </div>
+      </form>
+
       <form method="post">
         <input type="hidden" name="send_for_signature" value="1">
         <div class="row g-2 align-items-end">
@@ -545,7 +592,7 @@ require_once __DIR__ . '/../../includes/header.php';
           </div>
           <div class="col-auto">
             <button type="submit" class="btn btn-sm" style="background:#1a2332;color:#c9a84c;border-color:#1a2332;white-space:nowrap">
-              <i class="fa fa-paper-plane me-1"></i>Envoyer
+              <i class="fa fa-paper-plane me-1"></i>Envoyer par email
             </button>
           </div>
         </div>

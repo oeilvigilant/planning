@@ -23,6 +23,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
                 setParam('logo_principal', $nom);
             }
         }
+        // Signature président upload
+        if (!empty($_FILES['signature_president']['name'])) {
+            $ext = strtolower(pathinfo($_FILES['signature_president']['name'], PATHINFO_EXTENSION));
+            if (in_array($ext, ['jpg','jpeg','png'])) {
+                $nom = 'signature-president.' . $ext;
+                move_uploaded_file($_FILES['signature_president']['tmp_name'], APP_ROOT . '/uploads/photos/' . $nom);
+                setParam('signature_president', $nom);
+            }
+        }
         flash('success','Informations entreprise sauvegardées.');
         header('Location: index.php'); exit;
     }
@@ -234,6 +243,24 @@ $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll()
           <span style="font-size:0.78rem;color:#9ca3af">Logo actuel</span>
         </div>
         <input type="file" name="logo" class="form-control form-control-sm" accept="image/*">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Signature du président <small class="text-muted">(apparaît dans les contrats)</small></label>
+        <?php
+          $sigFile = $params['signature_president'] ?? 'signature-Traore.JPG';
+          $sigPath = APP_ROOT . '/uploads/photos/' . $sigFile;
+          $sigUrl  = APP_URL  . '/uploads/photos/' . $sigFile;
+        ?>
+        <?php if (file_exists($sigPath)): ?>
+        <div class="mb-2 p-2" style="background:#f8f9fa;border:1px solid #dee2e6;border-radius:4px;display:inline-block">
+          <img src="<?= h($sigUrl) ?>" style="height:50px;max-width:200px;object-fit:contain;display:block">
+        </div><br>
+        <span class="text-success small"><i class="fa fa-check-circle me-1"></i><?= h($sigFile) ?></span><br>
+        <?php else: ?>
+        <div class="alert alert-warning py-1 mb-2 small">Fichier introuvable : <?= h($sigFile) ?></div>
+        <?php endif; ?>
+        <input type="file" name="signature_president" class="form-control form-control-sm mt-1" accept="image/jpeg,image/png">
+        <div class="form-text">JPG ou PNG recommandé. Fond blanc ou transparent.</div>
       </div>
     </div>
     <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
