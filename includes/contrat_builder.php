@@ -362,8 +362,16 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
   </div>
   <div class="sig-block">
     <div class="sig-title">Le Salarié</div>
+    <?php if (!empty($a['signature'])): ?>
+    <img src="<?= $a['signature'] ?>" style="height:60px;max-width:180px;display:block;margin:6px auto 4px;object-fit:contain">
+    <?php else: ?>
+    <div style="height:60px"></div>
+    <?php endif; ?>
     <div class="sig-line">
       <?= $e($d['civilite']) ?> <?= $e($d['nom_prenom']) ?>
+      <?php if (!empty($a['signature_date'])): ?>
+      <br><span style="font-size:7pt;color:#888;font-style:italic">Signé électroniquement le <?= date('d/m/Y à H:i', strtotime($a['signature_date'])) ?></span>
+      <?php endif; ?>
     </div>
   </div>
 </div>

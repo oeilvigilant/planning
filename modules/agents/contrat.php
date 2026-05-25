@@ -35,6 +35,22 @@ if (($_GET['action'] ?? '') === 'get_heures_planning') {
     exit;
 }
 
+// ── Init BDD signature (auto-migration) ──────────────────────────────────────
+try {
+    $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature LONGTEXT NULL");
+    $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature_date DATETIME NULL");
+    $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature_ip VARCHAR(45) NULL");
+    $db->exec("CREATE TABLE IF NOT EXISTS signatures_log (
+        id        INT AUTO_INCREMENT PRIMARY KEY,
+        agent_id  INT NOT NULL,
+        contrat_hash VARCHAR(64) NOT NULL,
+        ip_address   VARCHAR(45),
+        user_agent   TEXT,
+        signed_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_agent (agent_id)
+    )");
+} catch (Exception $e) {}
+
 $stmt = $db->prepare("SELECT * FROM agents WHERE id = ?");
 $stmt->execute([$id]);
 $a = $stmt->fetch();
@@ -76,6 +92,33 @@ $defaults = [
     'lieu_signature'   => $params['entreprise_ville'] ?? 'Paris',
     'non_renouvelable' => '1',
 ];
+
+// ── Signature électronique : enregistrement ──────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_signature'])) {
+    $sigData = $_POST['signature_data'] ?? '';
+    if (preg_match('/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/', $sigData)) {
+        $ip      = $_SERVER['REMOTE_ADDR'] ?? '';
+        $ua      = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
+        $db->prepare("UPDATE agents SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=?")
+           ->execute([$sigData, $ip, $id]);
+        $db->prepare("INSERT INTO signatures_log (agent_id, contrat_hash, ip_address, user_agent) VALUES (?,?,?,?)")
+           ->execute([$id, hash('sha256', $sigData . $id . date('Y-m-d')), $ip, $ua]);
+        // Rafraîchir $a pour le reste de la page
+        $a = $db->prepare("SELECT * FROM agents WHERE id=?")->execute([$id]) ? null : null;
+        $stmt2 = $db->prepare("SELECT * FROM agents WHERE id=?"); $stmt2->execute([$id]); $a = $stmt2->fetch();
+        flash('success', 'Signature enregistrée — horodatage conservé.');
+    } else {
+        flash('danger', 'Données de signature invalides.');
+    }
+    header('Location: contrat.php?id=' . $id); exit;
+}
+
+// ── Signature électronique : suppression ─────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['delete_signature'])) {
+    $db->prepare("UPDATE agents SET signature=NULL, signature_date=NULL, signature_ip=NULL WHERE id=?")->execute([$id]);
+    flash('success', 'Signature supprimée.');
+    header('Location: contrat.php?id=' . $id); exit;
+}
 
 // ── Sauvegarder les données du contrat ───────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
@@ -351,6 +394,60 @@ require_once __DIR__ . '/../../includes/header.php';
       </button>
     </div>
   </form>
+
+  <!-- ── Signature électronique (hors formulaire contrat) ─────────────────── -->
+  <div class="ov-card mt-3">
+    <div class="ov-card-header">
+      <h2 class="ov-card-title"><i class="fa fa-pen-nib me-2" style="color:var(--ov-gold)"></i>Signature électronique du salarié</h2>
+    </div>
+    <div class="ov-card-body">
+
+      <?php if (!empty($a['signature'])): ?>
+      <!-- Signature déjà enregistrée -->
+      <div class="d-flex align-items-center gap-3 p-2 mb-3" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">
+        <img src="<?= h($a['signature']) ?>" style="height:54px;max-width:140px;background:#fff;border:1px solid #d1fae5;border-radius:4px;padding:3px;object-fit:contain">
+        <div class="small">
+          <div class="fw-semibold text-success"><i class="fa fa-check-circle me-1"></i>Signature enregistrée</div>
+          <?php if ($a['signature_date']): ?>
+          <div class="text-muted"><?= date('d/m/Y à H:i', strtotime($a['signature_date'])) ?></div>
+          <div class="text-muted">IP : <?= h($a['signature_ip'] ?? '—') ?></div>
+          <?php endif; ?>
+        </div>
+        <form method="post" class="ms-auto" onsubmit="return confirm('Supprimer définitivement la signature ?')">
+          <input type="hidden" name="delete_signature" value="1">
+          <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer"><i class="fa fa-trash"></i></button>
+        </form>
+      </div>
+      <p class="text-muted small mb-2">Pour re-signer, effacez la signature ci-dessus puis tracez et enregistrez la nouvelle.</p>
+      <?php else: ?>
+      <p class="text-muted small mb-2">Le salarié signe ici (souris ou écran tactile). La signature est horodatée et liée à l'identifiant du contrat.</p>
+      <?php endif; ?>
+
+      <div style="border:2px dashed #d1d5db;border-radius:6px;background:#fafafa;position:relative;user-select:none">
+        <canvas id="sigCanvas" width="600" height="150" style="width:100%;height:150px;display:block;touch-action:none;cursor:crosshair;border-radius:4px"></canvas>
+        <span id="sigPlaceholder" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#d1d5db;font-size:14px;pointer-events:none;white-space:nowrap">✍ Signez ici</span>
+      </div>
+
+      <div class="d-flex gap-2 mt-2 align-items-center">
+        <button type="button" onclick="clearSig()" class="btn btn-sm btn-outline-secondary">
+          <i class="fa fa-eraser me-1"></i>Effacer
+        </button>
+        <button type="button" onclick="saveSig()" class="btn btn-sm btn-ov-primary ms-auto">
+          <i class="fa fa-check me-1"></i>Enregistrer la signature
+        </button>
+      </div>
+
+      <form method="post" id="sigForm">
+        <input type="hidden" name="save_signature" value="1">
+        <input type="hidden" name="signature_data" id="sigData">
+      </form>
+
+      <p class="text-muted mt-2 mb-0" style="font-size:10px">
+        <i class="fa fa-shield-halved me-1 text-success"></i>
+        Signature électronique simple — règlement eIDAS (UE 910/2014). Horodatage + IP conservés à des fins probatoires.
+      </p>
+    </div>
+  </div>
 </div>
 
 <!-- Aperçu droite -->
@@ -445,11 +542,64 @@ function exportPdf() {
 
 document.addEventListener('DOMContentLoaded', function() {
     updatePreview();
-    // Auto-remplir les heures si les dates sont déjà pré-remplies
     if (document.getElementById('dateDebut').value && document.getElementById('dateFin').value) {
         calcHeuresPlanning();
     }
+    initSigPad();
 });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.2.0/dist/signature_pad.umd.min.js"></script>
+<script>
+var _sigPad = null;
+
+function initSigPad() {
+    var canvas = document.getElementById('sigCanvas');
+    if (!canvas) return;
+
+    function setCanvasSize() {
+        var ratio = window.devicePixelRatio || 1;
+        var w = canvas.offsetWidth;
+        var h = canvas.offsetHeight;
+        canvas.width  = w * ratio;
+        canvas.height = h * ratio;
+        canvas.getContext('2d').scale(ratio, ratio);
+        if (_sigPad) _sigPad.clear();
+    }
+
+    setCanvasSize();
+    window.addEventListener('resize', setCanvasSize);
+
+    _sigPad = new SignaturePad(canvas, {
+        backgroundColor: 'rgba(255,255,255,0)',
+        penColor: '#1a2332',
+        minWidth: 1,
+        maxWidth: 2.5
+    });
+
+    canvas.addEventListener('mousedown', hidePlaceholder);
+    canvas.addEventListener('touchstart', hidePlaceholder);
+}
+
+function hidePlaceholder() {
+    var p = document.getElementById('sigPlaceholder');
+    if (p) p.style.display = 'none';
+}
+
+function clearSig() {
+    if (_sigPad) _sigPad.clear();
+    var p = document.getElementById('sigPlaceholder');
+    if (p) p.style.display = '';
+}
+
+function saveSig() {
+    if (!_sigPad || _sigPad.isEmpty()) {
+        alert('Veuillez tracer votre signature avant d\'enregistrer.');
+        return;
+    }
+    document.getElementById('sigData').value = _sigPad.toDataURL('image/png');
+    document.getElementById('sigForm').submit();
+}
 </script>
 
 <style>
