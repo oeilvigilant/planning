@@ -140,6 +140,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         header('Location: index.php?tab=champs-agents'); exit;
     }
 
+    if ($action === 'save_smtp') {
+        $champs = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from'];
+        foreach ($champs as $c) setParam($c, trim($_POST[$c] ?? ''));
+        flash('success', 'Configuration email sauvegardée.');
+        header('Location: index.php?tab=email'); exit;
+    }
+
     if ($action === 'save_api') {
         $key = trim($_POST['anthropic_api_key'] ?? '');
         if ($key && strpos($key, 'sk-ant-api') !== 0) {
@@ -171,6 +178,7 @@ $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll()
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-carte">Carte agent</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-pdf">PDF comptable</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-champs-agents">Champs agents</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-email">Email</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-api">API</a></li>
 </ul>
 
@@ -515,6 +523,59 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+</div>
+
+<!-- EMAIL / SMTP -->
+<div class="tab-pane fade" id="tab-email">
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-envelope me-2" style="color:var(--ov-gold)"></i>Configuration email (SMTP)</h2></div>
+  <div class="ov-card-body">
+    <p class="text-muted small mb-3">
+      Utilisé pour l'envoi des liens de signature électronique et des notifications aux agents.<br>
+      Laissez <strong>Serveur SMTP</strong> vide pour utiliser la fonction <code>mail()</code> native du serveur (déconseillé en production).
+    </p>
+    <form method="POST">
+    <input type="hidden" name="action" value="save_smtp">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Serveur SMTP</label>
+        <input type="text" name="smtp_host" class="form-control" placeholder="smtp.gmail.com" value="<?= h($params['smtp_host']??'') ?>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Port</label>
+        <input type="number" name="smtp_port" class="form-control" placeholder="587" min="1" max="65535" value="<?= h($params['smtp_port']??'587') ?>">
+        <div class="form-text">587 = TLS · 465 = SSL</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Adresse expéditeur (From)</label>
+        <input type="email" name="smtp_from" class="form-control" placeholder="noreply@votredomaine.fr" value="<?= h($params['smtp_from']??'') ?>">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Identifiant SMTP</label>
+        <input type="text" name="smtp_user" class="form-control" placeholder="votre@email.com" value="<?= h($params['smtp_user']??'') ?>" autocomplete="off">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Mot de passe SMTP</label>
+        <input type="password" name="smtp_pass" class="form-control font-monospace" placeholder="••••••••" value="<?= h($params['smtp_pass']??'') ?>" autocomplete="new-password">
+        <div class="form-text">Pour Gmail : utilisez un <a href="https://myaccount.google.com/apppasswords" target="_blank">mot de passe d'application</a> (compte avec 2FA activé).</div>
+      </div>
+    </div>
+    <?php if (!empty($params['smtp_host'])): ?>
+    <div class="alert alert-success py-2 mt-3 small">
+      <i class="fa fa-check-circle me-1"></i>
+      SMTP configuré sur <strong><?= h($params['smtp_host']) ?>:<?= h($params['smtp_port']??'587') ?></strong>
+      — expéditeur : <strong><?= h($params['smtp_from']??'—') ?></strong>
+    </div>
+    <?php else: ?>
+    <div class="alert alert-warning py-2 mt-3 small">
+      <i class="fa fa-exclamation-triangle me-1"></i>
+      Aucun serveur SMTP configuré — les emails de signature ne seront pas envoyés.
+    </div>
+    <?php endif; ?>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+  </div>
+</div>
 </div>
 
 <!-- API -->
