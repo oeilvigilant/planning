@@ -72,6 +72,14 @@ function buildContratHtml(array $d, array $p, array $a): string {
         $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
     }
 
+    $sigPresB64 = '';
+    $sigPresFile = APP_ROOT . '/uploads/photos/' . ($p['signature_president'] ?? 'signature-Traore.JPG');
+    if (file_exists($sigPresFile)) {
+        $ext2 = strtolower(pathinfo($sigPresFile, PATHINFO_EXTENSION));
+        $mime2 = ($ext2 === 'jpg' || $ext2 === 'jpeg') ? 'image/jpeg' : 'image/png';
+        $sigPresB64 = 'data:' . $mime2 . ';base64,' . base64_encode(file_get_contents($sigPresFile));
+    }
+
     $e          = fn($v) => htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8');
     $typeCdd    = in_array($d['type_contrat'] ?? 'CDD', ['CDD','CDD Usage','Saisonnier']);
     $isCddUsage = ($d['type_contrat'] ?? 'CDD') === 'CDD Usage';
@@ -355,6 +363,11 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
 <div class="signatures">
   <div class="sig-block">
     <div class="sig-title">L'Employeur</div>
+    <?php if ($sigPresB64): ?>
+    <img src="<?= $sigPresB64 ?>" style="height:60px;max-width:180px;display:block;margin:6px auto 4px;object-fit:contain">
+    <?php else: ?>
+    <div style="height:60px"></div>
+    <?php endif; ?>
     <div class="sig-line">
       M. <?= $e($p['entreprise_dirigeant'] ?? 'TRAORE Ibrahim') ?><br>
       Président — S.A.S <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?>
@@ -464,6 +477,14 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
         $ext     = strtolower(pathinfo($logoFile, PATHINFO_EXTENSION));
         $mime    = ($ext === 'jpg' || $ext === 'jpeg') ? 'image/jpeg' : 'image/png';
         $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
+    }
+
+    $sigPresB64 = '';
+    $sigPresFile = APP_ROOT . '/uploads/photos/' . ($p['signature_president'] ?? 'signature-Traore.JPG');
+    if (file_exists($sigPresFile)) {
+        $ext2 = strtolower(pathinfo($sigPresFile, PATHINFO_EXTENSION));
+        $mime2 = ($ext2 === 'jpg' || $ext2 === 'jpeg') ? 'image/jpeg' : 'image/png';
+        $sigPresB64 = 'data:' . $mime2 . ';base64,' . base64_encode(file_get_contents($sigPresFile));
     }
 
     $e       = fn($v) => htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8');
@@ -592,6 +613,11 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
 <div class="signatures">
   <div class="sig-block">
     <div class="sig-title">L'Employeur</div>
+    <?php if ($sigPresB64): ?>
+    <img src="<?= $sigPresB64 ?>" style="height:60px;max-width:180px;display:block;margin:6px auto 4px;object-fit:contain">
+    <?php else: ?>
+    <div style="height:60px"></div>
+    <?php endif; ?>
     <div class="sig-line">
       M. <?= $e($p['entreprise_dirigeant'] ?? 'TRAORE Ibrahim') ?><br>
       Président — S.A.S <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?>
