@@ -21,4 +21,7 @@ if (!is_array($data)) { http_response_code(400); exit; }
 $params = getAllParams();
 
 header('Content-Type: text/html; charset=UTF-8');
-echo buildContratHtml($data, $params, $a);
+$html = buildContratHtml($data, $params, $a);
+// Inject interactive checkboxes (web preview only — DomPDF ignores <script>)
+$checkboxJs = '<script>document.addEventListener("DOMContentLoaded",function(){document.querySelectorAll("span").forEach(function(s){if(s.textContent.trim()==="[ ]"&&s.style.fontFamily&&s.style.fontFamily.indexOf("Courier")!==-1){var c=document.createElement("input");c.type="checkbox";c.style.cssText="width:14px;height:14px;vertical-align:middle;cursor:pointer;margin-right:6px";s.parentNode.replaceChild(c,s);}});});</script>';
+echo str_replace('</body>', $checkboxJs . '</body>', $html);

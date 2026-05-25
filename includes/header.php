@@ -152,7 +152,7 @@ $currentModule = $currentModule ?? '';
 <div class="flash-container" id="flashContainer">
 <?php foreach (getFlash() as $f): ?>
     <div class="alert alert-<?= h($f['type']) ?> alert-dismissible fade show shadow-sm" role="alert" style="border-radius:10px">
-        <?= h($f['message']) ?>
+        <?= $f['message'] ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 <?php endforeach; ?>

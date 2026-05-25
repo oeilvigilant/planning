@@ -149,17 +149,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature']
            ->execute([$id, $token, $emailDest, $dataSnap, $expiresAt]);
         $sigLink   = rtrim(APP_URL, '/') . '/token/signer.php?t=' . $token;
         $expiryFmt = date('d/m/Y à H:i', strtotime($expiresAt));
-        $result    = sendMail(
-            $emailDest,
-            trim($a['prenom'] . ' ' . strtoupper($a['nom'])),
-            'Signature de votre contrat — ' . ($params['entreprise_nom'] ?? 'Oeil Vigilant'),
-            buildSignatureEmailHtml($a, $params, $sigLink, $expiryFmt)
-        );
-        if ($result['ok']) {
-            flash('success', "Lien de signature envoyé à <strong>" . htmlspecialchars($emailDest) . "</strong>. Expire le $expiryFmt.");
+        $linkHtml  = '<div class="mt-2 p-2" style="background:#f8f9fa;border-radius:4px;word-break:break-all;font-size:12px"><strong>Lien à copier :</strong><br><a href="' . htmlspecialchars($sigLink) . '" target="_blank">' . htmlspecialchars($sigLink) . '</a></div>';
+
+        if (empty($params['smtp_host'])) {
+            // No SMTP configured — show link directly, no attempt to send
+            flash('warning', '<i class="fa fa-exclamation-triangle me-1"></i>SMTP non configuré — copiez ce lien et transmettez-le à l\'agent. <a href="' . APP_URL . '/modules/parametres/index.php?tab=email" class="alert-link">Configurer le SMTP</a>' . $linkHtml);
         } else {
-            // Email failed → show link manually
-            flash('danger', 'Envoi email impossible (' . htmlspecialchars($result['error'] ?? '?') . '). Copiez ce lien manuellement : <br><code>' . htmlspecialchars($sigLink) . '</code>');
+            $result = sendMail(
+                $emailDest,
+                trim($a['prenom'] . ' ' . strtoupper($a['nom'])),
+                'Signature de votre contrat — ' . ($params['entreprise_nom'] ?? 'Oeil Vigilant'),
+                buildSignatureEmailHtml($a, $params, $sigLink, $expiryFmt)
+            );
+            if ($result['ok']) {
+                flash('success', '<i class="fa fa-check-circle me-1"></i>Email envoyé à <strong>' . htmlspecialchars($emailDest) . '</strong>. Lien valide jusqu\'au ' . $expiryFmt . '.' . $linkHtml);
+            } else {
+                flash('danger', '<i class="fa fa-times-circle me-1"></i>Envoi impossible : ' . htmlspecialchars($result['error'] ?? 'erreur inconnue') . $linkHtml);
+            }
         }
     }
     header('Location: contrat.php?id=' . $id); exit;

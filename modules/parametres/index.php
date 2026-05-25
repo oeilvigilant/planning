@@ -147,6 +147,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         header('Location: index.php?tab=email'); exit;
     }
 
+    if ($action === 'test_smtp') {
+        require_once __DIR__ . '/../../includes/mailer.php';
+        $dest = trim($_POST['test_email'] ?? '');
+        if (!filter_var($dest, FILTER_VALIDATE_EMAIL)) {
+            flash('danger', 'Adresse email invalide pour le test.');
+        } elseif (empty($params['smtp_host'])) {
+            flash('warning', 'Aucun serveur SMTP configuré — remplissez et sauvegardez d\'abord la configuration.');
+        } else {
+            $res = sendMail($dest, $dest, 'Test SMTP — ' . ($params['entreprise_nom'] ?? 'OV-Gestion'),
+                '<p>✅ La configuration SMTP fonctionne correctement.</p><p>Serveur : <strong>' . htmlspecialchars($params['smtp_host']) . ':' . htmlspecialchars($params['smtp_port'] ?? '587') . '</strong></p>');
+            if ($res['ok']) {
+                flash('success', '<i class="fa fa-check-circle me-1"></i>Email de test envoyé avec succès à <strong>' . htmlspecialchars($dest) . '</strong>.');
+            } else {
+                flash('danger', '<i class="fa fa-times-circle me-1"></i>Échec : ' . htmlspecialchars($res['error'] ?? 'erreur inconnue'));
+            }
+        }
+        header('Location: index.php?tab=email'); exit;
+    }
+
     if ($action === 'save_api') {
         $key = trim($_POST['anthropic_api_key'] ?? '');
         if ($key && strpos($key, 'sk-ant-api') !== 0) {
@@ -573,6 +592,17 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <?php endif; ?>
     <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+
+    <hr class="my-4">
+    <h6 class="mb-2"><i class="fa fa-paper-plane me-1 text-warning"></i>Tester la configuration</h6>
+    <form method="POST" class="d-flex gap-2 align-items-end">
+      <input type="hidden" name="action" value="test_smtp">
+      <div>
+        <label class="form-label small mb-1">Envoyer un email de test à</label>
+        <input type="email" name="test_email" class="form-control" placeholder="votre@email.com" style="width:260px" required>
+      </div>
+      <button type="submit" class="btn btn-outline-secondary"><i class="fa fa-vial me-1"></i>Tester</button>
     </form>
   </div>
 </div>

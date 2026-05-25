@@ -204,6 +204,15 @@ if (canvas) {
     canvas.addEventListener('mousedown', function(){ var p=document.getElementById('sigPlaceholder'); if(p) p.style.display='none'; });
     canvas.addEventListener('touchstart', function(){ var p=document.getElementById('sigPlaceholder'); if(p) p.style.display='none'; });
 }
+// Convert [ ] text markers to real interactive checkboxes in the contract preview
+document.querySelectorAll('.contract-box span').forEach(function(span) {
+    if (span.textContent.trim() === '[ ]' && span.style.fontFamily && span.style.fontFamily.indexOf('Courier') !== -1) {
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.style.cssText = 'width:15px;height:15px;vertical-align:middle;cursor:pointer;accent-color:#1a2332;margin-right:6px';
+        span.parentNode.replaceChild(cb, span);
+    }
+});
 function clearSig() {
     if (_pad) _pad.clear();
     var p=document.getElementById('sigPlaceholder'); if(p) p.style.display='';
