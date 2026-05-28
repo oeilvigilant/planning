@@ -398,6 +398,7 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
 
 </div><!-- /page -->
 
+<?php if (($d['inclure_annexe_24h'] ?? '1') === '1'): ?>
 <!-- ANNEXE 1 -->
 <div class="annexe-page">
   <div class="annexe-header">
@@ -413,10 +414,16 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <p>J'ai bien noté que mes horaires de travail seront regroupés sur des journées ou des demi-journées régulières ou complètes. Je reconnais avoir été informé(e) de mon droit à revenir sur cette dérogation à tout moment, avec un préavis raisonnable.</p>
     <div class="annexe-sig">
       <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
+      <?php if (!empty($a['signature'])): ?>
+      <div style="margin:4px 0"><img src="<?= $a['signature'] ?>" style="height:44px;max-width:160px;display:block;object-fit:contain;mix-blend-mode:multiply"></div>
+      <?php else: ?>
+      <div style="height:44px"></div>
+      <?php endif; ?>
       <div class="sig-line"><?= $e($d['civilite']) ?> <?= $e($d['nom_prenom']) ?><br><span style="font-style:italic;font-size:7.5pt">Lu et approuvé — Signature</span></div>
     </div>
   </div>
 </div>
+<?php endif; ?>
 
 <!-- ANNEXE 2 -->
 <div class="annexe-page">
@@ -438,6 +445,11 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <p style="font-size:8pt;color:#666;font-style:italic">Je reconnais être informé(e) que toute fausse déclaration m'expose à des sanctions disciplinaires et peut engager ma responsabilité personnelle en cas d'accident du travail imputable à un dépassement des durées maximales.</p>
     <div class="annexe-sig">
       <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
+      <?php if (!empty($a['signature'])): ?>
+      <div style="margin:4px 0"><img src="<?= $a['signature'] ?>" style="height:44px;max-width:160px;display:block;object-fit:contain;mix-blend-mode:multiply"></div>
+      <?php else: ?>
+      <div style="height:44px"></div>
+      <?php endif; ?>
       <div class="sig-line"><?= $e($d['civilite']) ?> <?= $e($d['nom_prenom']) ?><br><span style="font-style:italic;font-size:7.5pt">Lu et approuvé — Signature</span></div>
     </div>
   </div>
@@ -447,17 +459,32 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
 <div class="annexe-page">
   <div class="annexe-header">
     <div class="sous"><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> &nbsp;·&nbsp; SIREN 928 552 702</div>
+    <?php if (($d['mutuelle_choix'] ?? 'dispense') === 'adhesion'): ?>
+    <h2>Annexe 3 — Adhésion à la mutuelle d'entreprise</h2>
+    <?php else: ?>
     <h2>Annexe 3 — Demande de dispense d'affiliation à la mutuelle</h2>
+    <?php endif; ?>
     <div class="sous">Annexe obligatoire au contrat de travail signé le <?= $e($d['date_signature']) ?></div>
   </div>
   <div class="annexe-body">
-    <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demande à être dispensé(e) d'affiliation au régime de garantie « Frais de Santé » collectif et obligatoire mis en place par <strong>OEIL VIGILANT</strong>, pour le motif suivant (Art R2421-2 CT) :</p>
+    <?php if (($d['mutuelle_choix'] ?? 'dispense') === 'adhesion'): ?>
+    <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demeurant au : <strong><?= $e($d['adresse']) ?></strong>,</p>
+    <p>reconnais ne pas bénéficier d'une couverture complémentaire santé et <strong>demande mon affiliation au régime collectif obligatoire « Frais de Santé »</strong> mis en place par <strong><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?></strong>, à compter de ma date d'embauche, conformément à l'accord de branche de la CCN n°1351 et à la loi n°2013-504 du 14 juin 2013.</p>
+    <p>Je reconnais avoir été informé(e) des garanties couvertes, du montant de la cotisation salariale et de la prise en charge par l'Employeur selon les modalités en vigueur dans l'Entreprise. Je m'engage à signaler sans délai tout changement de situation susceptible de modifier mon droit à adhésion ou à dispense (acquisition d'une autre couverture, changement de situation familiale, etc.).</p>
+    <?php else: ?>
+    <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demande à être dispensé(e) d'affiliation au régime de garantie « Frais de Santé » collectif et obligatoire mis en place par <strong><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?></strong>, pour le motif suivant (Art R2421-2 CT) :</p>
     <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je suis titulaire d'un CDD ou contrat de mission de moins de 3 mois, et justifie d'une couverture responsable individuelle (CSS, AMC individuelle).</div>
     <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je bénéficie déjà d'une couverture collective et obligatoire en tant qu'ayant droit ou en tant que salarié d'un autre employeur.</div>
     <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je bénéficie de la Complémentaire Santé Solidaire (CSS) ou de l'Aide médicale d'État (AME).</div>
     <p>Je m'engage à fournir les justificatifs correspondants à l'Employeur et reconnais qu'en cas de dispense, je ne pourrai pas prétendre à la prise en charge employeur des frais de santé. Cette dispense prend fin automatiquement en cas de perte du motif qui la justifie.</p>
+    <?php endif; ?>
     <div class="annexe-sig">
       <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
+      <?php if (!empty($a['signature'])): ?>
+      <div style="margin:4px 0"><img src="<?= $a['signature'] ?>" style="height:44px;max-width:160px;display:block;object-fit:contain;mix-blend-mode:multiply"></div>
+      <?php else: ?>
+      <div style="height:44px"></div>
+      <?php endif; ?>
       <div class="sig-line"><?= $e($d['civilite']) ?> <?= $e($d['nom_prenom']) ?><br><span style="font-style:italic;font-size:7.5pt">Lu et approuvé — Signature</span></div>
     </div>
   </div>

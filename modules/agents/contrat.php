@@ -42,6 +42,8 @@ try {
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature_ip VARCHAR(45) NULL");
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS lieu_signature VARCHAR(100) NULL");
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS date_signature VARCHAR(10) NULL");
+    $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS inclure_annexe_24h TINYINT(1) NOT NULL DEFAULT 1");
+    $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS mutuelle_choix VARCHAR(20) NOT NULL DEFAULT 'dispense'");
     $db->exec("CREATE TABLE IF NOT EXISTS signatures_log (
         id        INT AUTO_INCREMENT PRIMARY KEY,
         agent_id  INT NOT NULL,
@@ -104,9 +106,11 @@ $defaults = [
     'majoration_nuit'  => '10',
     'majoration_dim'   => '10',
     'majoration_ferie' => '100',
-    'date_signature'   => $a['date_signature'] ?? date('d/m/Y'),
-    'lieu_signature'   => $a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris'),
-    'non_renouvelable' => '1',
+    'date_signature'     => $a['date_signature'] ?? date('d/m/Y'),
+    'lieu_signature'     => $a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris'),
+    'non_renouvelable'   => '1',
+    'inclure_annexe_24h' => (string)($a['inclure_annexe_24h'] ?? '1'),
+    'mutuelle_choix'     => $a['mutuelle_choix'] ?? 'dispense',
 ];
 
 // ── Signature électronique : enregistrement ──────────────────────────────────
@@ -230,20 +234,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
             lieu_travail       = ?,
             poste              = ?,
             lieu_signature     = ?,
-            date_signature     = ?
+            date_signature     = ?,
+            inclure_annexe_24h = ?,
+            mutuelle_choix     = ?
         WHERE id = ?
     ");
     $stmt->execute([
-        $_POST['type_contrat']      ?? null,
+        $_POST['type_contrat']        ?? null,
         $dateDebut,
         $dateFin,
-        $_POST['salaire_horaire']   ?? null,
-        $_POST['type_remuneration'] ?? 'Brute',
-        $_POST['periode_essai']     ?? null,
-        $_POST['site_affectation']  ?? null,
-        $_POST['poste']             ?? null,
+        $_POST['salaire_horaire']     ?? null,
+        $_POST['type_remuneration']   ?? 'Brute',
+        $_POST['periode_essai']       ?? null,
+        $_POST['site_affectation']    ?? null,
+        $_POST['poste']               ?? null,
         trim($_POST['lieu_signature'] ?? ''),
         trim($_POST['date_signature'] ?? ''),
+        isset($_POST['inclure_annexe_24h']) ? 1 : 0,
+        $_POST['mutuelle_choix']      ?? 'dispense',
         $id,
     ]);
     flash('success', 'Données du contrat sauvegardées dans la fiche agent.');
@@ -468,6 +476,29 @@ require_once __DIR__ . '/../../includes/header.php';
           <div class="col-6">
             <label class="form-label">Date</label>
             <input type="text" name="date_signature" class="form-control form-control-sm" value="<?= h($data['date_signature']) ?>" placeholder="dd/mm/yyyy" oninput="updatePreview()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Options annexes -->
+    <div class="ov-card mb-3">
+      <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-paperclip me-2" style="color:var(--ov-gold)"></i>Options annexes</h2></div>
+      <div class="ov-card-body">
+        <div class="row g-2">
+          <div class="col-12">
+            <label class="form-label">Annexe 1 — Dérogation &lt;24h/semaine</label>
+            <select name="inclure_annexe_24h" class="form-select form-select-sm" onchange="updatePreview()">
+              <option value="1" <?= ($data['inclure_annexe_24h'] ?? '1') === '1' ? 'selected' : '' ?>>Inclure (contrat &lt;24h/semaine)</option>
+              <option value="0" <?= ($data['inclure_annexe_24h'] ?? '1') === '0' ? 'selected' : '' ?>>Ne pas inclure (&gt;= 24h/semaine)</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Annexe 3 — Mutuelle</label>
+            <select name="mutuelle_choix" class="form-select form-select-sm" onchange="updatePreview()">
+              <option value="dispense" <?= ($data['mutuelle_choix'] ?? 'dispense') === 'dispense' ? 'selected' : '' ?>>Demande de dispense d'affiliation</option>
+              <option value="adhesion" <?= ($data['mutuelle_choix'] ?? 'dispense') === 'adhesion' ? 'selected' : '' ?>>Adhésion à la mutuelle d'entreprise</option>
+            </select>
           </div>
         </div>
       </div>
