@@ -389,16 +389,16 @@ require_once __DIR__ . '/../../includes/header.php';
           </div>
           <div class="col-6">
             <label class="form-label">Date de début</label>
-            <input type="text" name="date_debut" id="dateDebut" class="form-control form-control-sm" value="<?= h($data['date_debut']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); calcHeuresPlanning(); updatePreview()">
+            <input type="text" name="date_debut" id="dateDebut" class="form-control form-control-sm" value="<?= h($data['date_debut']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); calcHeuresPlanning(); updatePreview(); check24hCoherence()">
           </div>
           <div class="col-6">
             <label class="form-label">Date de fin <small class="text-muted">(CDD)</small></label>
-            <input type="text" name="date_fin" id="dateFin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); calcHeuresPlanning(); updatePreview()">
+            <input type="text" name="date_fin" id="dateFin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); calcHeuresPlanning(); updatePreview(); check24hCoherence()">
           </div>
           <div class="col-6">
             <label class="form-label">Total heures contrat <small class="text-muted">(calculé planning)</small></label>
             <div class="input-group input-group-sm">
-              <input type="number" name="total_heures_contrat" class="form-control" step="0.5" min="0" value="<?= h($data['total_heures_contrat'] ?? '') ?>" placeholder="ex: 36" oninput="updatePreview()">
+              <input type="number" name="total_heures_contrat" class="form-control" step="0.5" min="0" value="<?= h($data['total_heures_contrat'] ?? '') ?>" placeholder="ex: 36" oninput="updatePreview(); check24hCoherence()">
               <span class="input-group-text">h</span>
             </div>
           </div>
@@ -488,10 +488,11 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="row g-2">
           <div class="col-12">
             <label class="form-label">Annexe 1 — Dérogation &lt;24h/semaine</label>
-            <select name="inclure_annexe_24h" class="form-select form-select-sm" onchange="updatePreview()">
+            <select name="inclure_annexe_24h" class="form-select form-select-sm" onchange="updatePreview(); check24hCoherence()">
               <option value="1" <?= ($data['inclure_annexe_24h'] ?? '1') === '1' ? 'selected' : '' ?>>Inclure (contrat &lt;24h/semaine)</option>
               <option value="0" <?= ($data['inclure_annexe_24h'] ?? '1') === '0' ? 'selected' : '' ?>>Ne pas inclure (&gt;= 24h/semaine)</option>
             </select>
+            <div id="alert24h" class="mt-1"></div>
           </div>
           <div class="col-12">
             <label class="form-label">Annexe 3 — Mutuelle</label>
@@ -706,6 +707,36 @@ function calcHeuresPlanning() {
     }, 400);
 }
 
+function check24hCoherence() {
+    var totalH  = parseFloat(document.querySelector('[name="total_heures_contrat"]').value) || 0;
+    var debut   = document.getElementById('dateDebut').value;
+    var fin     = document.getElementById('dateFin').value;
+    var inclure = document.querySelector('[name="inclure_annexe_24h"]').value;
+    var el      = document.getElementById('alert24h');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!totalH || !debut || !fin) return;
+    var d1 = parseDate(debut), d2 = parseDate(fin);
+    if (!d1 || !d2 || d2 <= d1) return;
+    var nbJours     = Math.round((d2 - d1) / 86400000) + 1;
+    var hParSemaine = totalH / (nbJours / 7);
+    if (hParSemaine >= 24 && inclure === '1') {
+        el.innerHTML = '<div class="alert alert-warning py-1 px-2 mb-0 d-flex align-items-center gap-2" style="font-size:0.78rem">'
+            + '<i class="fa fa-triangle-exclamation"></i>'
+            + '<span><strong>' + hParSemaine.toFixed(1) + 'h/semaine</strong> — &gt;= 24h, cette annexe n\'est pas nécessaire.</span>'
+            + '<button type="button" class="btn btn-xs btn-warning ms-auto py-0 px-1" style="font-size:0.72rem;white-space:nowrap" onclick="document.querySelector(\'[name=inclure_annexe_24h]\').value=\'0\'; updatePreview(); check24hCoherence()">Retirer</button>'
+            + '</div>';
+    } else if (hParSemaine < 24 && inclure === '0') {
+        el.innerHTML = '<div class="alert alert-warning py-1 px-2 mb-0 d-flex align-items-center gap-2" style="font-size:0.78rem">'
+            + '<i class="fa fa-triangle-exclamation"></i>'
+            + '<span><strong>' + hParSemaine.toFixed(1) + 'h/semaine</strong> — &lt; 24h, l\'annexe est recommandée.</span>'
+            + '<button type="button" class="btn btn-xs btn-warning ms-auto py-0 px-1" style="font-size:0.72rem;white-space:nowrap" onclick="document.querySelector(\'[name=inclure_annexe_24h]\').value=\'1\'; updatePreview(); check24hCoherence()">Inclure</button>'
+            + '</div>';
+    } else {
+        el.innerHTML = '<div class="text-success" style="font-size:0.75rem"><i class="fa fa-check-circle me-1"></i>' + hParSemaine.toFixed(1) + 'h/sem — cohérent</div>';
+    }
+}
+
 function getFormData() {
     const form = document.getElementById('contratForm');
     const fd = new FormData(form);
@@ -739,6 +770,7 @@ function exportPdf() {
 
 document.addEventListener('DOMContentLoaded', function() {
     updatePreview();
+    check24hCoherence();
     if (document.getElementById('dateDebut').value && document.getElementById('dateFin').value) {
         calcHeuresPlanning();
     }
