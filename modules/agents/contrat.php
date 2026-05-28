@@ -146,7 +146,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature']
         $token     = bin2hex(random_bytes(32));
         $nbJours   = max(1, min(30, (int)($_POST['sig_expiry_jours'] ?? 7)));
         $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $nbJours . ' days'));
-        $dataSnap  = json_encode($defaults, JSON_UNESCAPED_UNICODE);
+        $snap      = json_decode($_POST['contrat_snapshot'] ?? '{}', true);
+        $snapData  = (is_array($snap) && !empty($snap)) ? array_merge($defaults, $snap) : $defaults;
+        unset($snapData['export_pdf'], $snapData['save_contrat'], $snapData['sign_submit']);
+        $dataSnap  = json_encode($snapData, JSON_UNESCAPED_UNICODE);
         $db->prepare("INSERT INTO signature_tokens (agent_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?)")
            ->execute([$id, $token, $emailDest, $dataSnap, $expiresAt]);
         $sigLink   = rtrim(APP_URL, '/') . '/token/signer.php?t=' . $token;
@@ -191,7 +194,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['regenerate_token']))
     $nbJours   = max(1, min(30, (int)($_POST['regen_expiry_jours'] ?? 7)));
     $expiresAt = date('Y-m-d H:i:s', strtotime('+' . $nbJours . ' days'));
     $token     = bin2hex(random_bytes(32));
-    $dataSnap  = json_encode($defaults, JSON_UNESCAPED_UNICODE);
+    $snap      = json_decode($_POST['contrat_snapshot'] ?? '{}', true);
+    $snapData  = (is_array($snap) && !empty($snap)) ? array_merge($defaults, $snap) : $defaults;
+    unset($snapData['export_pdf'], $snapData['save_contrat'], $snapData['sign_submit']);
+    $dataSnap  = json_encode($snapData, JSON_UNESCAPED_UNICODE);
     $db->prepare("INSERT INTO signature_tokens (agent_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?)")
        ->execute([$id, $token, $a['email'] ?? '', $dataSnap, $expiresAt]);
     $sigLink   = rtrim(APP_URL, '/') . '/token/signer.php?t=' . $token;
@@ -563,8 +569,9 @@ require_once __DIR__ . '/../../includes/header.php';
       <?php endif; ?>
 
       <!-- Regénérer le lien -->
-      <form method="post" class="mb-2">
+      <form method="post" class="mb-2" id="regenForm">
         <input type="hidden" name="regenerate_token" value="1">
+        <input type="hidden" name="contrat_snapshot" id="regenSnapshot">
         <div class="row g-2 align-items-end">
           <div class="col-auto">
             <label class="form-label mb-1 small">Validité</label>
@@ -574,15 +581,16 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
           </div>
           <div class="col-auto">
-            <button type="submit" class="btn btn-sm btn-outline-secondary" style="white-space:nowrap" title="Génère un nouveau lien avec les données du contrat actuellement sauvegardées">
+            <button type="submit" class="btn btn-sm btn-outline-secondary" style="white-space:nowrap" title="Génère un nouveau lien avec les données actuelles du formulaire">
               <i class="fa fa-rotate me-1"></i>Regénérer le lien
             </button>
           </div>
         </div>
       </form>
 
-      <form method="post">
+      <form method="post" id="sendForm">
         <input type="hidden" name="send_for_signature" value="1">
+        <input type="hidden" name="contrat_snapshot" id="sendSnapshot">
         <div class="row g-2 align-items-end">
           <div class="col">
             <label class="form-label mb-1 small">Email du salarié</label>
@@ -704,6 +712,14 @@ document.addEventListener('DOMContentLoaded', function() {
         calcHeuresPlanning();
     }
     initSigPad();
+
+    // Capture snapshot du formulaire contrat avant chaque envoi de token
+    document.getElementById('regenForm').addEventListener('submit', function() {
+        document.getElementById('regenSnapshot').value = JSON.stringify(getFormData());
+    });
+    document.getElementById('sendForm').addEventListener('submit', function() {
+        document.getElementById('sendSnapshot').value = JSON.stringify(getFormData());
+    });
 });
 </script>
 
