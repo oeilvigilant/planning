@@ -814,11 +814,6 @@ if ($vue === 'semaine') {
                     style="background:#f8f9fa;color:#374151;border:1.5px solid #d1d5db;border-radius:6px;font-weight:700;font-size:0.78rem;padding:5px 9px;cursor:pointer">
               Libre<br><span style="font-size:0.6rem;font-weight:400;opacity:0.7">Personnalisé</span>
             </button>
-            <button type="button" id="btnViderPreset"
-                    onclick="viderCreneau()"
-                    style="background:rgba(239,68,68,0.08);color:#dc2626;border:1.5px solid #fca5a5;border-radius:6px;font-weight:700;font-size:0.78rem;padding:5px 9px;cursor:pointer">
-              ⊘ Vider<br><span style="font-size:0.6rem;font-weight:400;opacity:0.7">Effacer</span>
-            </button>
           </div>
         </div>
 
@@ -846,7 +841,7 @@ if ($vue === 'semaine') {
         </div>
       </div>
       <div class="modal-footer border-0 pt-0" style="padding:0 16px 14px">
-        <button type="button" class="btn btn-sm btn-danger me-auto" id="btnDeleteLigne" style="display:none" onclick="deleteLigne()"><i class="fa fa-trash me-1"></i>Supprimer</button>
+        <button type="button" class="btn btn-sm btn-outline-danger me-auto" id="btnDeleteLigne" onclick="deleteLigne()"><i class="fa fa-eraser me-1"></i>Effacer</button>
         <button type="button" class="btn btn-sm btn-ov-secondary" data-bs-dismiss="modal">Annuler</button>
         <button type="button" class="btn btn-sm btn-ov-primary" onclick="saveLigne()" id="btnSaveLigne"><i class="fa fa-check me-1"></i>Enregistrer</button>
       </div>
@@ -1202,8 +1197,7 @@ window.openCell = function(el) {
     document.getElementById('modalDebut').value     = '';
     document.getElementById('modalFin').value       = '';
     document.getElementById('modalNote').value      = '';
-    document.getElementById('calcPreview').style.display   = 'none';
-    document.getElementById('btnDeleteLigne').style.display = 'none';
+    document.getElementById('calcPreview').style.display = 'none';
     document.getElementById('btnSaveLigne').disabled = false;
     document.getElementById('btnSaveLigne').innerHTML = '<i class="fa fa-check me-1"></i>Enregistrer';
     highlightPreset('-');
@@ -1226,7 +1220,6 @@ window.openCell = function(el) {
                 document.getElementById('modalDebut').value = debut;
                 document.getElementById('modalFin').value   = fin;
                 document.getElementById('modalNote').value  = data.ligne.note || '';
-                document.getElementById('btnDeleteLigne').style.display = '';
                 highlightPreset(debut + '-' + fin);
                 updateCalcPreview();
             }
@@ -1302,7 +1295,6 @@ window.saveLigne = function() {
 
 // ── deleteLigne ───────────────────────────────────────────────────────────────
 window.deleteLigne = function() {
-    if (!confirm('Supprimer ce créneau ?')) return;
     var body = new URLSearchParams({
         action:     'delete_ligne',
         agent_id:   document.getElementById('modalAgentId').value,
