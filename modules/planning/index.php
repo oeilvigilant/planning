@@ -268,6 +268,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 
+    if ($action === 'bulk_delete') {
+        $agentId  = (int)($_POST['agent_id']  ?? 0);
+        $dateDebut =     ($_POST['date_debut'] ?? '');
+        $dateFin  =      ($_POST['date_fin']   ?? '');
+        $joursStr =      ($_POST['jours']      ?? '1,2,3,4,5,6,7');
+
+        if (!$agentId || !$dateDebut || !$dateFin) {
+            echo json_encode(['ok' => false, 'error' => 'Paramètres manquants']);
+            exit;
+        }
+
+        $joursOk = array_map('intval', array_filter(explode(',', $joursStr), 'is_numeric'));
+        if (empty($joursOk)) {
+            echo json_encode(['ok' => false, 'error' => 'Aucun jour sélectionné']);
+            exit;
+        }
+
+        try {
+            $d   = new DateTime($dateDebut);
+            $end = new DateTime($dateFin);
+        } catch (Exception $e) {
+            echo json_encode(['ok' => false, 'error' => 'Dates invalides']);
+            exit;
+        }
+
+        $vMap = [];
+        foreach ($db->query("SELECT id,mois,annee FROM planning_versions WHERE is_current=1")->fetchAll() as $v) {
+            $vMap[$v['annee'].'-'.sprintf('%02d',$v['mois'])] = (int)$v['id'];
+        }
+
+        $deleted = 0;
+        while ($d->format('Y-m-d') <= $end->format('Y-m-d')) {
+            $dow = (int)$d->format('N');
+            if (in_array($dow, $joursOk)) {
+                $k = $d->format('Y').'-'.$d->format('m');
+                if (isset($vMap[$k])) {
+                    $stmt = $db->prepare("DELETE FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?");
+                    $stmt->execute([$vMap[$k], $agentId, $d->format('Y-m-d')]);
+                    $deleted += $stmt->rowCount();
+                }
+            }
+            $d->modify('+1 day');
+        }
+
+        echo json_encode(['ok' => true, 'deleted' => $deleted]);
+        exit;
+    }
+
     echo json_encode(['ok' => false, 'error' => 'Action inconnue']);
     exit;
 }
@@ -885,6 +933,11 @@ if ($vue === 'semaine') {
                     style="background:#f8f9fa;color:#374151;border:1.5px solid #d1d5db;border-radius:6px;font-weight:700;font-size:0.8rem;padding:6px 10px;cursor:pointer">
               Libre
             </button>
+            <button type="button" class="bulk-shift-btn"
+                    data-debut="__vide__" data-fin="__vide__"
+                    style="background:#fff5f5;color:#dc2626;border:1.5px solid #fca5a5;border-radius:6px;font-weight:700;font-size:0.8rem;padding:6px 10px;cursor:pointer">
+              <i class="fa fa-eraser me-1"></i>Vide
+            </button>
           </div>
           <div id="bulkLibreInputs" style="display:none" class="row g-2">
             <div class="col-6">
@@ -1140,14 +1193,21 @@ document.querySelectorAll('.bulk-shift-btn').forEach(function(btn) {
         btn.style.boxShadow = '0 0 0 3px ' + (btn.style.color || '#374151') + '40';
         btn.classList.add('active');
 
-        if (btn.dataset.debut === '' && btn.dataset.fin === '') {
+        if (btn.dataset.debut === '__vide__') {
+            document.getElementById('bulkLibreInputs').style.display = 'none';
+            activeBulkDebut = '__vide__';
+            activeBulkFin   = '__vide__';
+            document.getElementById('btnSaveBulk').innerHTML = '<i class="fa fa-eraser me-1"></i>Effacer';
+        } else if (btn.dataset.debut === '' && btn.dataset.fin === '') {
             document.getElementById('bulkLibreInputs').style.display = '';
             activeBulkDebut = '';
             activeBulkFin   = '';
+            document.getElementById('btnSaveBulk').innerHTML = '<i class="fa fa-bolt me-1"></i>Affecter';
         } else {
             document.getElementById('bulkLibreInputs').style.display = 'none';
             activeBulkDebut = btn.dataset.debut;
             activeBulkFin   = btn.dataset.fin;
+            document.getElementById('btnSaveBulk').innerHTML = '<i class="fa fa-bolt me-1"></i>Affecter';
         }
     });
 });
@@ -1378,15 +1438,16 @@ window.saveBulk = function() {
     var dateFin   = document.getElementById('bulkDateFin').value;
     var note      = document.getElementById('bulkNote').value;
 
-    var debut = activeBulkDebut;
-    var fin   = activeBulkFin;
-    if (debut === '' || fin === '') {
+    var isVide = (activeBulkDebut === '__vide__');
+    var debut  = activeBulkDebut;
+    var fin    = activeBulkFin;
+    if (!isVide && (debut === '' || fin === '')) {
         debut = document.getElementById('bulkDebut').value;
         fin   = document.getElementById('bulkFin').value;
     }
 
     if (!agentId || !dateDebut || !dateFin) { alert('Veuillez remplir agent et les dates.'); return; }
-    if (!debut || !fin) { alert('Veuillez sélectionner un poste ou saisir les heures.'); return; }
+    if (!isVide && (!debut || !fin)) { alert('Veuillez sélectionner un poste ou saisir les heures.'); return; }
     if (dateDebut > dateFin) { alert('La date de fin doit être après la date de début.'); return; }
 
     var jours = [];
@@ -1397,33 +1458,48 @@ window.saveBulk = function() {
     document.getElementById('btnSaveBulk').innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i>En cours...';
     document.getElementById('bulkStatus').innerHTML  = '';
 
-    var body = new URLSearchParams({
-        action:      'bulk_save',
-        agent_id:    agentId,
-        date_debut:  dateDebut,
-        date_fin:    dateFin,
-        heure_debut: debut,
-        heure_fin:   fin,
-        jours:       jours.join(','),
-        note:        note
-    });
+    var body;
+    if (isVide) {
+        body = new URLSearchParams({
+            action:     'bulk_delete',
+            agent_id:   agentId,
+            date_debut: dateDebut,
+            date_fin:   dateFin,
+            jours:      jours.join(',')
+        });
+    } else {
+        body = new URLSearchParams({
+            action:      'bulk_save',
+            agent_id:    agentId,
+            date_debut:  dateDebut,
+            date_fin:    dateFin,
+            heure_debut: debut,
+            heure_fin:   fin,
+            jours:       jours.join(','),
+            note:        note
+        });
+    }
 
     fetch('index.php', {method:'POST', body:body})
         .then(function(r) { return r.json(); })
         .then(function(d) {
             if (d.ok) {
+                var count = isVide ? d.deleted : d.saved;
+                var label = isVide
+                    ? '<strong>' + count + ' créneau(x)</strong> effacé(s).'
+                    : '<strong>' + count + ' créneau(x)</strong> affecté(s) avec succès.';
                 document.getElementById('bulkStatus').innerHTML =
-                    '<div class="alert alert-success py-2 px-3 mt-2" style="font-size:0.82rem"><i class="fa fa-check-circle me-1"></i><strong>' + d.saved + ' créneau(x)</strong> affecté(s) avec succès.</div>';
+                    '<div class="alert alert-success py-2 px-3 mt-2" style="font-size:0.82rem"><i class="fa fa-check-circle me-1"></i>' + label + '</div>';
                 setTimeout(function() { bulkModal.hide(); location.reload(); }, 900);
             } else {
-                alert('Erreur : ' + (d.error || 'Affectation échouée'));
+                alert('Erreur : ' + (d.error || 'Opération échouée'));
                 document.getElementById('btnSaveBulk').disabled = false;
-                document.getElementById('btnSaveBulk').innerHTML = '<i class="fa fa-bolt me-1"></i>Affecter';
+                document.getElementById('btnSaveBulk').innerHTML = isVide ? '<i class="fa fa-eraser me-1"></i>Effacer' : '<i class="fa fa-bolt me-1"></i>Affecter';
             }
         }).catch(function() {
             alert('Erreur réseau.');
             document.getElementById('btnSaveBulk').disabled = false;
-            document.getElementById('btnSaveBulk').innerHTML = '<i class="fa fa-bolt me-1"></i>Affecter';
+            document.getElementById('btnSaveBulk').innerHTML = isVide ? '<i class="fa fa-eraser me-1"></i>Effacer' : '<i class="fa fa-bolt me-1"></i>Affecter';
         });
 };
 
