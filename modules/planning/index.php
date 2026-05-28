@@ -165,12 +165,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($action === 'reset_month') {
-        requirePerm('planning', 'delete');
+        requirePerm('planning', 'create');
         $versionId = (int)($_POST['version_id'] ?? 0);
         if ($versionId) {
-            $deleted = $db->prepare("DELETE FROM planning_lignes WHERE version_id=?");
-            $deleted->execute([$versionId]);
-            echo json_encode(['ok' => true, 'deleted' => $deleted->rowCount()]);
+            // Récupérer mois/année de la version courante
+            $curV = $db->prepare("SELECT mois, annee, version FROM planning_versions WHERE id=?");
+            $curV->execute([$versionId]);
+            $cv = $curV->fetch();
+            if (!$cv) { echo json_encode(['ok' => false, 'error' => 'Version introuvable']); exit; }
+            // Archiver la version courante
+            $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mois=? AND annee=?")->execute([$cv['mois'], $cv['annee']]);
+            // Créer une nouvelle version vide
+            $nextV = ((int)$cv['version']) + 1;
+            $db->prepare("INSERT INTO planning_versions (mois, annee, version, note, is_current, created_by) VALUES (?,?,?,?,1,?)")
+               ->execute([$cv['mois'], $cv['annee'], $nextV, 'Réinitialisation', getCurrentUser()['id']]);
+            echo json_encode(['ok' => true, 'new_version' => $nextV]);
         } else {
             echo json_encode(['ok' => false, 'error' => 'Version introuvable']);
         }
@@ -1317,11 +1326,11 @@ window.viderCreneau = function() {
         .then(function(d) { if (d.ok) { cellModal.hide(); location.reload(); } });
 };
 
-// ── resetMonth — vide toutes les affectations du mois courant ─────────────────
+// ── resetMonth — crée une nouvelle version vide (archive la courante) ─────────
 window.resetMonth = function() {
     var versionId = typeof currentVersionId !== 'undefined' ? currentVersionId : 0;
     if (!versionId) { alert('Aucune version active pour ce mois.'); return; }
-    if (!confirm('⚠️ Supprimer TOUTES les affectations du mois ?\n\nCette action est irréversible (sauf si vous avez créé une version précédente).')) return;
+    if (!confirm('Réinitialiser le mois ? La version actuelle sera archivée et une nouvelle version vide sera créée.')) return;
     var body = new URLSearchParams({action:'reset_month', version_id:versionId});
     fetch('index.php', {method:'POST', body:body})
         .then(function(r) { return r.json(); })
