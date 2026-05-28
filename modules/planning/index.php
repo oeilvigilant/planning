@@ -1114,7 +1114,7 @@ var btnVer = document.getElementById('btnNewVersion');
 if (btnVer) btnVer.addEventListener('click', function() { versionModal.show(); });
 
 var btnReset = document.getElementById('btnResetMonth');
-if (btnReset) btnReset.addEventListener('click', resetMonth);
+if (btnReset) btnReset.addEventListener('click', function() { resetMonth(); });
 
 var btnBulk = document.getElementById('btnBulkAssign');
 if (btnBulk) {
