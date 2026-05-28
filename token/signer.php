@@ -210,9 +210,38 @@ document.querySelectorAll('.contract-box span').forEach(function(span) {
         var cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.style.cssText = 'width:15px;height:15px;vertical-align:middle;cursor:pointer;accent-color:#1a2332;margin-right:6px';
+        cb.addEventListener('change', refreshAnnexeStatus);
         span.parentNode.replaceChild(cb, span);
     }
 });
+
+// Surligne en orange les annexes dont aucune case n'est cochée
+function refreshAnnexeStatus() {
+    document.querySelectorAll('.contract-box .annexe-page').forEach(function(page) {
+        var boxes = page.querySelectorAll('input[type="checkbox"]');
+        if (!boxes.length) return;
+        var anyChecked = Array.prototype.some.call(boxes, function(cb) { return cb.checked; });
+        page.style.outline      = anyChecked ? 'none'          : '2px solid #f59e0b';
+        page.style.outlineOffset = anyChecked ? '0'             : '4px';
+        page.style.borderRadius  = anyChecked ? '0'             : '4px';
+    });
+}
+refreshAnnexeStatus(); // état initial
+
+function getAnnexesNonCochees() {
+    var liste = [];
+    document.querySelectorAll('.contract-box .annexe-page').forEach(function(page) {
+        var boxes = page.querySelectorAll('input[type="checkbox"]');
+        if (!boxes.length) return;
+        var anyChecked = Array.prototype.some.call(boxes, function(cb) { return cb.checked; });
+        if (!anyChecked) {
+            var h2 = page.querySelector('h2');
+            liste.push(h2 ? h2.textContent.trim() : 'une annexe');
+        }
+    });
+    return liste;
+}
+
 function clearSig() {
     if (_pad) _pad.clear();
     var p=document.getElementById('sigPlaceholder'); if(p) p.style.display='';
@@ -220,6 +249,22 @@ function clearSig() {
 function submitSig() {
     if (!document.getElementById('chkLu').checked) { alert("Veuillez cocher la case d'acceptation du contrat."); return; }
     if (!_pad || _pad.isEmpty()) { alert('Veuillez tracer votre signature avant de valider.'); return; }
+
+    var nonCochees = getAnnexesNonCochees();
+    if (nonCochees.length > 0) {
+        refreshAnnexeStatus();
+        var msg = 'Attention — aucune case n\'a été cochée dans :\n\n'
+            + nonCochees.map(function(n){ return '• ' + n; }).join('\n')
+            + '\n\nCes cases précisent votre situation personnelle.'
+            + ' Souhaitez-vous quand même signer sans les cocher ?';
+        if (!confirm(msg)) {
+            // Faire défiler vers la première annexe non cochée
+            var firstPage = document.querySelector('.contract-box .annexe-page[style*="outline"]');
+            if (firstPage) firstPage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+        }
+    }
+
     document.getElementById('sigData').value = _pad.toDataURL('image/png');
     document.getElementById('sigForm').submit();
 }
