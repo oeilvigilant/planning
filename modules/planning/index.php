@@ -164,6 +164,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         exit;
     }
 
+    if ($action === 'reset_month') {
+        requirePerm('planning', 'delete');
+        $versionId = (int)($_POST['version_id'] ?? 0);
+        if ($versionId) {
+            $deleted = $db->prepare("DELETE FROM planning_lignes WHERE version_id=?");
+            $deleted->execute([$versionId]);
+            echo json_encode(['ok' => true, 'deleted' => $deleted->rowCount()]);
+        } else {
+            echo json_encode(['ok' => false, 'error' => 'Version introuvable']);
+        }
+        exit;
+    }
+
     if ($action === 'bulk_save') {
         $agentId   = (int)($_POST['agent_id']   ?? 0);
         $dateDebut =      ($_POST['date_debut']  ?? '');
@@ -367,6 +380,7 @@ if ($vue === 'semaine') {
         </button>
         <?php if ($canEdit): ?>
         <button class="btn btn-ov-secondary btn-sm" id="btnNewVersion"><i class="fa fa-code-branch me-1"></i>Nouvelle version</button>
+        <button class="btn btn-sm btn-outline-danger" id="btnResetMonth" title="Supprimer toutes les affectations du mois"><i class="fa fa-eraser me-1"></i>Réinitialiser le mois</button>
         <?php endif; ?>
         <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
         <?php if (canDo('planning','export')): ?>
@@ -594,6 +608,7 @@ if ($vue === 'semaine') {
         </button>
         <?php if ($canEdit): ?>
         <button class="btn btn-ov-secondary btn-sm" id="btnNewVersion"><i class="fa fa-code-branch me-1"></i>Nouvelle version</button>
+        <button class="btn btn-sm btn-outline-danger" id="btnResetMonth" title="Supprimer toutes les affectations du mois"><i class="fa fa-eraser me-1"></i>Réinitialiser le mois</button>
         <?php endif; ?>
         <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
         <?php if ($version && canDo('planning','export')): ?>
@@ -789,6 +804,11 @@ if ($vue === 'semaine') {
                     onclick="applyPreset(this)"
                     style="background:#f8f9fa;color:#374151;border:1.5px solid #d1d5db;border-radius:6px;font-weight:700;font-size:0.78rem;padding:5px 9px;cursor:pointer">
               Libre<br><span style="font-size:0.6rem;font-weight:400;opacity:0.7">Personnalisé</span>
+            </button>
+            <button type="button" id="btnViderPreset"
+                    onclick="viderCreneau()"
+                    style="background:rgba(239,68,68,0.08);color:#dc2626;border:1.5px solid #fca5a5;border-radius:6px;font-weight:700;font-size:0.78rem;padding:5px 9px;cursor:pointer">
+              ⊘ Vider<br><span style="font-size:0.6rem;font-weight:400;opacity:0.7">Effacer</span>
             </button>
           </div>
         </div>
@@ -1073,6 +1093,7 @@ var shifts          = {$shiftsJson};
 var currentMois     = {$jsMois};
 var currentAnnee    = {$jsAnnee};
 var exportVersionId = {$jsVersionId};
+var currentVersionId = {$jsVersionId};
 var exportSemaine   = {$jsSemaine};
 var exportVue       = '{$jsVue}';
 
@@ -1082,6 +1103,9 @@ if (btnAgent) btnAgent.addEventListener('click', function() { agentFilterModal.s
 
 var btnVer = document.getElementById('btnNewVersion');
 if (btnVer) btnVer.addEventListener('click', function() { versionModal.show(); });
+
+var btnReset = document.getElementById('btnResetMonth');
+if (btnReset) btnReset.addEventListener('click', resetMonth);
 
 var btnBulk = document.getElementById('btnBulkAssign');
 if (btnBulk) {
@@ -1279,6 +1303,32 @@ window.deleteLigne = function() {
     fetch('index.php', {method:'POST', body:body})
         .then(function(r) { return r.json(); })
         .then(function(d) { if (d.ok) { cellModal.hide(); location.reload(); } });
+};
+
+// ── viderCreneau — efface directement sans confirmation ───────────────────────
+window.viderCreneau = function() {
+    var agentId   = document.getElementById('modalAgentId').value;
+    var date      = document.getElementById('modalDate').value;
+    var versionId = document.getElementById('modalVersionId').value;
+    if (!versionId || versionId === '0') { cellModal.hide(); return; }
+    var body = new URLSearchParams({action:'delete_ligne', agent_id:agentId, date:date, version_id:versionId});
+    fetch('index.php', {method:'POST', body:body})
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d.ok) { cellModal.hide(); location.reload(); } });
+};
+
+// ── resetMonth — vide toutes les affectations du mois courant ─────────────────
+window.resetMonth = function() {
+    var versionId = typeof currentVersionId !== 'undefined' ? currentVersionId : 0;
+    if (!versionId) { alert('Aucune version active pour ce mois.'); return; }
+    if (!confirm('⚠️ Supprimer TOUTES les affectations du mois ?\n\nCette action est irréversible (sauf si vous avez créé une version précédente).')) return;
+    var body = new URLSearchParams({action:'reset_month', version_id:versionId});
+    fetch('index.php', {method:'POST', body:body})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.ok) { location.reload(); }
+            else { alert('Erreur : ' + (d.error || '?')); }
+        });
 };
 
 // ── createVersion ─────────────────────────────────────────────────────────────
