@@ -393,7 +393,7 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
 </div>
 
 <div class="footer">
-  Document généré le <?= date('d/m/Y à H:i') ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Confidentiel
+  Fait à <?= $e($d['lieu_signature']) ?>, le <?= $e($d['date_signature'] ?: date('d/m/Y')) ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Confidentiel
 </div>
 
 </div><!-- /page -->
@@ -636,7 +636,7 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
 </div>
 
 <div class="footer">
-  Avenant n°<?= $e($numAv) ?> — Généré le <?= date('d/m/Y à H:i') ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Confidentiel
+  Avenant n°<?= $e($numAv) ?> — Fait à <?= $e($d['lieu_signature'] ?? ($p['entreprise_ville']??'Paris')) ?>, le <?= $e($d['date_signature'] ?: date('d/m/Y')) ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Confidentiel
 </div>
 
 </div>
