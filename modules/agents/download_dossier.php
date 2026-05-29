@@ -218,11 +218,13 @@ $docsLabels = [
 ];
 
 foreach ($documents as $doc) {
-    $filePath = UPLOAD_PATH . '/' . $doc['chemin'];
+    // Normaliser le séparateur (Windows)
+    $filePath = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, UPLOAD_PATH . '/' . $doc['chemin']);
     if (!file_exists($filePath)) continue;
     $ext      = strtolower(pathinfo($doc['chemin'], PATHINFO_EXTENSION));
-    $label    = $docsLabels[$doc['type_document']] ?? preg_replace('/[^A-Za-z0-9]/', '_', $doc['type_document']);
-    $zip->addFile($filePath, $label . '_' . $nomBase . '.' . $ext);
+    $label    = $docsLabels[$doc['type_document']] ?? preg_replace('/[^A-Za-z0-9_]/', '_', $doc['type_document']);
+    // addFromString lit le fichier immédiatement (plus fiable que addFile sur Windows)
+    $zip->addFromString($label . '_' . $nomBase . '.' . $ext, file_get_contents($filePath));
 }
 
 $zip->close();
