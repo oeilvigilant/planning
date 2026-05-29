@@ -56,10 +56,8 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #111;
 .annexe-header .sous { font-size: 8.5pt; color: #666; }
 .annexe-body { font-size: 9pt; line-height: 1.6; }
 .annexe-body p { margin: 8px 0; }
-.check-row { margin: 8px 0 8px 10px; display: table; width: 100%; font-size: 9pt; }
-.check-box { display: table-cell; width: 16px; vertical-align: top; padding-top: 1px; }
-.check-box-inner { display: inline-block; width: 11px; height: 11px; border: 1.5px solid #333; background: #fff; }
-.check-label { display: table-cell; padding-left: 6px; vertical-align: top; }
+.choix-groupe { margin: 8px 0 12px; }
+.choix-item { display: block; margin: 5px 0; padding: 6px 10px 6px 10px; border: 1.2px solid #d1d5db; border-radius: 4px; font-size: 9pt; }
 .annexe-sig { margin-top: 28px; }
 .annexe-sig .lieu { font-size: 9pt; margin-bottom: 30px; }
 .annexe-sig .sig-line { border-top: 1px solid #333; padding-top: 4px; font-size: 8pt; color: #666; width: 50%; }
@@ -410,7 +408,9 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demeurant au : <strong><?= $e($d['adresse']) ?></strong>,</p>
     <p>demande expressément et en mon nom propre à la société <strong>OEIL VIGILANT</strong> de déroger à la durée minimale légale de travail de <strong>24 heures par semaine</strong>, conformément à l'article L3123-7 du Code du travail. Je reconnais que cette demande émane exclusivement de ma propre initiative et n'a pas été sollicitée par l'Employeur.</p>
     <p><strong>Cette demande est justifiée par la raison suivante :</strong></p>
-    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Me permettre de faire face à des contraintes personnelles ou de cumuler plusieurs activités afin d'atteindre une durée globale de travail correspondant à un temps plein ou au moins égale à 24 heures par semaine.</div>
+    <div style="margin:6px 0;padding:7px 12px;background:#f8f9fa;border-left:3px solid #c9a84c;border-radius:0 4px 4px 0;font-size:9pt">
+      Me permettre de faire face à des contraintes personnelles ou de cumuler plusieurs activités afin d'atteindre une durée globale de travail correspondant à un temps plein ou au moins égale à 24 heures par semaine.
+    </div>
     <p>J'ai bien noté que mes horaires de travail seront regroupés sur des journées ou des demi-journées régulières ou complètes. Je reconnais avoir été informé(e) de mon droit à revenir sur cette dérogation à tout moment, avec un préavis raisonnable.</p>
     <div class="annexe-sig">
       <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
@@ -440,8 +440,10 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
       <li>44 heures en moyenne sur 12 semaines consécutives (Art L3121-22 CT)</li>
     </ul>
     <p><strong>À ce jour, je déclare :</strong></p>
-    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;N'exercer aucune autre activité professionnelle rémunérée.</div>
-    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et chez tout autre employeur ne dépasse jamais les limites légales susmentionnées, et à informer immédiatement l'Employeur de tout changement de situation.</div>
+    <div class="choix-groupe" data-groupe="cumul">
+      <div class="choix-item">○&nbsp;&nbsp;N'exercer aucune autre activité professionnelle rémunérée.</div>
+      <div class="choix-item">○&nbsp;&nbsp;Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et chez tout autre employeur ne dépasse jamais les limites légales susmentionnées, et à informer immédiatement l'Employeur de tout changement de situation.</div>
+    </div>
     <p style="font-size:8pt;color:#666;font-style:italic">Je reconnais être informé(e) que toute fausse déclaration m'expose à des sanctions disciplinaires et peut engager ma responsabilité personnelle en cas d'accident du travail imputable à un dépassement des durées maximales.</p>
     <div class="annexe-sig">
       <div class="lieu">Fait à <?= $e($d['lieu_signature'] ?? 'Paris') ?>, le <?= $e($d['date_signature']) ?></div>
@@ -473,9 +475,11 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <p>Je reconnais avoir été informé(e) des garanties couvertes, du montant de la cotisation salariale et de la prise en charge par l'Employeur selon les modalités en vigueur dans l'Entreprise. Je m'engage à signaler sans délai tout changement de situation susceptible de modifier mon droit à adhésion ou à dispense (acquisition d'une autre couverture, changement de situation familiale, etc.).</p>
     <?php else: ?>
     <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demande à être dispensé(e) d'affiliation au régime de garantie « Frais de Santé » collectif et obligatoire mis en place par <strong><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?></strong>, pour le motif suivant (Art R2421-2 CT) :</p>
-    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je suis titulaire d'un CDD ou contrat de mission de moins de 3 mois, et justifie d'une couverture responsable individuelle (CSS, AMC individuelle).</div>
-    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je bénéficie déjà d'une couverture collective et obligatoire en tant qu'ayant droit ou en tant que salarié d'un autre employeur.</div>
-    <div style="margin:6px 0;padding-left:4px"><span style="font-family:Courier,monospace;font-weight:bold">[ ]</span>&nbsp;&nbsp;Je bénéficie de la Complémentaire Santé Solidaire (CSS) ou de l'Aide médicale d'État (AME).</div>
+    <div class="choix-groupe" data-groupe="mutuelle">
+      <div class="choix-item">○&nbsp;&nbsp;Je suis titulaire d'un CDD ou contrat de mission de moins de 3 mois, et justifie d'une couverture responsable individuelle (CSS, AMC individuelle).</div>
+      <div class="choix-item">○&nbsp;&nbsp;Je bénéficie déjà d'une couverture collective et obligatoire en tant qu'ayant droit ou en tant que salarié d'un autre employeur.</div>
+      <div class="choix-item">○&nbsp;&nbsp;Je bénéficie de la Complémentaire Santé Solidaire (CSS) ou de l'Aide médicale d'État (AME).</div>
+    </div>
     <p>Je m'engage à fournir les justificatifs correspondants à l'Employeur et reconnais qu'en cas de dispense, je ne pourrai pas prétendre à la prise en charge employeur des frais de santé. Cette dispense prend fin automatiquement en cas de perte du motif qui la justifie.</p>
     <?php endif; ?>
     <div class="annexe-sig">

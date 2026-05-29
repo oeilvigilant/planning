@@ -218,42 +218,47 @@ if (canvas) {
     canvas.addEventListener('mousedown', function(){ var p=document.getElementById('sigPlaceholder'); if(p) p.style.display='none'; });
     canvas.addEventListener('touchstart', function(){ var p=document.getElementById('sigPlaceholder'); if(p) p.style.display='none'; });
 }
-// Convert [ ] text markers to real interactive checkboxes in the contract preview
-document.querySelectorAll('.contract-box span').forEach(function(span) {
-    if (span.textContent.trim() === '[ ]' && span.style.fontFamily && span.style.fontFamily.indexOf('Courier') !== -1) {
-        var cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.style.cssText = 'width:15px;height:15px;vertical-align:middle;cursor:pointer;accent-color:#1a2332;margin-right:6px';
-        cb.addEventListener('change', refreshAnnexeStatus);
-        span.parentNode.replaceChild(cb, span);
-    }
+// Convertit les groupes de choix (.choix-groupe) en vrais boutons radio interactifs
+document.querySelectorAll('.contract-box .choix-groupe').forEach(function(groupe) {
+    var nom = groupe.dataset.groupe || ('choix_' + Math.random().toString(36).substr(2,5));
+    var items = groupe.querySelectorAll('.choix-item');
+    items.forEach(function(item, idx) {
+        var texte = item.textContent.replace(/^[○◯]\s*/, '').trim();
+        var label = document.createElement('label');
+        label.style.cssText = 'display:block;padding:9px 12px;margin:5px 0;border:1.5px solid #d1d5db;border-radius:6px;cursor:pointer;font-size:0.88rem;transition:border-color 0.15s,background 0.15s';
+        var radio = document.createElement('input');
+        radio.type  = 'radio';
+        radio.name  = 'choix_' + nom;
+        radio.value = idx;
+        radio.style.cssText = 'margin-right:10px;cursor:pointer;accent-color:#1a2332;width:15px;height:15px;vertical-align:middle';
+        radio.addEventListener('change', function() {
+            groupe.querySelectorAll('label').forEach(function(l) {
+                l.style.borderColor = '#d1d5db';
+                l.style.background  = '#fff';
+            });
+            label.style.borderColor = '#1a2332';
+            label.style.background  = '#eef2ff';
+        });
+        label.appendChild(radio);
+        label.appendChild(document.createTextNode(texte));
+        item.parentNode.insertBefore(label, item);
+        item.style.display = 'none';
+    });
 });
 
-// Surligne en orange les annexes dont aucune case n'est cochée
-function refreshAnnexeStatus() {
-    document.querySelectorAll('.contract-box .annexe-page').forEach(function(page) {
-        var boxes = page.querySelectorAll('input[type="checkbox"]');
-        if (!boxes.length) return;
-        var anyChecked = Array.prototype.some.call(boxes, function(cb) { return cb.checked; });
-        page.style.outline      = anyChecked ? 'none'          : '2px solid #f59e0b';
-        page.style.outlineOffset = anyChecked ? '0'             : '4px';
-        page.style.borderRadius  = anyChecked ? '0'             : '4px';
-    });
-}
-refreshAnnexeStatus(); // état initial
-
-function getAnnexesNonCochees() {
-    var liste = [];
-    document.querySelectorAll('.contract-box .annexe-page').forEach(function(page) {
-        var boxes = page.querySelectorAll('input[type="checkbox"]');
-        if (!boxes.length) return;
-        var anyChecked = Array.prototype.some.call(boxes, function(cb) { return cb.checked; });
-        if (!anyChecked) {
-            var h2 = page.querySelector('h2');
-            liste.push(h2 ? h2.textContent.trim() : 'une annexe');
+function getGroupesNonSelectionnes() {
+    var manquants = [];
+    document.querySelectorAll('.contract-box .choix-groupe').forEach(function(groupe) {
+        var nom = groupe.dataset.groupe;
+        var selected = groupe.querySelector('input[type="radio"]:checked');
+        if (!selected) {
+            manquants.push(
+                nom === 'cumul'    ? 'Annexe 2 — Déclaration cumul d\'emplois' :
+                nom === 'mutuelle' ? 'Annexe 3 — Mutuelle' : nom
+            );
         }
     });
-    return liste;
+    return manquants;
 }
 
 function clearSig() {
@@ -281,23 +286,24 @@ function submitSig() {
         return;
     }
 
-    var nonCochees = getAnnexesNonCochees();
-    if (nonCochees.length > 0) {
-        refreshAnnexeStatus();
-        showSigError('Veuillez cocher au moins une case dans chaque annexe avant de signer : <strong>'
-            + nonCochees.join(', ') + '</strong>. Les cases surlignées en orange vous attendent.');
-        // Défilement vers la première annexe non cochée
-        var firstPage = document.querySelector('.contract-box .annexe-page');
-        var pages = document.querySelectorAll('.contract-box .annexe-page');
-        for (var i = 0; i < pages.length; i++) {
-            var boxes = pages[i].querySelectorAll('input[type="checkbox"]');
-            if (boxes.length && !Array.prototype.some.call(boxes, function(cb){ return cb.checked; })) {
-                pages[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
-                break;
-            }
-        }
+    var manquants = getGroupesNonSelectionnes();
+    if (manquants.length > 0) {
+        // Mettre en évidence les groupes sans sélection
+        document.querySelectorAll('.contract-box .choix-groupe').forEach(function(g) {
+            var sel = g.querySelector('input[type="radio"]:checked');
+            g.style.outline       = sel ? 'none' : '2px solid #f59e0b';
+            g.style.outlineOffset = sel ? '0'    : '3px';
+            g.style.borderRadius  = '4px';
+        });
+        showSigError('Veuillez faire votre choix dans : <strong>' + manquants.join(' et ') + '</strong>.');
+        var firstGroupe = document.querySelector('.contract-box .choix-groupe');
+        if (firstGroupe) firstGroupe.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
+    // Retirer les bordures d'alerte si tout est OK
+    document.querySelectorAll('.contract-box .choix-groupe').forEach(function(g) {
+        g.style.outline = 'none';
+    });
 
     document.getElementById('sigData').value = _pad.toDataURL('image/png');
     document.getElementById('sigForm').submit();
