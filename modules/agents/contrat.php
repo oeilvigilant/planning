@@ -44,6 +44,7 @@ try {
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS date_signature VARCHAR(10) NULL");
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS inclure_annexe_24h TINYINT(1) NOT NULL DEFAULT 1");
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS mutuelle_choix VARCHAR(20) NOT NULL DEFAULT 'dispense'");
+    $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS total_heures_contrat DECIMAL(8,2) NULL");
     $db->exec("CREATE TABLE IF NOT EXISTS signatures_log (
         id        INT AUTO_INCREMENT PRIMARY KEY,
         agent_id  INT NOT NULL,
@@ -99,7 +100,7 @@ $defaults = [
                               $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
                               $a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : ''
                           ),
-    'total_heures_contrat' => '',
+    'total_heures_contrat' => $a['total_heures_contrat'] ? (string)$a['total_heures_contrat'] : '',
     'site_affectation' => $a['lieu_travail'] ?? '',
     'salaire_horaire'  => $a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70',
     'type_remuneration'=> $a['type_remuneration'] ?? 'Brute',
@@ -225,18 +226,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
     }
     $stmt = $db->prepare("
         UPDATE agents SET
-            type_contrat       = ?,
-            date_debut_contrat = ?,
-            date_fin_contrat   = ?,
-            remuneration       = ?,
-            type_remuneration  = ?,
-            periode_essai      = ?,
-            lieu_travail       = ?,
-            poste              = ?,
-            lieu_signature     = ?,
-            date_signature     = ?,
-            inclure_annexe_24h = ?,
-            mutuelle_choix     = ?
+            type_contrat          = ?,
+            date_debut_contrat    = ?,
+            date_fin_contrat      = ?,
+            remuneration          = ?,
+            type_remuneration     = ?,
+            periode_essai         = ?,
+            lieu_travail          = ?,
+            poste                 = ?,
+            lieu_signature        = ?,
+            date_signature        = ?,
+            inclure_annexe_24h    = ?,
+            mutuelle_choix        = ?,
+            total_heures_contrat  = ?
         WHERE id = ?
     ");
     $stmt->execute([
@@ -252,6 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
         trim($_POST['date_signature'] ?? ''),
         isset($_POST['inclure_annexe_24h']) ? 1 : 0,
         $_POST['mutuelle_choix']      ?? 'dispense',
+        !empty($_POST['total_heures_contrat']) ? (float)$_POST['total_heures_contrat'] : null,
         $id,
     ]);
     flash('success', 'Données du contrat sauvegardées dans la fiche agent.');
