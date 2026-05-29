@@ -209,22 +209,38 @@ $zip->addFromString('Fiche_comptable_' . $nomBase . '.pdf', $fichePdf);
 
 $docsLabels = [
     'piece_identite'       => 'Piece_identite',
+    'titre_sejour'         => 'Titre_sejour',
     'carte_vitale'         => 'Carte_vitale',
     'attestation_domicile' => 'Attestation_domicile',
-    'titre_sejour'         => 'Titre_sejour',
     'attestation_cnaps'    => 'Attestation_CNAPS',
     'rib'                  => 'RIB',
     'contrat'              => 'Contrat_signe',
 ];
 
+$zipNames = []; // compteur pour éviter les doublons dans le ZIP
 foreach ($documents as $doc) {
-    // Normaliser le séparateur (Windows)
     $filePath = str_replace(['\\', '/'], DIRECTORY_SEPARATOR, UPLOAD_PATH . '/' . $doc['chemin']);
     if (!file_exists($filePath)) continue;
-    $ext      = strtolower(pathinfo($doc['chemin'], PATHINFO_EXTENSION));
-    $label    = $docsLabels[$doc['type_document']] ?? preg_replace('/[^A-Za-z0-9_]/', '_', $doc['type_document']);
-    // addFromString lit le fichier immédiatement (plus fiable que addFile sur Windows)
-    $zip->addFromString($label . '_' . $nomBase . '.' . $ext, file_get_contents($filePath));
+    $ext = strtolower(pathinfo($doc['chemin'], PATHINFO_EXTENSION));
+
+    if ($doc['type_document'] === 'autre') {
+        // Utiliser le libellé saisi par l'agent comme nom de fichier
+        $parts = explode(' — ', $doc['nom_fichier'], 2);
+        $label = preg_replace('/[^A-Za-z0-9_-]/', '_', $parts[0] ?: 'Document');
+    } else {
+        $label = $docsLabels[$doc['type_document']] ?? preg_replace('/[^A-Za-z0-9_]/', '_', $doc['type_document']);
+    }
+
+    // Déduplication : ajouter un suffixe si le nom existe déjà
+    $zipName = $label . '_' . $nomBase . '.' . $ext;
+    if (isset($zipNames[$zipName])) {
+        $zipNames[$zipName]++;
+        $zipName = $label . '_' . $nomBase . '_' . $zipNames[$zipName] . '.' . $ext;
+    } else {
+        $zipNames[$zipName] = 1;
+    }
+
+    $zip->addFromString($zipName, file_get_contents($filePath));
 }
 
 $zip->close();

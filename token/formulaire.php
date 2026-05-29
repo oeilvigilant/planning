@@ -33,7 +33,8 @@ foreach ($docRows->fetchAll() as $d) {
     $existingDocs[$d['type_document']] = $d;
 }
 
-$typesDoc = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','contrat','rib'];
+// contrat et titre_sejour gérés séparément dans la boucle ci-dessous
+$typesDoc = ['piece_identite','carte_vitale','attestation_domicile','attestation_cnaps','rib'];
 
 $errors  = [];
 $success = false;
@@ -67,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($photo) $db->prepare("UPDATE agents SET photo=? WHERE id=?")->execute([$photo, $agent['id']]);
     }
 
-    // Documents — uniquement les types non encore fournis
+    // Documents standards — uniquement les types non encore fournis
     foreach ($typesDoc as $typeDoc) {
         if (!isset($existingDocs[$typeDoc]) && !empty($_FILES[$typeDoc]['name'])) {
             $chemin = uploadFichier($_FILES[$typeDoc], 'documents', ['pdf','jpg','jpeg','png']);
@@ -77,6 +78,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+
+    // Pièce d'identité OU titre de séjour (champ fusionné)
+    $hasIdentite = isset($existingDocs['piece_identite']) || isset($existingDocs['titre_sejour']);
+    if (!$hasIdentite && !empty($_FILES['piece_identite']['name'])) {
+        $chemin = uploadFichier($_FILES['piece_identite'], 'documents', ['pdf','jpg','jpeg','png']);
+        if ($chemin) {
+            $db->prepare("INSERT INTO agent_documents (agent_id,type_document,nom_fichier,chemin,taille) VALUES (?,?,?,?,?)")
+               ->execute([$agent['id'], 'piece_identite', $_FILES['piece_identite']['name'], $chemin, $_FILES['piece_identite']['size']]);
+        }
+    }
+
+    // Autres documents libres (slots 1 et 2)
+    for ($i = 1; $i <= 2; $i++) {
+        if (!empty($_FILES['autre_' . $i]['name'])) {
+            $chemin = uploadFichier($_FILES['autre_' . $i], 'documents', ['pdf','jpg','jpeg','png']);
+            if ($chemin) {
+                $label = trim($_POST['autre_label_' . $i] ?? '') ?: 'Document supplémentaire';
+                $db->prepare("INSERT INTO agent_documents (agent_id,type_document,nom_fichier,chemin,taille) VALUES (?,?,?,?,?)")
+                   ->execute([$agent['id'], 'autre', $label . ' — ' . $_FILES['autre_' . $i]['name'], $chemin, $_FILES['autre_' . $i]['size']]);
+            }
+        }
+    }
+
     $success = true;
 }
 
@@ -226,14 +250,29 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
           </div>
 
           <?php
+          // ── Pièce d'identité OU titre de séjour (champ fusionné) ──────────────
+          $existIdentite = $existingDocs['piece_identite'] ?? $existingDocs['titre_sejour'] ?? null;
+          ?>
+          <div class="col-md-6">
+            <label class="form-label"><i class="fa fa-id-card me-1 text-muted"></i>Pièce d'identité <span style="color:#6b7280;font-weight:400">ou</span> titre de séjour</label>
+            <?php if ($existIdentite): ?>
+              <div class="doc-done">
+                <i class="fa fa-check-circle text-success"></i>
+                <span style="color:#15803d;font-weight:500">Déjà fourni</span>
+                <a href="<?= UPLOAD_URL ?>/<?= h($existIdentite['chemin']) ?>" target="_blank" class="ms-auto" style="font-size:0.75rem;color:#2563eb"><i class="fa fa-eye me-1"></i><?= h($existIdentite['nom_fichier']) ?></a>
+              </div>
+            <?php else: ?>
+              <input type="file" name="piece_identite" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+            <?php endif; ?>
+          </div>
+
+          <?php
+          // ── Documents standards (sans pièce d'identité/titre séjour/contrat) ──
           $docsLabels = [
-            'piece_identite'       => ['Pièce d\'identité',            'fa-id-card'],
-            'carte_vitale'         => ['Carte vitale',                 'fa-heart-pulse'],
-            'attestation_domicile' => ['Attestation domicile',         'fa-house'],
-            'titre_sejour'         => ['Titre de séjour (si étranger)','fa-passport'],
-            'attestation_cnaps'    => ['Attestation CNAPS',            'fa-shield-halved'],
+            'carte_vitale'         => ['Carte vitale',                    'fa-heart-pulse'],
+            'attestation_domicile' => ['Attestation de domicile',         'fa-house'],
+            'attestation_cnaps'    => ['Attestation CNAPS',               'fa-shield-halved'],
             'rib'                  => ['RIB (relevé d\'identité bancaire)','fa-building-columns'],
-            'contrat'              => ['Contrat de travail',           'fa-file-contract'],
           ];
           foreach ($docsLabels as $k => [$label, $icon]):
             $existing = $existingDocs[$k] ?? null;
@@ -251,6 +290,27 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
             <?php endif; ?>
           </div>
           <?php endforeach; ?>
+
+          <?php
+          // ── Autres documents ─────────────────────────────────────────────────
+          $autresDocs = array_filter($existingDocs, fn($d) => true, ARRAY_FILTER_USE_KEY);
+          $nbAutres = count(array_filter($existingDocs, fn($k) => $k === 'autre', ARRAY_FILTER_USE_KEY));
+          ?>
+          <div class="col-12 mt-2">
+            <div style="border-top:1px dashed #d1d5db;padding-top:1rem;margin-top:0.25rem">
+              <div class="form-label mb-2" style="color:#374151;font-weight:600"><i class="fa fa-paperclip me-1 text-muted"></i>Autres documents <span style="color:#6b7280;font-weight:400;font-size:0.8rem">(optionnel — diplôme, justificatif, etc.)</span></div>
+              <?php for ($i = 1; $i <= 2; $i++): ?>
+              <div class="row g-2 mb-2">
+                <div class="col-md-5">
+                  <input type="text" name="autre_label_<?= $i ?>" class="form-control form-control-sm" placeholder="Nom du document (ex : Diplôme)" maxlength="80">
+                </div>
+                <div class="col-md-7">
+                  <input type="file" name="autre_<?= $i ?>" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png">
+                </div>
+              </div>
+              <?php endfor; ?>
+            </div>
+          </div>
 
         </div>
 

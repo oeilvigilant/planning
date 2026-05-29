@@ -65,12 +65,13 @@ try {
 
 $docsLabels = [
     'piece_identite'      => ['Pièce d\'identité','fa-id-card'],
+    'titre_sejour'        => ['Titre de séjour','fa-passport'],
     'carte_vitale'        => ['Carte vitale','fa-heart-pulse'],
     'attestation_domicile'=> ['Attestation domicile','fa-house'],
-    'titre_sejour'        => ['Titre de séjour','fa-passport'],
     'attestation_cnaps'   => ['Attestation CNAPS','fa-shield-halved'],
     'rib'                 => ['RIB','fa-building-columns'],
     'contrat'             => ['Contrat','fa-file-contract'],
+    'autre'               => ['Document','fa-file'],
 ];
 ?>
 
@@ -161,8 +162,18 @@ if (canDo('agents','delete')) {
         <div class="d-flex align-items-center gap-2 px-3 py-2" style="border-bottom:1px solid #f0f2f5;font-size:0.82rem">
           <i class="fa <?= $docsLabels[$doc['type_document']][1] ?? 'fa-file' ?> text-muted"></i>
           <div class="flex-grow-1">
-            <div><?= h($docsLabels[$doc['type_document']][0] ?? $doc['type_document']) ?></div>
-            <div style="font-size:0.72rem;color:#9ca3af"><?= h($doc['nom_fichier']) ?></div>
+            <?php
+            if ($doc['type_document'] === 'autre') {
+                $parts = explode(' — ', $doc['nom_fichier'], 2);
+                $docLabel = $parts[0];
+                $docSub   = $parts[1] ?? '';
+            } else {
+                $docLabel = $docsLabels[$doc['type_document']][0] ?? $doc['type_document'];
+                $docSub   = $doc['nom_fichier'];
+            }
+            ?>
+            <div><?= h($docLabel) ?></div>
+            <div style="font-size:0.72rem;color:#9ca3af"><?= h($docSub) ?></div>
           </div>
           <a href="<?= UPLOAD_URL ?>/<?= h($doc['chemin']) ?>" target="_blank" class="btn-sm-icon view" title="Voir"><i class="fa fa-eye"></i></a>
           <?php if (canDo('agents','edit')): ?>
