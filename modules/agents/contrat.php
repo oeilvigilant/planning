@@ -277,23 +277,6 @@ if (!$defaults['date_debut'] || !$defaults['date_fin']) {
     }
 }
 
-// ── Pré-calculer les heures contrat depuis le planning ─────────────────────────
-if (empty($defaults['total_heures_contrat']) && $defaults['date_debut'] && $defaults['date_fin']) {
-    $dD = DateTime::createFromFormat('d/m/Y', $defaults['date_debut']);
-    $dF = DateTime::createFromFormat('d/m/Y', $defaults['date_fin']);
-    if ($dD && $dF && $dF >= $dD) {
-        $stmt = $db->prepare("
-            SELECT COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche
-                              + pl.min_ferie_normal + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS total_min
-            FROM planning_lignes pl
-            JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
-            WHERE pl.agent_id = ? AND pl.date_travail BETWEEN ? AND ?
-        ");
-        $stmt->execute([$id, $dD->format('Y-m-d'), $dF->format('Y-m-d')]);
-        $totalMin = (int)($stmt->fetch()['total_min'] ?? 0);
-        if ($totalMin > 0) $defaults['total_heures_contrat'] = round($totalMin / 60, 2);
-    }
-}
 
 $data      = $_SERVER['REQUEST_METHOD'] === 'POST' ? array_merge($defaults, $_POST) : $defaults;
 $exportPdf = $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['export_pdf']) && $_POST['export_pdf'] === '1';
@@ -395,17 +378,20 @@ require_once __DIR__ . '/../../includes/header.php';
           </div>
           <div class="col-6">
             <label class="form-label">Date de début</label>
-            <input type="text" name="date_debut" id="dateDebut" class="form-control form-control-sm" value="<?= h($data['date_debut']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); calcHeuresPlanning(); updatePreview(); check24hCoherence()">
+            <input type="text" name="date_debut" id="dateDebut" class="form-control form-control-sm" value="<?= h($data['date_debut']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); updatePreview(); check24hCoherence()">
           </div>
           <div class="col-6">
             <label class="form-label">Date de fin <small class="text-muted">(CDD)</small></label>
-            <input type="text" name="date_fin" id="dateFin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); calcHeuresPlanning(); updatePreview(); check24hCoherence()">
+            <input type="text" name="date_fin" id="dateFin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); updatePreview(); check24hCoherence()">
           </div>
           <div class="col-6">
-            <label class="form-label">Total heures contrat <small class="text-muted">(calculé planning)</small></label>
+            <label class="form-label">Total heures contrat</label>
             <div class="input-group input-group-sm">
-              <input type="number" name="total_heures_contrat" class="form-control" step="0.5" min="0" value="<?= h($data['total_heures_contrat'] ?? '') ?>" placeholder="ex: 36" oninput="updatePreview(); check24hCoherence()">
+              <input type="number" name="total_heures_contrat" id="totalHeuresContrat" class="form-control" step="0.5" min="0" value="<?= h($data['total_heures_contrat'] ?? '') ?>" placeholder="ex: 36" oninput="updatePreview(); check24hCoherence()">
               <span class="input-group-text">h</span>
+              <button type="button" class="btn btn-outline-secondary" id="btnCalcHeures" onclick="calcHeuresPlanning()" title="Calculer depuis le planning">
+                <i class="fa fa-rotate" id="calcHeuresIcon"></i>
+              </button>
             </div>
           </div>
           <div class="col-6">
@@ -704,26 +690,40 @@ function calcPeriodeEssai() {
     else { el.value = nbSem + ' jours travaillés'; }
 }
 
-var _heuresFetchTimer = null;
 function calcHeuresPlanning() {
     var debut = document.getElementById('dateDebut').value;
     var fin   = document.getElementById('dateFin').value;
-    if (!debut || !fin) return;
-    clearTimeout(_heuresFetchTimer);
-    _heuresFetchTimer = setTimeout(function() {
-        var url = 'contrat.php?id=<?= $id ?>&action=get_heures_planning&agent_id=<?= $id ?>'
-                + '&date_debut=' + encodeURIComponent(debut)
-                + '&date_fin='   + encodeURIComponent(fin);
-        fetch(url)
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.ok && data.total_heures > 0) {
-                    document.querySelector('[name="total_heures_contrat"]').value = data.total_heures;
-                    updatePreview();
-                }
-            })
-            .catch(function() {});
-    }, 400);
+    if (!debut || !fin) {
+        alert('Veuillez renseigner les dates de début et de fin avant de calculer.');
+        return;
+    }
+    var icon = document.getElementById('calcHeuresIcon');
+    var btn  = document.getElementById('btnCalcHeures');
+    icon.className = 'fa fa-spinner fa-spin';
+    btn.disabled = true;
+
+    var url = 'contrat.php?id=<?= $id ?>&action=get_heures_planning&agent_id=<?= $id ?>'
+            + '&date_debut=' + encodeURIComponent(debut)
+            + '&date_fin='   + encodeURIComponent(fin);
+    fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok && data.total_heures > 0) {
+                document.getElementById('totalHeuresContrat').value = data.total_heures;
+                updatePreview();
+                check24hCoherence();
+                icon.className = 'fa fa-check text-success';
+                setTimeout(function() { icon.className = 'fa fa-rotate'; }, 2000);
+            } else {
+                icon.className = 'fa fa-triangle-exclamation text-warning';
+                setTimeout(function() { icon.className = 'fa fa-rotate'; }, 2000);
+            }
+            btn.disabled = false;
+        })
+        .catch(function() {
+            icon.className = 'fa fa-rotate';
+            btn.disabled = false;
+        });
 }
 
 function check24hCoherence() {
@@ -790,9 +790,6 @@ function exportPdf() {
 document.addEventListener('DOMContentLoaded', function() {
     updatePreview();
     check24hCoherence();
-    if (document.getElementById('dateDebut').value && document.getElementById('dateFin').value) {
-        calcHeuresPlanning();
-    }
     initSigPad();
 
     // Capture snapshot du formulaire contrat avant chaque envoi de token
