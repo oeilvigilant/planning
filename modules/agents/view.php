@@ -69,6 +69,7 @@ $docsLabels = [
     'attestation_domicile'=> ['Attestation domicile','fa-house'],
     'titre_sejour'        => ['Titre de séjour','fa-passport'],
     'attestation_cnaps'   => ['Attestation CNAPS','fa-shield-halved'],
+    'rib'                 => ['RIB','fa-building-columns'],
     'contrat'             => ['Contrat','fa-file-contract'],
 ];
 ?>

@@ -12,7 +12,6 @@ $stmt->execute([$token]);
 $agent = $stmt->fetch();
 
 if (!$agent) {
-    $expired = $db->prepare("SELECT token_used FROM agents WHERE token_acces = ?")->execute([$token]);
 ?>
 <!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Lien expiré</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -26,13 +25,23 @@ if (!$agent) {
 </body></html>
 <?php exit; }
 
-$errors = [];
+// Documents déjà uploadés pour cet agent
+$existingDocs = [];
+$docRows = $db->prepare("SELECT type_document, nom_fichier, chemin FROM agent_documents WHERE agent_id = ?");
+$docRows->execute([$agent['id']]);
+foreach ($docRows->fetchAll() as $d) {
+    $existingDocs[$d['type_document']] = $d;
+}
+
+$typesDoc = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','contrat','rib'];
+
+$errors  = [];
 $success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = $_POST;
+    // Les valeurs de l'agent servent de fallback pour les champs désactivés (selects)
+    $data = array_merge($agent, $_POST);
 
-    // Mettre à jour les infos de base
     $db->prepare("
         UPDATE agents SET
         date_naissance=?,lieu_naissance=?,nationalite=?,num_secu=?,
@@ -41,14 +50,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         token_used=1
         WHERE id=?
     ")->execute([
-        $data['date_naissance']?:null,$data['lieu_naissance']?:null,
-        $data['nationalite']?:null,$data['num_secu']?:null,
-        $data['situation_familiale']?:null,(int)($data['nb_enfants']??0),
-        $data['adresse']?:null,$data['cp']?:null,$data['ville']?:null,
-        $data['telephone']?:null,$data['email']?:null,
-        $data['num_autorisation_cnaps']?:null,
-        $data['date_autorisation_cnaps']?:null,$data['date_expiration_cnaps']?:null,
-        $agent['id']
+        $data['date_naissance']    ?: null, $data['lieu_naissance'] ?: null,
+        $data['nationalite']       ?: null, $data['num_secu']       ?: null,
+        $data['situation_familiale']?: null, (int)($data['nb_enfants'] ?? 0),
+        $data['adresse']  ?: null, $data['cp']    ?: null, $data['ville'] ?: null,
+        $data['telephone']?: null, $data['email'] ?: null,
+        $data['num_autorisation_cnaps']  ?: null,
+        $data['date_autorisation_cnaps'] ?: null,
+        $data['date_expiration_cnaps']   ?: null,
+        $agent['id'],
     ]);
 
     // Photo
@@ -57,14 +67,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($photo) $db->prepare("UPDATE agents SET photo=? WHERE id=?")->execute([$photo, $agent['id']]);
     }
 
-    // Documents
-    $typesDoc = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','contrat'];
+    // Documents — uniquement les types non encore fournis
     foreach ($typesDoc as $typeDoc) {
-        if (!empty($_FILES[$typeDoc]['name'])) {
+        if (!isset($existingDocs[$typeDoc]) && !empty($_FILES[$typeDoc]['name'])) {
             $chemin = uploadFichier($_FILES[$typeDoc], 'documents', ['pdf','jpg','jpeg','png']);
             if ($chemin) {
                 $db->prepare("INSERT INTO agent_documents (agent_id,type_document,nom_fichier,chemin,taille) VALUES (?,?,?,?,?)")
-                   ->execute([$agent['id'],$typeDoc,$_FILES[$typeDoc]['name'],$chemin,$_FILES[$typeDoc]['size']]);
+                   ->execute([$agent['id'], $typeDoc, $_FILES[$typeDoc]['name'], $chemin, $_FILES[$typeDoc]['size']]);
             }
         }
     }
@@ -72,6 +81,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $params = getAllParams();
+
+// Helper : attributs readonly si la valeur est déjà renseignée
+$ro = fn($v) => !empty(trim((string)$v))
+    ? ' readonly style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"'
+    : '';
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -87,6 +101,8 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
 .form-header h1 { font-size:1.3rem; }
 .section-title { color:#c9a84c; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid rgba(201,168,76,0.2); padding-bottom:0.5rem; margin:1.5rem 0 1rem; }
 .form-label { font-weight:500; font-size:0.85rem; color:#374151; }
+.field-done { font-size:0.7rem; color:#16a34a; font-weight:600; margin-left:6px; }
+.doc-done { display:flex; align-items:center; gap:8px; padding:8px 10px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; font-size:0.82rem; }
 </style>
 </head>
 <body>
@@ -113,65 +129,129 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
     <div class="card-body p-4">
       <div class="alert alert-info py-2" style="font-size:0.85rem">
         <i class="fa fa-info-circle me-2"></i>
-        Bonjour <strong><?= h($agent['prenom'].' '.$agent['nom']) ?></strong>, veuillez compléter vos informations ci-dessous. Ce lien est à usage unique.
+        Bonjour <strong><?= h($agent['prenom'].' '.$agent['nom']) ?></strong>, veuillez compléter les informations manquantes ci-dessous.
+        Les champs <span style="background:#f3f4f6;color:#6b7280;padding:1px 6px;border-radius:4px;font-size:0.8rem">grisés</span> sont déjà renseignés. Ce lien est à usage unique.
       </div>
 
       <form method="POST" enctype="multipart/form-data">
 
         <div class="section-title">Informations personnelles</div>
         <div class="row g-3">
-          <div class="col-md-6"><label class="form-label">Date de naissance</label>
-            <input type="date" name="date_naissance" class="form-control" value="<?= h($agent['date_naissance']??'') ?>"></div>
-          <div class="col-md-6"><label class="form-label">Lieu de naissance</label>
-            <input type="text" name="lieu_naissance" class="form-control" value="<?= h($agent['lieu_naissance']??'') ?>"></div>
-          <div class="col-md-6"><label class="form-label">Nationalité</label>
-            <input type="text" name="nationalite" class="form-control" value="<?= h($agent['nationalite']??'') ?>"></div>
-          <div class="col-md-6"><label class="form-label">N° Sécurité Sociale</label>
-            <input type="text" name="num_secu" class="form-control" data-format="secu" value="<?= h($agent['num_secu']??'') ?>"></div>
-          <div class="col-md-6"><label class="form-label">Situation familiale</label>
-            <select name="situation_familiale" class="form-select">
+          <div class="col-md-6">
+            <label class="form-label">Date de naissance<?= !empty($agent['date_naissance']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="date" name="date_naissance" class="form-control" value="<?= h($agent['date_naissance']??'') ?>"<?= $ro($agent['date_naissance']??'') ?>>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Lieu de naissance<?= !empty($agent['lieu_naissance']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="text" name="lieu_naissance" class="form-control" value="<?= h($agent['lieu_naissance']??'') ?>"<?= $ro($agent['lieu_naissance']??'') ?>>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Nationalité<?= !empty($agent['nationalite']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="text" name="nationalite" class="form-control" value="<?= h($agent['nationalite']??'') ?>"<?= $ro($agent['nationalite']??'') ?>>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">N° Sécurité Sociale<?= !empty($agent['num_secu']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="text" name="num_secu" class="form-control" data-format="secu" value="<?= h($agent['num_secu']??'') ?>"<?= $ro($agent['num_secu']??'') ?>>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Situation familiale<?= !empty($agent['situation_familiale']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <?php $sfFilled = !empty($agent['situation_familiale']); ?>
+            <select name="situation_familiale" class="form-select"<?= $sfFilled ? ' disabled style="background:#f3f4f6;color:#6b7280"' : '' ?>>
               <option value="">—</option>
               <?php foreach (['Célibataire','Marié(e)','Divorcé(e)','Veuf(ve)','PACS'] as $sf): ?>
               <option value="<?= h($sf) ?>" <?= $agent['situation_familiale']===$sf?'selected':'' ?>><?= h($sf) ?></option>
               <?php endforeach; ?>
-            </select></div>
-          <div class="col-md-6"><label class="form-label">Nombre d'enfants</label>
-            <input type="number" name="nb_enfants" class="form-control" min="0" value="<?= h($agent['nb_enfants']??0) ?>"></div>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Nombre d'enfants</label>
+            <input type="number" name="nb_enfants" class="form-control" min="0" value="<?= h($agent['nb_enfants']??0) ?>">
+          </div>
         </div>
 
         <div class="section-title">Coordonnées</div>
         <div class="row g-3">
-          <div class="col-12"><label class="form-label">Adresse</label>
-            <input type="text" name="adresse" class="form-control" value="<?= h($agent['adresse']??'') ?>"></div>
-          <div class="col-md-3"><label class="form-label">Code postal</label>
-            <input type="text" name="cp" class="form-control" value="<?= h($agent['cp']??'') ?>"></div>
-          <div class="col-md-5"><label class="form-label">Ville</label>
-            <input type="text" name="ville" class="form-control" value="<?= h($agent['ville']??'') ?>"></div>
-          <div class="col-md-4"><label class="form-label">Téléphone</label>
-            <input type="tel" name="telephone" class="form-control" value="<?= h($agent['telephone']??'') ?>"></div>
-          <div class="col-md-6"><label class="form-label">Email</label>
-            <input type="email" name="email" class="form-control" value="<?= h($agent['email']??'') ?>"></div>
+          <div class="col-12">
+            <label class="form-label">Adresse<?= !empty($agent['adresse']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="text" name="adresse" class="form-control" value="<?= h($agent['adresse']??'') ?>"<?= $ro($agent['adresse']??'') ?>>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Code postal<?= !empty($agent['cp']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="text" name="cp" class="form-control" value="<?= h($agent['cp']??'') ?>"<?= $ro($agent['cp']??'') ?>>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">Ville<?= !empty($agent['ville']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="text" name="ville" class="form-control" value="<?= h($agent['ville']??'') ?>"<?= $ro($agent['ville']??'') ?>>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Téléphone<?= !empty($agent['telephone']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="tel" name="telephone" class="form-control" value="<?= h($agent['telephone']??'') ?>"<?= $ro($agent['telephone']??'') ?>>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Email<?= !empty($agent['email']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="email" name="email" class="form-control" value="<?= h($agent['email']??'') ?>"<?= $ro($agent['email']??'') ?>>
+          </div>
         </div>
 
         <div class="section-title">Autorisation CNAPS</div>
         <div class="row g-3">
-          <div class="col-md-4"><label class="form-label">N° Autorisation CNAPS</label>
-            <input type="text" name="num_autorisation_cnaps" class="form-control" value="<?= h($agent['num_autorisation_cnaps']??'') ?>"></div>
-          <div class="col-md-4"><label class="form-label">Date d'autorisation</label>
-            <input type="date" name="date_autorisation_cnaps" class="form-control" value="<?= h($agent['date_autorisation_cnaps']??'') ?>"></div>
-          <div class="col-md-4"><label class="form-label">Date d'expiration</label>
-            <input type="date" name="date_expiration_cnaps" class="form-control" value="<?= h($agent['date_expiration_cnaps']??'') ?>"></div>
+          <div class="col-md-4">
+            <label class="form-label">N° Autorisation CNAPS<?= !empty($agent['num_autorisation_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="text" name="num_autorisation_cnaps" class="form-control" value="<?= h($agent['num_autorisation_cnaps']??'') ?>"<?= $ro($agent['num_autorisation_cnaps']??'') ?>>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Date d'autorisation<?= !empty($agent['date_autorisation_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="date" name="date_autorisation_cnaps" class="form-control" value="<?= h($agent['date_autorisation_cnaps']??'') ?>"<?= $ro($agent['date_autorisation_cnaps']??'') ?>>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Date d'expiration<?= !empty($agent['date_expiration_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="date" name="date_expiration_cnaps" class="form-control" value="<?= h($agent['date_expiration_cnaps']??'') ?>"<?= $ro($agent['date_expiration_cnaps']??'') ?>>
+          </div>
         </div>
 
         <div class="section-title">Photo & Documents</div>
         <div class="row g-3">
-          <div class="col-12"><label class="form-label">Photo</label>
-            <input type="file" name="photo" class="form-control" accept="image/*"></div>
-          <?php $docsLabels = ['piece_identite'=>'Pièce d\'identité','carte_vitale'=>'Carte vitale','attestation_domicile'=>'Attestation domicile','titre_sejour'=>'Titre de séjour (si étranger)','attestation_cnaps'=>'Attestation CNAPS','contrat'=>'Contrat de travail'];
-          foreach ($docsLabels as $k=>$l): ?>
-          <div class="col-md-6"><label class="form-label"><?= h($l) ?></label>
-            <input type="file" name="<?= $k ?>" class="form-control" accept=".pdf,.jpg,.jpeg,.png"></div>
+
+          <!-- Photo -->
+          <div class="col-12">
+            <label class="form-label">Photo</label>
+            <?php if (!empty($agent['photo'])): ?>
+            <div class="doc-done mb-1">
+              <img src="<?= UPLOAD_URL ?>/<?= h($agent['photo']) ?>" style="height:36px;width:36px;object-fit:cover;border-radius:50%;border:2px solid #bbf7d0">
+              <span style="color:#15803d"><i class="fa fa-check-circle me-1"></i>Photo déjà enregistrée</span>
+              <span style="color:#6b7280;font-size:0.75rem">— vous pouvez en envoyer une nouvelle ci-dessous</span>
+            </div>
+            <?php endif; ?>
+            <input type="file" name="photo" class="form-control" accept="image/*">
+          </div>
+
+          <?php
+          $docsLabels = [
+            'piece_identite'       => ['Pièce d\'identité',            'fa-id-card'],
+            'carte_vitale'         => ['Carte vitale',                 'fa-heart-pulse'],
+            'attestation_domicile' => ['Attestation domicile',         'fa-house'],
+            'titre_sejour'         => ['Titre de séjour (si étranger)','fa-passport'],
+            'attestation_cnaps'    => ['Attestation CNAPS',            'fa-shield-halved'],
+            'rib'                  => ['RIB (relevé d\'identité bancaire)','fa-building-columns'],
+            'contrat'              => ['Contrat de travail',           'fa-file-contract'],
+          ];
+          foreach ($docsLabels as $k => [$label, $icon]):
+            $existing = $existingDocs[$k] ?? null;
+          ?>
+          <div class="col-md-6">
+            <label class="form-label"><i class="fa <?= $icon ?> me-1 text-muted"></i><?= h($label) ?></label>
+            <?php if ($existing): ?>
+              <div class="doc-done">
+                <i class="fa fa-check-circle text-success"></i>
+                <span style="color:#15803d;font-weight:500">Déjà fourni</span>
+                <a href="<?= UPLOAD_URL ?>/<?= h($existing['chemin']) ?>" target="_blank" class="ms-auto" style="font-size:0.75rem;color:#2563eb"><i class="fa fa-eye me-1"></i><?= h($existing['nom_fichier']) ?></a>
+              </div>
+            <?php else: ?>
+              <input type="file" name="<?= $k ?>" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+            <?php endif; ?>
+          </div>
           <?php endforeach; ?>
+
         </div>
 
         <div class="mt-4 d-grid">

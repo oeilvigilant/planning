@@ -111,6 +111,7 @@ $docsLabels = [
     'attestation_domicile' => 'Attestation_domicile',
     'titre_sejour'         => 'Titre_sejour',
     'attestation_cnaps'    => 'Attestation_CNAPS',
+    'rib'                  => 'RIB',
     'contrat'              => 'Contrat_signe',
 ];
 

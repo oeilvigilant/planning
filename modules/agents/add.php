@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $agentId = $db->lastInsertId();
 
             // Upload documents
-            $typesDoc = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','contrat'];
+            $typesDoc = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','rib','contrat'];
             foreach ($typesDoc as $typeDoc) {
                 if (!empty($_FILES[$typeDoc]['name'])) {
                     $chemin = uploadFichier($_FILES[$typeDoc], 'documents', ['pdf','jpg','jpeg','png']);
@@ -361,6 +361,7 @@ require_once __DIR__ . '/../../includes/header.php';
         'attestation_domicile'=> 'Attestation domicile',
         'titre_sejour'        => 'Titre de séjour',
         'attestation_cnaps'   => 'Attestation CNAPS',
+        'rib'                 => 'RIB',
         'contrat'             => 'Contrat de travail',
       ];
       foreach ($docsLabels as $k => $label): ?>

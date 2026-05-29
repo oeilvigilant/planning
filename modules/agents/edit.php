@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             // Nouveaux documents
-            $typesDoc = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','contrat'];
+            $typesDoc = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','rib','contrat'];
             foreach ($typesDoc as $typeDoc) {
                 if (!empty($_FILES[$typeDoc]['name'])) {
                     $chemin = uploadFichier($_FILES[$typeDoc], 'documents', ['pdf','jpg','jpeg','png']);
@@ -368,7 +368,7 @@ $documents = $docs->fetchAll();
     <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-folder-open me-2" style="color:var(--ov-gold)"></i>Documents</h2></div>
     <div class="ov-card-body">
       <?php
-      $docsLabels = ['piece_identite'=>'Pièce d\'identité','carte_vitale'=>'Carte vitale','attestation_domicile'=>'Attestation domicile','titre_sejour'=>'Titre de séjour','attestation_cnaps'=>'Attestation CNAPS','contrat'=>'Contrat de travail'];
+      $docsLabels = ['piece_identite'=>'Pièce d\'identité','carte_vitale'=>'Carte vitale','attestation_domicile'=>'Attestation domicile','titre_sejour'=>'Titre de séjour','attestation_cnaps'=>'Attestation CNAPS','rib'=>'RIB','contrat'=>'Contrat de travail'];
       foreach ($docsLabels as $k => $label): ?>
       <div class="mb-2">
         <label class="form-label"><?= h($label) ?></label>
