@@ -440,9 +440,9 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
       <li>44 heures en moyenne sur 12 semaines consécutives (Art L3121-22 CT)</li>
     </ul>
     <p><strong>À ce jour, je déclare :</strong></p>
-    <div class="choix-groupe" data-groupe="cumul">
-      <div class="choix-item">○&nbsp;&nbsp;N'exercer aucune autre activité professionnelle rémunérée.</div>
-      <div class="choix-item">○&nbsp;&nbsp;Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et chez tout autre employeur ne dépasse jamais les limites légales susmentionnées, et à informer immédiatement l'Employeur de tout changement de situation.</div>
+    <div class="choix-groupe">
+      <div class="choix-item">N'exercer aucune autre activité professionnelle rémunérée.</div>
+      <div class="choix-item">Exercer une ou plusieurs autres activités professionnelles rémunérées. Je m'engage à ce que le cumul de mes heures chez OEIL VIGILANT et chez tout autre employeur ne dépasse jamais les limites légales susmentionnées, et à informer immédiatement l'Employeur de tout changement de situation.</div>
     </div>
     <p style="font-size:8pt;color:#666;font-style:italic">Je reconnais être informé(e) que toute fausse déclaration m'expose à des sanctions disciplinaires et peut engager ma responsabilité personnelle en cas d'accident du travail imputable à un dépassement des durées maximales.</p>
     <div class="annexe-sig">
@@ -475,10 +475,10 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <p>Je reconnais avoir été informé(e) des garanties couvertes, du montant de la cotisation salariale et de la prise en charge par l'Employeur selon les modalités en vigueur dans l'Entreprise. Je m'engage à signaler sans délai tout changement de situation susceptible de modifier mon droit à adhésion ou à dispense (acquisition d'une autre couverture, changement de situation familiale, etc.).</p>
     <?php else: ?>
     <p>Je soussigné(e) <strong><?= $e($d['nom_prenom']) ?></strong>, demande à être dispensé(e) d'affiliation au régime de garantie « Frais de Santé » collectif et obligatoire mis en place par <strong><?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?></strong>, pour le motif suivant (Art R2421-2 CT) :</p>
-    <div class="choix-groupe" data-groupe="mutuelle">
-      <div class="choix-item">○&nbsp;&nbsp;Je suis titulaire d'un CDD ou contrat de mission de moins de 3 mois, et justifie d'une couverture responsable individuelle (CSS, AMC individuelle).</div>
-      <div class="choix-item">○&nbsp;&nbsp;Je bénéficie déjà d'une couverture collective et obligatoire en tant qu'ayant droit ou en tant que salarié d'un autre employeur.</div>
-      <div class="choix-item">○&nbsp;&nbsp;Je bénéficie de la Complémentaire Santé Solidaire (CSS) ou de l'Aide médicale d'État (AME).</div>
+    <div class="choix-groupe">
+      <div class="choix-item">Je suis titulaire d'un CDD ou contrat de mission de moins de 3 mois, et justifie d'une couverture responsable individuelle (CSS, AMC individuelle).</div>
+      <div class="choix-item">Je bénéficie déjà d'une couverture collective et obligatoire en tant qu'ayant droit ou en tant que salarié d'un autre employeur.</div>
+      <div class="choix-item">Je bénéficie de la Complémentaire Santé Solidaire (CSS) ou de l'Aide médicale d'État (AME).</div>
     </div>
     <p>Je m'engage à fournir les justificatifs correspondants à l'Employeur et reconnais qu'en cas de dispense, je ne pourrai pas prétendre à la prise en charge employeur des frais de santé. Cette dispense prend fin automatiquement en cas de perte du motif qui la justifie.</p>
     <?php endif; ?>
