@@ -512,7 +512,13 @@ require_once __DIR__ . '/../../includes/header.php';
       <button type="button" onclick="exportPdf()" class="btn btn-ov-primary">
         <i class="fa fa-file-pdf me-2"></i>Générer &amp; Télécharger le contrat PDF
       </button>
-      <button type="button" onclick="window.print()" class="btn btn-ov-secondary">
+      <?php if (!empty($a['signature'])): ?>
+      <button type="button" onclick="exportPdf()" class="btn btn-success">
+        <i class="fa fa-file-pdf me-2"></i>Télécharger le contrat <strong>signé</strong>
+        <span class="badge bg-white text-success ms-1" style="font-size:0.7rem">✓ Signé le <?= date('d/m/Y', strtotime($a['signature_date'])) ?></span>
+      </button>
+      <?php endif; ?>
+      <button type="button" onclick="document.getElementById('contratPreview').contentWindow.print()" class="btn btn-ov-secondary">
         <i class="fa fa-print me-2"></i>Imprimer l'aperçu
       </button>
     </div>

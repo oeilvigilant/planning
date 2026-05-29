@@ -169,6 +169,8 @@ body { background:#f3f4f6; }
     </label>
   </div>
 
+  <div id="sigError" class="mb-2" style="display:none"></div>
+
   <form method="post" id="sigForm">
     <input type="hidden" name="sign_submit" value="1">
     <input type="hidden" name="signature_data" id="sigData">
@@ -246,23 +248,43 @@ function clearSig() {
     if (_pad) _pad.clear();
     var p=document.getElementById('sigPlaceholder'); if(p) p.style.display='';
 }
+function showSigError(msg) {
+    var el = document.getElementById('sigError');
+    el.style.display = '';
+    el.innerHTML = '<div class="alert alert-danger py-2 px-3 mb-0" style="font-size:0.88rem">'
+        + '<i class="fa fa-exclamation-circle me-2"></i>' + msg + '</div>';
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function submitSig() {
-    if (!document.getElementById('chkLu').checked) { alert("Veuillez cocher la case d'acceptation du contrat."); return; }
-    if (!_pad || _pad.isEmpty()) { alert('Veuillez tracer votre signature avant de valider.'); return; }
+    var errEl = document.getElementById('sigError');
+    if (errEl) errEl.style.display = 'none';
+
+    if (!document.getElementById('chkLu').checked) {
+        showSigError("Veuillez cocher la case « J'ai lu et j'accepte » avant de signer.");
+        return;
+    }
+    if (!_pad || _pad.isEmpty()) {
+        showSigError('Veuillez tracer votre signature dans le cadre avant de valider.');
+        return;
+    }
 
     var nonCochees = getAnnexesNonCochees();
     if (nonCochees.length > 0) {
         refreshAnnexeStatus();
-        var msg = 'Attention — aucune case n\'a été cochée dans :\n\n'
-            + nonCochees.map(function(n){ return '• ' + n; }).join('\n')
-            + '\n\nCes cases précisent votre situation personnelle.'
-            + ' Souhaitez-vous quand même signer sans les cocher ?';
-        if (!confirm(msg)) {
-            // Faire défiler vers la première annexe non cochée
-            var firstPage = document.querySelector('.contract-box .annexe-page[style*="outline"]');
-            if (firstPage) firstPage.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            return;
+        showSigError('Veuillez cocher au moins une case dans chaque annexe avant de signer : <strong>'
+            + nonCochees.join(', ') + '</strong>. Les cases surlignées en orange vous attendent.');
+        // Défilement vers la première annexe non cochée
+        var firstPage = document.querySelector('.contract-box .annexe-page');
+        var pages = document.querySelectorAll('.contract-box .annexe-page');
+        for (var i = 0; i < pages.length; i++) {
+            var boxes = pages[i].querySelectorAll('input[type="checkbox"]');
+            if (boxes.length && !Array.prototype.some.call(boxes, function(cb){ return cb.checked; })) {
+                pages[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                break;
+            }
         }
+        return;
     }
 
     document.getElementById('sigData').value = _pad.toDataURL('image/png');
