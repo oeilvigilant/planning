@@ -23,6 +23,23 @@ function renderPdf(string $html, string $filename, string $orientation = 'portra
     exit;
 }
 
+function renderPdfToString(string $html, string $orientation = 'portrait'): string {
+    if (file_exists(DOMPDF_AUTOLOAD)) {
+        require_once DOMPDF_AUTOLOAD;
+        $options = new \Dompdf\Options();
+        $options->set('isHtml5ParserEnabled', true);
+        $options->set('isRemoteEnabled', true);
+        $options->set('defaultFont', 'Arial');
+        $options->set('chroot', APP_ROOT);
+        $dompdf = new \Dompdf\Dompdf($options);
+        $dompdf->loadHtml($html, 'UTF-8');
+        $dompdf->setPaper('A4', $orientation);
+        $dompdf->render();
+        return $dompdf->output();
+    }
+    return $html;
+}
+
 function pdfBaseStyle(): string {
     return '
     <style>

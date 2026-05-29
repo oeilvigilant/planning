@@ -304,6 +304,12 @@ if ($exportPdf) {
     renderPdf($html, 'contrat_' . strtolower(str_replace(' ','_',$a['nom'])) . '_' . strtolower(str_replace(' ','_',$a['prenom'])) . '.pdf');
 }
 
+// Téléchargement direct depuis la fiche agent (?dl=1)
+if (($_GET['dl'] ?? '') === '1') {
+    $html = buildContratHtml($defaults, $params, $a);
+    renderPdf($html, 'Contrat_' . strtoupper(str_replace(' ', '_', $a['nom'])) . '_' . str_replace(' ', '_', $a['prenom']) . '.pdf');
+}
+
 $pageTitle    = 'Édition du contrat';
 $currentModule = 'agents';
 require_once __DIR__ . '/../../includes/header.php';

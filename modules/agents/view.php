@@ -92,6 +92,7 @@ if (canDo('agents','delete')) {
     <a href="contrat.php?id=<?= $id ?>" class="btn" style="background:rgba(201,168,76,0.1);color:#92400e;border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-file-contract me-1"></i>Contrat</a>
     <a href="avenant.php?id=<?= $id ?>" class="btn" style="background:rgba(16,185,129,0.1);color:#065f46;border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-file-pen me-1"></i>Avenant</a>
     <a href="analyse_contrat.php?id=<?= $id ?>" class="btn" style="background:rgba(99,102,241,0.1);color:#3730a3;border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-magnifying-glass-chart me-1"></i>Analyser</a>
+    <a href="download_dossier.php?id=<?= $id ?>" class="btn" style="background:rgba(6,182,212,0.1);color:#0e7490;border:1px solid rgba(6,182,212,0.3);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem" title="Télécharger le contrat + toutes les pièces jointes en ZIP"><i class="fa fa-file-zipper me-1"></i>Dossier pôle social</a>
     <?php if (canDo('agents','create')): ?>
     <a href="token.php?id=<?= $id ?>" class="btn" style="background:rgba(99,102,241,0.1);color:#4f46e5;border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:0.45rem 1rem;font-size:0.875rem"><i class="fa fa-link me-1"></i>Lien auto-remplissage</a>
     <?php endif; ?>
@@ -220,9 +221,12 @@ if (canDo('agents','delete')) {
   <div class="ov-card mb-3">
     <div class="ov-card-header d-flex align-items-center justify-content-between">
       <h2 class="ov-card-title mb-0"><i class="fa fa-file-contract me-2" style="color:var(--ov-gold)"></i>Contrat</h2>
-      <span style="font-size:0.75rem;background:<?= $sb[3] ?>;color:<?= $sb[2] ?>;padding:3px 12px;border-radius:20px;font-weight:600;white-space:nowrap">
-        <i class="fa <?= $sb[1] ?> me-1"></i><?= $sb[0] ?>
-      </span>
+      <div class="d-flex align-items-center gap-2">
+        <a href="contrat.php?id=<?= $id ?>&dl=1" class="btn-sm-icon" title="Télécharger le contrat PDF" style="color:#2563eb"><i class="fa fa-download"></i></a>
+        <span style="font-size:0.75rem;background:<?= $sb[3] ?>;color:<?= $sb[2] ?>;padding:3px 12px;border-radius:20px;font-weight:600;white-space:nowrap">
+          <i class="fa <?= $sb[1] ?> me-1"></i><?= $sb[0] ?>
+        </span>
+      </div>
     </div>
     <div class="ov-card-body">
     <?php if ($contratSigStatus === 'signe' && !empty($a['signature_date'])): ?>
