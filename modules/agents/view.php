@@ -37,6 +37,32 @@ $docs = $db->prepare("SELECT * FROM agent_documents WHERE agent_id = ? ORDER BY 
 $docs->execute([$id]);
 $documents = $docs->fetchAll();
 
+// Statut du contrat de signature
+$contratSigStatus = 'aucun';
+$sigTokenRow      = null;
+try {
+    if (!empty($a['signature'])) {
+        $contratSigStatus = 'signe';
+    } else {
+        $stTok = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? ORDER BY created_at DESC LIMIT 1");
+        $stTok->execute([$id]);
+        $sigTokenRow = $stTok->fetch();
+        if ($sigTokenRow) {
+            if (!empty($sigTokenRow['signed_at'])) {
+                $contratSigStatus = 'signe';
+            } elseif (strtotime($sigTokenRow['expires_at']) > time()) {
+                $contratSigStatus = 'lien_actif';
+            } else {
+                $contratSigStatus = 'lien_expire';
+            }
+        } elseif (!empty($a['contrat_realise'])) {
+            $contratSigStatus = 'cree';
+        }
+    }
+} catch (Exception $e) {
+    $contratSigStatus = !empty($a['contrat_realise']) ? 'cree' : 'aucun';
+}
+
 $docsLabels = [
     'piece_identite'      => ['Pièce d\'identité','fa-id-card'],
     'carte_vitale'        => ['Carte vitale','fa-heart-pulse'],
@@ -181,9 +207,40 @@ if (canDo('agents','delete')) {
   </div>
 
   <!-- Contrat -->
+  <?php
+  $sigBadgeMap = [
+    'signe'       => ['Signé',                   'fa-circle-check',         '#16a34a', 'rgba(34,197,94,0.12)'],
+    'lien_actif'  => ['En attente de signature',  'fa-paper-plane',          '#d97706', 'rgba(245,158,11,0.12)'],
+    'lien_expire' => ['Lien expiré',              'fa-triangle-exclamation', '#dc2626', 'rgba(239,68,68,0.1)'],
+    'cree'        => ['Contrat créé',             'fa-file-contract',        '#2563eb', 'rgba(37,99,235,0.1)'],
+    'aucun'       => ['Aucun contrat',            'fa-file-circle-question', '#6b7280', 'rgba(107,114,128,0.1)'],
+  ];
+  $sb = $sigBadgeMap[$contratSigStatus];
+  ?>
   <div class="ov-card mb-3">
-    <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-file-contract me-2" style="color:var(--ov-gold)"></i>Contrat</h2></div>
+    <div class="ov-card-header d-flex align-items-center justify-content-between">
+      <h2 class="ov-card-title mb-0"><i class="fa fa-file-contract me-2" style="color:var(--ov-gold)"></i>Contrat</h2>
+      <span style="font-size:0.75rem;background:<?= $sb[3] ?>;color:<?= $sb[2] ?>;padding:3px 12px;border-radius:20px;font-weight:600;white-space:nowrap">
+        <i class="fa <?= $sb[1] ?> me-1"></i><?= $sb[0] ?>
+      </span>
+    </div>
     <div class="ov-card-body">
+    <?php if ($contratSigStatus === 'signe' && !empty($a['signature_date'])): ?>
+    <div class="mb-3 d-flex align-items-center gap-2 px-2 py-2 rounded" style="background:rgba(34,197,94,0.07);font-size:0.82rem;color:#15803d">
+      <i class="fa fa-circle-check"></i>
+      Signé électroniquement le <strong><?= date('d/m/Y à H:i', strtotime($a['signature_date'])) ?></strong>
+    </div>
+    <?php elseif ($contratSigStatus === 'lien_actif' && $sigTokenRow): ?>
+    <div class="mb-3 d-flex align-items-center gap-2 px-2 py-2 rounded" style="background:rgba(245,158,11,0.08);font-size:0.82rem;color:#b45309">
+      <i class="fa fa-clock"></i>
+      Lien envoyé — en attente de signature · expire le <strong><?= date('d/m/Y à H:i', strtotime($sigTokenRow['expires_at'])) ?></strong>
+    </div>
+    <?php elseif ($contratSigStatus === 'lien_expire' && $sigTokenRow): ?>
+    <div class="mb-3 d-flex align-items-center gap-2 px-2 py-2 rounded" style="background:rgba(239,68,68,0.07);font-size:0.82rem;color:#dc2626">
+      <i class="fa fa-triangle-exclamation"></i>
+      Lien expiré le <strong><?= date('d/m/Y à H:i', strtotime($sigTokenRow['expires_at'])) ?></strong> — non signé · <a href="contrat.php?id=<?= $id ?>" style="color:#dc2626;text-decoration:underline">Régénérer un lien</a>
+    </div>
+    <?php endif; ?>
       <?php
       $rows2 = [
         ['Type de contrat', $a['type_contrat'], 'Statut', $a['statut']],
