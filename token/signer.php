@@ -13,13 +13,25 @@ $token = trim($_GET['t'] ?? '');
 if (!$token) { die('Lien invalide.'); }
 
 $db   = getDB();
-$stmt = $db->prepare("SELECT st.*, a.* FROM signature_tokens st JOIN agents a ON a.id = st.agent_id WHERE st.token = ? AND st.expires_at > NOW()");
+// Colonnes explicites pour éviter la collision de noms (st.id vs a.id)
+$stmt = $db->prepare("
+    SELECT st.id          AS token_id,
+           st.agent_id,
+           st.contrat_data,
+           st.expires_at,
+           st.signed_at,
+           st.ip_signed,
+           st.ua_signed,
+           a.*
+    FROM signature_tokens st
+    JOIN agents a ON a.id = st.agent_id
+    WHERE st.token = ? AND st.expires_at > NOW()
+");
 $stmt->execute([$token]);
 $row = $stmt->fetch();
 
 // ─── Token invalide ou expiré ─────────────────────────────────────────────────
 if (!$row) {
-    $alreadySigned = $db->prepare("SELECT signed_at FROM signature_tokens WHERE token=?")->execute([$token]) ? null : null;
     $st2 = $db->prepare("SELECT signed_at FROM signature_tokens WHERE token=?"); $st2->execute([$token]);
     $old = $st2->fetch();
 ?><!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Lien invalide</title>
@@ -38,9 +50,9 @@ if (!$row) {
   <?php endif; ?>
 </div></body></html><?php exit; }
 
-$params       = getAllParams();
-$agentId      = (int)$row['agent_id'];
-$tokenId      = (int)$row['id'];
+$params        = getAllParams();
+$agentId       = (int)$row['agent_id'];
+$tokenId       = (int)$row['token_id']; // alias explicite — évite collision avec a.id
 $contractData = json_decode($row['contrat_data'] ?? '{}', true) ?: [];
 $alreadySigned = !empty($row['signed_at']);
 

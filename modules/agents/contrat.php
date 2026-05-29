@@ -590,7 +590,14 @@ require_once __DIR__ . '/../../includes/header.php';
       <div class="mb-2 p-2 rounded small <?= $lastTok['signed_at'] ? 'bg-success bg-opacity-10 border border-success border-opacity-25' : (strtotime($lastTok['expires_at']) < time() ? 'bg-secondary bg-opacity-10' : 'bg-warning bg-opacity-10 border border-warning border-opacity-25') ?>">
         <?php if ($lastTok['signed_at']): ?>
           <i class="fa fa-check-circle text-success me-1"></i>
-          <strong>Signé</strong> le <?= date('d/m/Y à H:i', strtotime($lastTok['signed_at'])) ?> — envoyé à <?= h($lastTok['email']) ?>
+          <strong>Signé</strong> le <?= date('d/m/Y à H:i', strtotime($lastTok['signed_at'])) ?> — envoyé à <?= h($lastTok['email'] ?: '(sans email)') ?>
+          <?php if (empty($a['signature'])): ?>
+          <div class="alert alert-warning py-1 px-2 mt-2 mb-0" style="font-size:0.78rem">
+            <i class="fa fa-triangle-exclamation me-1"></i>
+            <strong>Signature manquante</strong> — le token est marqué signé mais la signature n'a pas été enregistrée (bug corrigé).
+            Regénérez un nouveau lien et demandez à l'agent de re-signer.
+          </div>
+          <?php endif; ?>
         <?php elseif (strtotime($lastTok['expires_at']) < time()): ?>
           <i class="fa fa-clock text-muted me-1"></i>
           <strong>Lien expiré</strong> — envoyé à <?= h($lastTok['email']) ?> le <?= date('d/m/Y', strtotime($lastTok['sent_at'])) ?>
