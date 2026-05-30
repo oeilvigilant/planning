@@ -388,6 +388,80 @@ function calculerSalaire(array $minutesParType): float {
     return round($salaire, 2);
 }
 
+// ── Cotisations sociales ──────────────────────────────────────────────────────
+
+function initCotisationsTable(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    $db = getDB();
+    $db->exec("CREATE TABLE IF NOT EXISTS cotisations_taux (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        libelle       VARCHAR(100) NOT NULL,
+        categorie     ENUM('secu_sociale','retraite','chomage','prevoyance','csg_crds','autres') DEFAULT 'autres',
+        taux_salarial DECIMAL(6,3) NOT NULL DEFAULT 0.000,
+        taux_patronal DECIMAL(6,3) NOT NULL DEFAULT 0.000,
+        actif         TINYINT(1)   NOT NULL DEFAULT 1,
+        ordre         INT          NOT NULL DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    if ((int)$db->query("SELECT COUNT(*) FROM cotisations_taux")->fetchColumn() === 0) {
+        $stmt = $db->prepare("INSERT INTO cotisations_taux (libelle,categorie,taux_salarial,taux_patronal,ordre) VALUES (?,?,?,?,?)");
+        foreach ([
+            ['Maladie / Maternité / Invalidité', 'secu_sociale', 0.000,  7.000,  1],
+            ['Vieillesse plafonnée (SS)',         'secu_sociale', 6.900,  8.550,  2],
+            ['Vieillesse déplafonnée (SS)',       'secu_sociale', 0.400,  1.900,  3],
+            ['AT/MP',                             'secu_sociale', 0.000,  2.500,  4],
+            ['Allocations familiales',            'secu_sociale', 0.000,  3.450,  5],
+            ['Assurance chômage',                 'chomage',      2.400,  4.050,  6],
+            ['AGIRC-ARRCO T1',                    'retraite',     3.150,  4.720,  7],
+            ['CEG (complément retraite)',          'retraite',     0.860,  1.290,  8],
+            ['CSG déductible',                    'csg_crds',     6.800,  0.000,  9],
+            ['CSG non déductible + CRDS',         'csg_crds',     2.900,  0.000, 10],
+            ['Prévoyance IDCC 1351',              'prevoyance',   0.500,  1.000, 11],
+        ] as $d) $stmt->execute($d);
+    }
+}
+
+function getCotisationsTaux(): array {
+    static $cotis = null;
+    if ($cotis === null) {
+        initCotisationsTable();
+        $cotis = getDB()->query(
+            "SELECT * FROM cotisations_taux WHERE actif=1 ORDER BY ordre,id"
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+    return $cotis;
+}
+
+function calculerCotisations(float $brut): array {
+    $lignes   = getCotisationsTaux();
+    $totalSal = 0.0;
+    $totalPat = 0.0;
+    $detail   = [];
+    foreach ($lignes as $c) {
+        $mSal = round($brut * ((float)$c['taux_salarial'] / 100), 2);
+        $mPat = round($brut * ((float)$c['taux_patronal'] / 100), 2);
+        $totalSal += $mSal;
+        $totalPat += $mPat;
+        $detail[] = [
+            'libelle'     => $c['libelle'],
+            'categorie'   => $c['categorie'],
+            'taux_sal'    => (float)$c['taux_salarial'],
+            'taux_pat'    => (float)$c['taux_patronal'],
+            'montant_sal' => $mSal,
+            'montant_pat' => $mPat,
+        ];
+    }
+    return [
+        'brut'           => $brut,
+        'salarial'       => round($totalSal, 2),
+        'patronal'       => round($totalPat, 2),
+        'net'            => round($brut - $totalSal, 2),
+        'cout_employeur' => round($brut + $totalPat, 2),
+        'detail'         => $detail,
+    ];
+}
+
 // ── Upload ────────────────────────────────────────────────────────────────────
 
 function uploadFichier(array $file, string $sousDossier, array $extAutorisees = ['pdf','jpg','jpeg','png']) {

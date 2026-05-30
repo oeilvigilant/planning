@@ -185,6 +185,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         }
         header('Location: index.php?tab=api'); exit;
     }
+
+    if ($action === 'save_cotisations') {
+        initCotisationsTable();
+        foreach ($_POST['cotis'] ?? [] as $cId => $d) {
+            $cat = in_array($d['categorie'] ?? '', ['secu_sociale','retraite','chomage','prevoyance','csg_crds','autres'])
+                ? $d['categorie'] : 'autres';
+            $db->prepare("UPDATE cotisations_taux SET libelle=?,categorie=?,taux_salarial=?,taux_patronal=?,actif=?,ordre=? WHERE id=?")
+               ->execute([
+                   trim($d['libelle'] ?? ''), $cat,
+                   max(0, min(100, (float)($d['taux_salarial'] ?? 0))),
+                   max(0, min(100, (float)($d['taux_patronal'] ?? 0))),
+                   isset($d['actif']) ? 1 : 0,
+                   (int)($d['ordre'] ?? 0),
+                   (int)$cId,
+               ]);
+        }
+        flash('success', 'Taux de cotisations mis à jour.');
+        header('Location: index.php?tab=cotisations'); exit;
+    }
+
+    if ($action === 'add_cotisation') {
+        initCotisationsTable();
+        $libelle   = trim($_POST['new_libelle'] ?? '');
+        $cat       = in_array($_POST['new_categorie'] ?? '', ['secu_sociale','retraite','chomage','prevoyance','csg_crds','autres'])
+                     ? $_POST['new_categorie'] : 'autres';
+        $tSal      = max(0, min(100, (float)($_POST['new_taux_salarial'] ?? 0)));
+        $tPat      = max(0, min(100, (float)($_POST['new_taux_patronal'] ?? 0)));
+        if ($libelle) {
+            $maxOrdre = (int)$db->query("SELECT COALESCE(MAX(ordre),0) FROM cotisations_taux")->fetchColumn();
+            $db->prepare("INSERT INTO cotisations_taux (libelle,categorie,taux_salarial,taux_patronal,actif,ordre) VALUES (?,?,?,?,1,?)")
+               ->execute([$libelle, $cat, $tSal, $tPat, $maxOrdre + 1]);
+            flash('success', 'Cotisation ajoutée.');
+        }
+        header('Location: index.php?tab=cotisations'); exit;
+    }
+
+    if ($action === 'del_cotisation') {
+        $cId = (int)($_POST['cotis_id'] ?? 0);
+        if ($cId) $db->prepare("DELETE FROM cotisations_taux WHERE id=?")->execute([$cId]);
+        flash('success', 'Cotisation supprimée.');
+        header('Location: index.php?tab=cotisations'); exit;
+    }
 }
 
 $pageTitle    = 'Paramètres';
@@ -196,6 +238,12 @@ $taux   = $db->query("SELECT * FROM taux_horaires ORDER BY ordre")->fetchAll();
 $feries = $db->query("SELECT * FROM jours_feries ORDER BY date")->fetchAll();
 $carteChamps = $db->query("SELECT * FROM carte_champs ORDER BY face, ordre")->fetchAll();
 $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll();
+try {
+    initCotisationsTable();
+    $cotisationsTaux = $db->query("SELECT * FROM cotisations_taux ORDER BY ordre,id")->fetchAll();
+} catch (Exception $e) {
+    $cotisationsTaux = [];
+}
 ?>
 
 <ul class="nav nav-tabs mb-4" style="border-bottom:2px solid #e5e7eb">
@@ -208,6 +256,7 @@ $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll()
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-champs-agents">Champs agents</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-email">Email</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-api">API</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-cotisations"><i class="fa fa-percent me-1" style="color:var(--ov-gold)"></i>Cotisations</a></li>
 </ul>
 
 <div class="tab-content">
@@ -675,6 +724,153 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 </div>
+
+<!-- COTISATIONS SOCIALES -->
+<div class="tab-pane fade" id="tab-cotisations">
+
+<div class="ov-card mb-3">
+  <div class="ov-card-header">
+    <h2 class="ov-card-title"><i class="fa fa-percent me-2" style="color:var(--ov-gold)"></i>Taux de cotisations sociales</h2>
+  </div>
+  <div class="ov-card-body">
+    <p class="text-muted small mb-3">
+      Taux pré-remplis selon la convention collective de la sécurité privée <strong>(IDCC 1351)</strong>.<br>
+      Ces taux alimentent le calcul du <strong>Brut → Net</strong> (cotisations salariales) et du <strong>Coût employeur</strong> (cotisations patronales) dans les exports XLS.
+      À adapter si votre situation diffère (taille entreprise, taux AT/MP, mutuelle…).
+    </p>
+
+    <?php
+    $catLabels = ['secu_sociale'=>'Séc. sociale','retraite'=>'Retraite','chomage'=>'Chômage','prevoyance'=>'Prévoyance','csg_crds'=>'CSG/CRDS','autres'=>'Autres'];
+    $catColors = ['secu_sociale'=>'#3b82f6','retraite'=>'#8b5cf6','chomage'=>'#f59e0b','prevoyance'=>'#10b981','csg_crds'=>'#ef4444','autres'=>'#6b7280'];
+    $tSalActif = array_sum(array_column(array_filter($cotisationsTaux, fn($c)=>$c['actif']), 'taux_salarial'));
+    $tPatActif = array_sum(array_column(array_filter($cotisationsTaux, fn($c)=>$c['actif']), 'taux_patronal'));
+    ?>
+
+    <!-- Totaux affichés -->
+    <div class="d-flex gap-3 mb-3 flex-wrap">
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 16px;min-width:160px">
+        <div style="font-size:0.72rem;color:#ef4444;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Cotisations salariales</div>
+        <div style="font-size:1.5rem;font-weight:700;color:#dc2626"><?= number_format($tSalActif, 2) ?> %</div>
+        <div style="font-size:0.72rem;color:#9ca3af">déduites du brut → net</div>
+      </div>
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 16px;min-width:160px">
+        <div style="font-size:0.72rem;color:#f97316;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Cotisations patronales</div>
+        <div style="font-size:1.5rem;font-weight:700;color:#ea580c"><?= number_format($tPatActif, 2) ?> %</div>
+        <div style="font-size:0.72rem;color:#9ca3af">ajoutées au brut → coût total</div>
+      </div>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 16px;min-width:160px">
+        <div style="font-size:0.72rem;color:#16a34a;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Charge totale entreprise</div>
+        <div style="font-size:1.5rem;font-weight:700;color:#15803d"><?= number_format(100 + $tPatActif, 2) ?> %</div>
+        <div style="font-size:0.72rem;color:#9ca3af">du salaire brut</div>
+      </div>
+    </div>
+
+    <form method="POST">
+    <input type="hidden" name="action" value="save_cotisations">
+    <div class="table-responsive">
+    <table class="ov-table">
+      <thead>
+        <tr>
+          <th style="width:40px">Actif</th>
+          <th>Libellé</th>
+          <th style="width:130px">Catégorie</th>
+          <th style="width:120px">Taux salarial</th>
+          <th style="width:120px">Taux patronal</th>
+          <th style="width:70px">Ordre</th>
+          <th style="width:40px"></th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach ($cotisationsTaux as $c): ?>
+      <tr <?= !$c['actif'] ? 'style="opacity:0.5"' : '' ?>>
+        <td><input type="checkbox" name="cotis[<?= $c['id'] ?>][actif]" <?= $c['actif']?'checked':'' ?> class="form-check-input"></td>
+        <td><input type="text" name="cotis[<?= $c['id'] ?>][libelle]" class="form-control form-control-sm" value="<?= h($c['libelle']) ?>" style="min-width:200px"></td>
+        <td>
+          <select name="cotis[<?= $c['id'] ?>][categorie]" class="form-select form-select-sm">
+            <?php foreach ($catLabels as $k => $l): ?>
+            <option value="<?= $k ?>" <?= $c['categorie']===$k?'selected':'' ?>
+                    style="color:<?= $catColors[$k] ?? '#6b7280' ?>"><?= $l ?></option>
+            <?php endforeach; ?>
+          </select>
+        </td>
+        <td>
+          <div class="input-group input-group-sm">
+            <input type="number" name="cotis[<?= $c['id'] ?>][taux_salarial]" class="form-control"
+                   step="0.001" min="0" max="100" value="<?= h($c['taux_salarial']) ?>">
+            <span class="input-group-text">%</span>
+          </div>
+        </td>
+        <td>
+          <div class="input-group input-group-sm">
+            <input type="number" name="cotis[<?= $c['id'] ?>][taux_patronal]" class="form-control"
+                   step="0.001" min="0" max="100" value="<?= h($c['taux_patronal']) ?>">
+            <span class="input-group-text">%</span>
+          </div>
+        </td>
+        <td><input type="number" name="cotis[<?= $c['id'] ?>][ordre]" class="form-control form-control-sm" style="width:60px" value="<?= $c['ordre'] ?>"></td>
+        <td>
+          <button type="submit" form="delCotisForm<?= $c['id'] ?>" class="btn-sm-icon delete"
+                  data-confirm="Supprimer «<?= h($c['libelle']) ?>» ?"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder les taux</button></div>
+    </form>
+
+    <?php foreach ($cotisationsTaux as $c): ?>
+    <form id="delCotisForm<?= $c['id'] ?>" method="POST" style="display:none">
+      <input type="hidden" name="action" value="del_cotisation">
+      <input type="hidden" name="cotis_id" value="<?= $c['id'] ?>">
+    </form>
+    <?php endforeach; ?>
+  </div>
+</div>
+
+<!-- Ajouter une cotisation -->
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-plus me-2" style="color:var(--ov-gold)"></i>Ajouter une cotisation</h2></div>
+  <div class="ov-card-body">
+    <form method="POST">
+    <input type="hidden" name="action" value="add_cotisation">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Libellé</label>
+        <input type="text" name="new_libelle" class="form-control" required placeholder="Ex : Mutuelle entreprise">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Catégorie</label>
+        <select name="new_categorie" class="form-select">
+          <?php foreach ($catLabels as $k => $l): ?>
+          <option value="<?= $k ?>"><?= $l ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Taux salarial</label>
+        <div class="input-group">
+          <input type="number" name="new_taux_salarial" class="form-control" step="0.001" min="0" max="100" value="0.000" required>
+          <span class="input-group-text">%</span>
+        </div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Taux patronal</label>
+        <div class="input-group">
+          <input type="number" name="new_taux_patronal" class="form-control" step="0.001" min="0" max="100" value="0.000" required>
+          <span class="input-group-text">%</span>
+        </div>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-ov-primary"><i class="fa fa-plus me-1"></i>Ajouter</button>
+      </div>
+    </div>
+    </form>
+  </div>
+</div>
+
+</div><!-- /tab-cotisations -->
 
 </div><!-- /tab-content -->
 

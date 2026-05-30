@@ -97,6 +97,40 @@ if ($type === 'week') {
         .' au '.$dimanche->format('d').' '.$moisFrArr[(int)$dimanche->format('n')].' '.$dimanche->format('Y');
     $fileLabel = 'sem'.$semaine.'_'.$annee;
 
+} elseif ($type === 'mission') {
+    $dateDebut = date('Y-m-d', strtotime($_GET['date_debut'] ?? date('Y-m-d')));
+    $dateFin   = date('Y-m-d', strtotime($_GET['date_fin']   ?? date('Y-m-d', strtotime('+6 days'))));
+    if ($dateDebut > $dateFin) [$dateDebut, $dateFin] = [$dateFin, $dateDebut];
+    $nbJ = (int)((strtotime($dateFin) - strtotime($dateDebut)) / 86400) + 1;
+    if ($nbJ > 62) $dateFin = date('Y-m-d', strtotime($dateDebut . ' +61 days'));
+
+    $stmtM = $db->prepare("
+        SELECT pl.* FROM planning_lignes pl
+        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+        WHERE pl.date_travail BETWEEN ? AND ?");
+    $stmtM->execute([$dateDebut, $dateFin]);
+    foreach ($stmtM->fetchAll() as $l) {
+        $planningData[$l['agent_id']][$l['date_travail']] = $l;
+    }
+
+    $dates  = [];
+    $dM     = new DateTime($dateDebut);
+    $endM   = new DateTime($dateFin);
+    while ($dM <= $endM) { $dates[] = clone $dM; $dM->modify('+1 day'); }
+
+    $anneeD = (int)substr($dateDebut, 0, 4);
+    $anneeF = (int)substr($dateFin, 0, 4);
+    $feries = getJoursFeries($anneeD);
+    if ($anneeF !== $anneeD) $feries = array_merge($feries, getJoursFeries($anneeF));
+
+    $dfDebut      = date('d/m/Y', strtotime($dateDebut));
+    $dfFin        = date('d/m/Y', strtotime($dateFin));
+    $periodeLabel = "Mission du $dfDebut au $dfFin";
+    $fileLabel    = 'mission_'.str_replace('-','', $dateDebut).'_'.str_replace('-','', $dateFin);
+
+    // Réutiliser la logique de la vue semaine
+    $type = 'week';
+
 } else {
     $versionId = (int)($_GET['version_id'] ?? 0);
     if (!$versionId) die('Version invalide.');

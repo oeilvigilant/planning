@@ -101,4 +101,89 @@ $agents = $db->query("SELECT id, nom, prenom, matricule FROM agents WHERE actif=
 </div>
 </div>
 
+<!-- Export XLS agents par période -->
+<div class="row g-3 mt-1">
+<div class="col-12">
+  <div class="ov-card">
+    <div class="ov-card-header">
+      <h2 class="ov-card-title">
+        <i class="fa fa-file-excel me-2" style="color:var(--ov-gold)"></i>
+        Export XLS — Heures par agents et période
+      </h2>
+    </div>
+    <div class="ov-card-body">
+      <p class="text-muted mb-3" style="font-size:0.85rem">
+        Sélectionnez les agents et une plage de dates pour exporter un fichier Excel détaillant
+        les heures par type (normal, nuit, dimanche, férié…), le montant par type et le total.
+      </p>
+      <form action="export_xls_agents.php" method="post" target="_blank" id="form-xls-agents">
+        <div class="row g-3 mb-4">
+          <div class="col-md-3">
+            <label class="form-label fw-600" style="font-size:0.85rem">Date début</label>
+            <input type="date" name="date_debut" class="form-control form-control-sm" required
+                   value="<?= date('Y-m-01') ?>">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-600" style="font-size:0.85rem">Date fin</label>
+            <input type="date" name="date_fin" class="form-control form-control-sm" required
+                   value="<?= date('Y-m-t') ?>">
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <div class="d-flex align-items-center gap-3 mb-2">
+            <span class="fw-600" style="font-size:0.85rem">Agents</span>
+            <button type="button" class="btn btn-sm" style="font-size:0.75rem;padding:2px 10px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb"
+                    onclick="document.querySelectorAll('.ag-cb').forEach(c=>c.checked=true)">
+              Tout sélectionner
+            </button>
+            <button type="button" class="btn btn-sm" style="font-size:0.75rem;padding:2px 10px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb"
+                    onclick="document.querySelectorAll('.ag-cb').forEach(c=>c.checked=false)">
+              Tout désélectionner
+            </button>
+          </div>
+          <?php if (empty($agents)): ?>
+          <p class="text-muted" style="font-size:0.85rem">Aucun agent actif.</p>
+          <?php else: ?>
+          <div class="row g-2">
+            <?php foreach ($agents as $a): ?>
+            <div class="col-xl-2 col-lg-3 col-md-4 col-sm-6">
+              <label class="d-flex align-items-center gap-2 p-2 rounded"
+                     style="background:#f8f9fa;border:1px solid #e5e7eb;cursor:pointer;font-size:0.82rem;transition:background .15s"
+                     onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background='#f8f9fa'">
+                <input class="form-check-input ag-cb" type="checkbox" name="agents[]"
+                       value="<?= $a['id'] ?>" style="margin-top:0;flex-shrink:0" checked>
+                <span>
+                  <?= h($a['prenom'] . ' ' . $a['nom']) ?>
+                  <?php if ($a['matricule']): ?>
+                  <br><span style="color:#9ca3af;font-size:0.73rem"><?= h($a['matricule']) ?></span>
+                  <?php endif; ?>
+                </span>
+              </label>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+        </div>
+
+        <button type="submit" class="btn btn-ov-primary" onclick="return validerFormXls()">
+          <i class="fa fa-file-excel me-1"></i>Télécharger XLS
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+function validerFormXls() {
+  var cbs = document.querySelectorAll('.ag-cb:checked');
+  if (!cbs.length) {
+    alert('Veuillez sélectionner au moins un agent.');
+    return false;
+  }
+  return true;
+}
+</script>
+
 <?php include __DIR__ . '/../../includes/footer.php'; ?>

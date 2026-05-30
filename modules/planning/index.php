@@ -421,6 +421,7 @@ if ($vue === 'semaine') {
       <div class="btn-group btn-group-sm me-1">
         <a href="?vue=mois&mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar me-1"></i>Mensuel</a>
         <button class="btn btn-dark" disabled><i class="fa fa-calendar-week me-1"></i>Hebdo</button>
+        <a href="mission.php?date_debut=<?= $lundi->format('Y-m-d') ?>&date_fin=<?= $dimanche->format('Y-m-d') ?>" class="btn btn-ov-secondary"><i class="fa fa-map-marker-alt me-1"></i>Mission</a>
       </div>
       <a href="?vue=semaine&semaine=<?= $prevSem ?>&annee=<?= $prevAnnSem ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
       <span style="font-weight:700;font-size:0.95rem;color:var(--ov-navy)">
@@ -646,6 +647,7 @@ if ($vue === 'semaine') {
       <div class="btn-group btn-group-sm me-1">
         <button class="btn btn-dark" disabled><i class="fa fa-calendar me-1"></i>Mensuel</button>
         <a href="?vue=semaine&semaine=<?= $semaineCourante ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar-week me-1"></i>Hebdo</a>
+        <a href="mission.php?date_debut=<?= sprintf('%04d-%02d-01',$annee,$mois) ?>&date_fin=<?= sprintf('%04d-%02d-%02d',$annee,$mois,$nbJours) ?>" class="btn btn-ov-secondary"><i class="fa fa-map-marker-alt me-1"></i>Mission</a>
       </div>
       <a href="?vue=mois&mois=<?= $prevMois ?>&annee=<?= $prevAnnee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
       <h2 style="font-size:1.05rem;font-weight:700;color:var(--ov-navy);margin:0"><?= formatMois($mois,$annee) ?></h2>
