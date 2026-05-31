@@ -54,6 +54,41 @@ $stmt = $db->prepare("
 $stmt->execute(array_merge($agentIds, [$dateDebut, $dateFin]));
 $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Détail journalier — pour feuille "Formulaire de calcul"
+$stmtLines = $db->prepare("
+    SELECT
+        a.id AS agent_id, a.nom, a.prenom, a.matricule,
+        pl.date_travail, pl.heure_debut, pl.heure_fin, pl.depasse_minuit, pl.note,
+        pl.min_normal, pl.min_nuit, pl.min_dimanche,
+        pl.min_ferie_normal, pl.min_ferie_dimanche, pl.min_ferie_nuit
+    FROM agents a
+    JOIN planning_lignes pl ON pl.agent_id = a.id
+    JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+    WHERE pl.agent_id IN ($placeholders)
+      AND pl.date_travail BETWEEN ? AND ?
+    ORDER BY a.nom, a.prenom, pl.date_travail
+");
+$stmtLines->execute(array_merge($agentIds, [$dateDebut, $dateFin]));
+
+$detailParAgent = [];
+foreach ($stmtLines->fetchAll(PDO::FETCH_ASSOC) as $l) {
+    $aid = $l['agent_id'];
+    if (!isset($detailParAgent[$aid])) {
+        $detailParAgent[$aid] = ['nom'=>$l['nom'],'prenom'=>$l['prenom'],'matricule'=>$l['matricule']??'','lignes'=>[]];
+    }
+    $montantJ = 0;
+    foreach (['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
+        $montantJ += round(((int)$l["min_$t"] / 60) * ($taux[$t] ?? 0), 2);
+    }
+    $detailParAgent[$aid]['lignes'][] = array_merge($l, ['montant' => $montantJ]);
+}
+
+$anneeDebut   = (int)substr($dateDebut, 0, 4);
+$anneeFin     = (int)substr($dateFin, 0, 4);
+$feriesDetail = getJoursFeries($anneeDebut);
+if ($anneeFin !== $anneeDebut) $feriesDetail = array_merge($feriesDetail, getJoursFeries($anneeFin));
+$nomsJours = ['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+
 // Build results
 $resultats = [];
 $totaux    = array_fill_keys(array_keys($types), ['h' => 0.0, 'm' => 0.0]);
@@ -330,6 +365,38 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
       <NumberFormat ss:Format="#,##0.00 &quot;€&quot;"/>
       <Interior ss:Color="#F5F3FF" ss:Pattern="Solid"/>
     </Style>
+    <!-- Feuille 3 spécifique -->
+    <Style ss:ID="s_zero">
+      <Alignment ss:Horizontal="Center"/>
+      <Font ss:Color="#D1D5DB"/>
+      <NumberFormat ss:Format="0.00&quot; h&quot;"/>
+    </Style>
+    <Style ss:ID="s2_ferie_date">
+      <Alignment ss:Horizontal="Center"/>
+      <Font ss:Bold="1" ss:Color="#92400E"/>
+      <Interior ss:Color="#FEF9C3" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s2_dim_date">
+      <Alignment ss:Horizontal="Center"/>
+      <Font ss:Bold="1" ss:Color="#DC2626"/>
+      <Interior ss:Color="#FEF2F2" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s2_subtotal_lbl">
+      <Font ss:Bold="1" ss:Italic="1" ss:Color="#374151"/>
+      <Interior ss:Color="#F1F5F9" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s2_subtotal_h">
+      <Alignment ss:Horizontal="Right"/>
+      <Font ss:Bold="1"/>
+      <NumberFormat ss:Format="0.00&quot; h&quot;"/>
+      <Interior ss:Color="#EFF6FF" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s2_subtotal_eur">
+      <Alignment ss:Horizontal="Right"/>
+      <Font ss:Bold="1" ss:Color="#15803D"/>
+      <NumberFormat ss:Format="#,##0.00 &quot;€&quot;"/>
+      <Interior ss:Color="#F0FDF4" ss:Pattern="Solid"/>
+    </Style>
     <Style ss:ID="s2_pct">
       <Alignment ss:Horizontal="Right"/>
       <Font ss:Color="#6B7280"/>
@@ -583,6 +650,146 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
         <?= numCell($totaux['net'],             's_foot_net') ?>
         <?= numCell($totaux['cotis_patronale'], 's_foot_pat') ?>
         <?= numCell($totaux['cout_employeur'],  's_foot_cout') ?>
+      </Row>
+      <?php endif; ?>
+
+    </Table>
+    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+      <FreezePanes/>
+      <FrozenNoSplit/>
+      <SplitHorizontal>4</SplitHorizontal>
+      <TopRowBottomPane>4</TopRowBottomPane>
+      <ActivePane>2</ActivePane>
+    </WorksheetOptions>
+  </Worksheet>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FEUILLE 3 — Formulaire de calcul (détail journalier)
+  ════════════════════════════════════════════════════════════════ -->
+  <Worksheet ss:Name="Formulaire de calcul">
+    <Table>
+      <Column ss:Width="155"/>
+      <Column ss:Width="85"/>
+      <Column ss:Width="72"/>
+      <Column ss:Width="42"/>
+      <Column ss:Width="90"/>
+      <Column ss:Width="65"/>
+      <Column ss:Width="65"/>
+      <Column ss:Width="65"/>
+      <Column ss:Width="65"/>
+      <Column ss:Width="65"/>
+      <Column ss:Width="65"/>
+      <Column ss:Width="72"/>
+      <Column ss:Width="90"/>
+
+      <!-- Titre -->
+      <Row ss:Height="30">
+        <Cell ss:MergeAcross="12" ss:StyleID="s_title">
+          <Data ss:Type="String">Formulaire de calcul — du <?= xe($dfDebut) ?> au <?= xe($dfFin) ?></Data>
+        </Cell>
+      </Row>
+
+      <!-- Taux -->
+      <Row ss:Height="16">
+        <Cell ss:MergeAcross="12" ss:StyleID="s_info">
+          <Data ss:Type="String">Taux horaires : <?= xe($tauxInfo) ?></Data>
+        </Cell>
+      </Row>
+
+      <!-- Espacement -->
+      <Row ss:Height="6"/>
+
+      <!-- En-têtes -->
+      <Row ss:Height="38">
+        <?= strCell('Agent',        's_hdr') ?>
+        <?= strCell('Matricule',    's_hdr') ?>
+        <?= strCell('Date',         's_hdr') ?>
+        <?= strCell('Jour',         's_hdr') ?>
+        <?= strCell('Horaires',     's_hdr') ?>
+        <?= strCell('Normal (h)',   's_hdr') ?>
+        <?= strCell('Nuit (h)',     's_hdr_nuit') ?>
+        <?= strCell('Dim. (h)',     's_hdr_dim') ?>
+        <?= strCell('Fér. (h)',     's_hdr_ferie') ?>
+        <?= strCell('Fér.D. (h)',   's_hdr_ferie') ?>
+        <?= strCell('N.Fér. (h)',   's_hdr_ferie') ?>
+        <?= strCell('Total (h)',    's_hdr_total') ?>
+        <?= strCell('Montant (€)',  's_hdr_total') ?>
+      </Row>
+
+      <?php
+      $gTotalMin = 0;
+      $gTotalMnt = 0.0;
+      foreach ($detailParAgent as $aid => $agData):
+          $agLabel    = $agData['prenom'] . ' ' . $agData['nom'];
+          $agMat      = $agData['matricule'];
+          $subTotalMin = 0;
+          $subTotalMnt = 0.0;
+          $firstRow    = true;
+
+          foreach ($agData['lignes'] as $l):
+              $dt      = strtotime($l['date_travail']);
+              $jourSem = (int)date('N', $dt);
+              $isFer   = in_array($l['date_travail'], $feriesDetail);
+              $isDim   = $jourSem === 7;
+              $totMin  = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+              $subTotalMin += $totMin;
+              $subTotalMnt += $l['montant'];
+
+              // Style de la ligne selon le type de jour
+              $rowStyle = $isFer ? ' ss:StyleID="s2_ferie_row"' : ($isDim ? ' ss:StyleID="s2_dim_row"' : '');
+              $dateFmt  = date('d/m/Y', $dt);
+              $jourNom  = $nomsJours[$jourSem] . ($isFer ? ' F' : '');
+              $horaires = substr($l['heure_debut'],0,5) . '→' . substr($l['heure_fin'],0,5) . ($l['depasse_minuit'] ? '+1' : '');
+              if ($l['note']) $horaires .= ' (' . $l['note'] . ')';
+          ?>
+          <Row ss:Height="17">
+            <?= strCell($firstRow ? $agLabel : '', $firstRow ? 's_agent' : '') ?>
+            <?= strCell($firstRow ? $agMat   : '', 's_mat') ?>
+            <?= strCell($dateFmt, $isFer ? 's2_ferie_date' : ($isDim ? 's2_dim_date' : '')) ?>
+            <?= strCell($jourNom, $isFer ? 's2_ferie_date' : ($isDim ? 's2_dim_date' : 's_mat')) ?>
+            <?= strCell($horaires, '') ?>
+            <?= numCell(minutesToHeures((int)$l['min_normal']),         $l['min_normal']         > 0 ? 's_h' : 's_zero') ?>
+            <?= numCell(minutesToHeures((int)$l['min_nuit']),           $l['min_nuit']           > 0 ? 's_h' : 's_zero') ?>
+            <?= numCell(minutesToHeures((int)$l['min_dimanche']),       $l['min_dimanche']       > 0 ? 's_h' : 's_zero') ?>
+            <?= numCell(minutesToHeures((int)$l['min_ferie_normal']),   $l['min_ferie_normal']   > 0 ? 's_h' : 's_zero') ?>
+            <?= numCell(minutesToHeures((int)$l['min_ferie_dimanche']), $l['min_ferie_dimanche'] > 0 ? 's_h' : 's_zero') ?>
+            <?= numCell(minutesToHeures((int)$l['min_ferie_nuit']),     $l['min_ferie_nuit']     > 0 ? 's_h' : 's_zero') ?>
+            <?= numCell(minutesToHeures($totMin),  's_total_h') ?>
+            <?= numCell($l['montant'],             's_total_eur') ?>
+          </Row>
+          <?php $firstRow = false; endforeach; ?>
+
+          <!-- Sous-total agent -->
+          <Row ss:Height="20">
+            <Cell ss:MergeAcross="3" ss:StyleID="s2_subtotal_lbl">
+              <Data ss:Type="String">Sous-total <?= xe($agLabel) ?></Data>
+            </Cell>
+            <?= emptyCell('s2_subtotal_lbl') ?>
+            <?= emptyCell('s2_subtotal_lbl') ?>
+            <?= emptyCell('s2_subtotal_lbl') ?>
+            <?= emptyCell('s2_subtotal_lbl') ?>
+            <?= emptyCell('s2_subtotal_lbl') ?>
+            <?= emptyCell('s2_subtotal_lbl') ?>
+            <?= numCell(minutesToHeures($subTotalMin), 's2_subtotal_h') ?>
+            <?= numCell(round($subTotalMnt, 2),        's2_subtotal_eur') ?>
+          </Row>
+          <!-- Ligne vide entre agents -->
+          <Row ss:Height="5"/>
+
+          <?php
+          $gTotalMin += $subTotalMin;
+          $gTotalMnt += $subTotalMnt;
+      endforeach;
+      ?>
+
+      <?php if (!empty($detailParAgent)): ?>
+      <!-- GRAND TOTAL -->
+      <Row ss:Height="24">
+        <Cell ss:MergeAcross="10" ss:StyleID="s_foot">
+          <Data ss:Type="String">TOTAL GÉNÉRAL</Data>
+        </Cell>
+        <?= numCell(minutesToHeures($gTotalMin), 's_foot_h') ?>
+        <?= numCell(round($gTotalMnt, 2),        's_foot_eur') ?>
       </Row>
       <?php endif; ?>
 
