@@ -37,6 +37,8 @@ $placeholders = implode(',', array_fill(0, count($agentIds), '?'));
 $stmt = $db->prepare("
     SELECT
         a.id, a.nom, a.prenom, a.matricule,
+        a.total_heures_contrat,
+        a.temps_travail_hebdo,
         SUM(pl.min_normal)         AS min_normal,
         SUM(pl.min_nuit)           AS min_nuit,
         SUM(pl.min_dimanche)       AS min_dimanche,
@@ -48,7 +50,7 @@ $stmt = $db->prepare("
     JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
     WHERE pl.agent_id IN ($placeholders)
       AND pl.date_travail BETWEEN ? AND ?
-    GROUP BY a.id, a.nom, a.prenom, a.matricule
+    GROUP BY a.id, a.nom, a.prenom, a.matricule, a.total_heures_contrat, a.temps_travail_hebdo
     ORDER BY a.nom, a.prenom
 ");
 $stmt->execute(array_merge($agentIds, [$dateDebut, $dateFin]));
@@ -100,13 +102,17 @@ $totaux['cotis_patronale']  = 0.0;
 $totaux['cout_employeur']   = 0.0;
 
 foreach ($rows as $row) {
+    $hContrat = ($row['total_heures_contrat'] !== null && $row['total_heures_contrat'] > 0)
+                ? (float)$row['total_heures_contrat'] : null;
     $r = [
-        'nom'      => $row['nom'],
-        'prenom'   => $row['prenom'],
-        'matricule'=> $row['matricule'] ?? '',
-        'types'    => [],
-        'total_h'  => 0.0,
-        'total_m'  => 0.0,
+        'nom'         => $row['nom'],
+        'prenom'      => $row['prenom'],
+        'matricule'   => $row['matricule'] ?? '',
+        'h_contrat'   => $hContrat,
+        'temps_hebdo' => $row['temps_travail_hebdo'] ?? '',
+        'types'       => [],
+        'total_h'     => 0.0,
+        'total_m'     => 0.0,
     ];
     foreach (array_keys($types) as $t) {
         $h = minutesToHeures((int)($row["min_$t"] ?? 0));
@@ -217,6 +223,42 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
       <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
       <Font ss:Bold="1" ss:Color="#FFFFFF"/>
       <Interior ss:Color="#C9A84C" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s_hdr_contrat">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+      <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#374151" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s_hdr_ecart">
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+      <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#6B7280" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s_contrat_h">
+      <Alignment ss:Horizontal="Right"/>
+      <NumberFormat ss:Format="0.00&quot; h&quot;"/>
+      <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s_contrat_na">
+      <Alignment ss:Horizontal="Center"/>
+      <Font ss:Color="#9CA3AF" ss:Italic="1"/>
+    </Style>
+    <Style ss:ID="s_hebdo">
+      <Alignment ss:Horizontal="Center"/>
+      <Font ss:Color="#6B7280" ss:Italic="1"/>
+      <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s_ecart_pos">
+      <Alignment ss:Horizontal="Right"/>
+      <Font ss:Bold="1" ss:Color="#15803D"/>
+      <NumberFormat ss:Format="+0.00&quot; h&quot;;-0.00&quot; h&quot;;0&quot; h&quot;"/>
+      <Interior ss:Color="#F0FDF4" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s_ecart_neg">
+      <Alignment ss:Horizontal="Right"/>
+      <Font ss:Bold="1" ss:Color="#DC2626"/>
+      <NumberFormat ss:Format="+0.00&quot; h&quot;;-0.00&quot; h&quot;;0&quot; h&quot;"/>
+      <Interior ss:Color="#FEF2F2" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="s_hdr_sal">
       <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
@@ -428,6 +470,10 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
       <Column ss:Width="62" ss:Span="11"/>
       <Column ss:Width="78"/>
       <Column ss:Width="88"/>
+      <!-- Contrat columns -->
+      <Column ss:Width="78"/>
+      <Column ss:Width="72"/>
+      <Column ss:Width="72"/>
       <!-- Social columns -->
       <Column ss:Width="95"/>
       <Column ss:Width="95"/>
@@ -436,21 +482,21 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
 
       <!-- Row 1 : Titre -->
       <Row ss:Height="30">
-        <Cell ss:MergeAcross="19" ss:StyleID="s_title">
+        <Cell ss:MergeAcross="22" ss:StyleID="s_title">
           <Data ss:Type="String">Rapport Heures &amp; Salaires Agents — du <?= xe($dfDebut) ?> au <?= xe($dfFin) ?></Data>
         </Cell>
       </Row>
 
       <!-- Row 2 : Taux horaires -->
       <Row ss:Height="16">
-        <Cell ss:MergeAcross="19" ss:StyleID="s_info">
+        <Cell ss:MergeAcross="22" ss:StyleID="s_info">
           <Data ss:Type="String">Taux horaires : <?= xe($tauxInfo) ?></Data>
         </Cell>
       </Row>
 
       <!-- Row 3 : Taux cotisations -->
       <Row ss:Height="16">
-        <Cell ss:MergeAcross="19" ss:StyleID="s_info">
+        <Cell ss:MergeAcross="22" ss:StyleID="s_info">
           <Data ss:Type="String">Cotisations (IDCC 1351) : Salariales <?= number_format($tSalPct, 2) ?>% | Patronales <?= number_format($tPatPct, 2) ?>% — Voir onglet "Cotisations détail" pour le détail</Data>
         </Cell>
       </Row>
@@ -475,6 +521,9 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
         <?= strCell('Nuit Fér. (h)', 's_hdr_ferie') ?>
         <?= strCell('Nuit Fér. (€)', 's_hdr_ferie') ?>
         <?= strCell('TOTAL (h)', 's_hdr_total') ?>
+        <?= strCell('H. contrat (€)', 's_hdr_contrat') ?>
+        <?= strCell('Contrat/sem.', 's_hdr_contrat') ?>
+        <?= strCell('Écart (h)', 's_hdr_ecart') ?>
         <?= strCell('BRUT (€)', 's_hdr_total') ?>
         <?= strCell('Cotis. sal. (€)', 's_hdr_sal') ?>
         <?= strCell('NET (€)', 's_hdr_net') ?>
@@ -505,7 +554,14 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
         <?= numCell($r['types']['ferie_dimanche']['m'], 's_eur') ?>
         <?= numCell($r['types']['ferie_nuit']['h'],     's_h') ?>
         <?= numCell($r['types']['ferie_nuit']['m'],     's_eur') ?>
-        <?= numCell($r['total_h'],                      's_total_h') ?>
+        <?= numCell($r['total_h'],  's_total_h') ?>
+        <?php
+        $ecart = $r['h_contrat'] !== null ? round($r['total_h'] - $r['h_contrat'], 2) : null;
+        $ecartStyle = ($ecart === null) ? '' : ($ecart >= 0 ? 's_ecart_pos' : 's_ecart_neg');
+        ?>
+        <?= $r['h_contrat'] !== null ? numCell($r['h_contrat'], 's_contrat_h') : strCell('—', 's_contrat_na') ?>
+        <?= strCell($r['temps_hebdo'] ?: '—', 's_hebdo') ?>
+        <?= $ecart !== null ? numCell($ecart, $ecartStyle) : strCell('—', 's_contrat_na') ?>
         <?= numCell($r['total_m'],                      's_total_eur') ?>
         <?= numCell($r['cotis_salariale'],              's_sal_eur') ?>
         <?= numCell($r['net'],                          's_net_eur') ?>
@@ -530,7 +586,10 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
         <?= numCell($totaux['ferie_dimanche']['m'], 's_foot_eur') ?>
         <?= numCell($totaux['ferie_nuit']['h'],     's_foot_h') ?>
         <?= numCell($totaux['ferie_nuit']['m'],     's_foot_eur') ?>
-        <?= numCell($totaux['total_h'],             's_foot_h') ?>
+        <?= numCell($totaux['total_h'],  's_foot_h') ?>
+        <?= emptyCell('s_foot') ?>
+        <?= emptyCell('s_foot') ?>
+        <?= emptyCell('s_foot') ?>
         <?= numCell($totaux['total_m'],             's_foot_eur') ?>
         <?= numCell($totaux['cotis_salariale'],     's_foot_sal') ?>
         <?= numCell($totaux['net'],                 's_foot_net') ?>
