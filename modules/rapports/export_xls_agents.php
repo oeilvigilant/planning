@@ -161,6 +161,14 @@ $tPatPct = array_sum(array_column($cotisLignes, 'taux_patronal'));
 
 $filename = 'heures_agents_' . str_replace('-', '', $dateDebut) . '_' . str_replace('-', '', $dateFin) . '.xls';
 
+// Positions de lignes pour les formules de la feuille 1
+// Rows 1-3 = titre/infos, row 4 = vide, row 5 = headers → données à partir de row 6
+$firstDataRow   = 6;
+$lastDataRow    = 5 + count($resultats);
+// Feuille Parametres : taux en lignes 4-9, cotisations dès ligne 13
+// Ligne TOTAL cotisations = 13 + nb lignes cotisations
+$cotisTotalRowP = 13 + count($cotisLignes);
+
 header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Cache-Control: max-age=0');
@@ -181,6 +189,10 @@ function pctCell(float $val, string $style): string {
 function emptyCell(string $style = ''): string {
     $s = $style ? " ss:StyleID=\"$style\"" : '';
     return "<Cell$s/>\n";
+}
+function formulaCell(string $formula, string $style, float $defaultValue = 0): string {
+    $s = $style ? " ss:StyleID=\"$style\"" : '';
+    return "<Cell$s ss:Formula=\"" . xe($formula) . "\"><Data ss:Type=\"Number\">" . number_format($defaultValue, 2, '.', '') . "</Data></Cell>\n";
 }
 
 echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
@@ -238,6 +250,18 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
       <Alignment ss:Horizontal="Right"/>
       <NumberFormat ss:Format="0.00&quot; h&quot;"/>
       <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s_param_val">
+      <Alignment ss:Horizontal="Right"/>
+      <Font ss:Bold="1" ss:Color="#1A2332"/>
+      <NumberFormat ss:Format="0.00"/>
+      <Interior ss:Color="#FFFBEB" ss:Pattern="Solid"/>
+    </Style>
+    <Style ss:ID="s_param_pct">
+      <Alignment ss:Horizontal="Right"/>
+      <Font ss:Bold="1" ss:Color="#374151"/>
+      <NumberFormat ss:Format="0.000&quot; %&quot;"/>
+      <Interior ss:Color="#FFFBEB" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="s_contrat_na">
       <Alignment ss:Horizontal="Center"/>
@@ -490,14 +514,14 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
       <!-- Row 2 : Taux horaires -->
       <Row ss:Height="16">
         <Cell ss:MergeAcross="22" ss:StyleID="s_info">
-          <Data ss:Type="String">Taux horaires : <?= xe($tauxInfo) ?></Data>
+          <Data ss:Type="String">Taux et cotisations modifiables dans l'onglet «Parametres» — les montants se recalculent automatiquement. Valeurs actuelles : <?= xe($tauxInfo) ?></Data>
         </Cell>
       </Row>
 
-      <!-- Row 3 : Taux cotisations -->
+      <!-- Row 3 : Cotisations -->
       <Row ss:Height="16">
         <Cell ss:MergeAcross="22" ss:StyleID="s_info">
-          <Data ss:Type="String">Cotisations (IDCC 1351) : Salariales <?= number_format($tSalPct, 2) ?>% | Patronales <?= number_format($tPatPct, 2) ?>% — Voir onglet "Cotisations détail" pour le détail</Data>
+          <Data ss:Type="String">Cotisations (IDCC 1351) : Salariales <?= number_format($tSalPct, 2) ?>% | Patronales <?= number_format($tPatPct, 2) ?>% du brut — modifiables dans «Parametres»</Data>
         </Cell>
       </Row>
 
@@ -533,68 +557,81 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
 
       <?php if (empty($resultats)): ?>
       <Row ss:Height="24">
-        <Cell ss:MergeAcross="19"><Data ss:Type="String">Aucune donnée pour la période et les agents sélectionnés.</Data></Cell>
+        <Cell ss:MergeAcross="22"><Data ss:Type="String">Aucune donnée pour la période et les agents sélectionnés.</Data></Cell>
       </Row>
       <?php else: ?>
 
-      <!-- Lignes agents -->
+      <!-- Lignes agents — heures statiques (BDD), montants/totaux en formules -->
       <?php foreach ($resultats as $r): ?>
       <Row ss:Height="20">
         <?= strCell($r['prenom'] . ' ' . $r['nom'], 's_agent') ?>
         <?= strCell($r['matricule'], 's_mat') ?>
+        <?php /* cols 3-14 : h statiques, € en formule =RC[-1]*Parametres!RnC2 */ ?>
         <?= numCell($r['types']['normal']['h'],         's_h') ?>
-        <?= numCell($r['types']['normal']['m'],         's_eur') ?>
+        <?= formulaCell('=RC[-1]*Parametres!R4C2',  's_eur', $r['types']['normal']['m']) ?>
         <?= numCell($r['types']['nuit']['h'],           's_h') ?>
-        <?= numCell($r['types']['nuit']['m'],           's_eur') ?>
+        <?= formulaCell('=RC[-1]*Parametres!R5C2',  's_eur', $r['types']['nuit']['m']) ?>
         <?= numCell($r['types']['dimanche']['h'],       's_h') ?>
-        <?= numCell($r['types']['dimanche']['m'],       's_eur') ?>
+        <?= formulaCell('=RC[-1]*Parametres!R6C2',  's_eur', $r['types']['dimanche']['m']) ?>
         <?= numCell($r['types']['ferie_normal']['h'],   's_h') ?>
-        <?= numCell($r['types']['ferie_normal']['m'],   's_eur') ?>
+        <?= formulaCell('=RC[-1]*Parametres!R7C2',  's_eur', $r['types']['ferie_normal']['m']) ?>
         <?= numCell($r['types']['ferie_dimanche']['h'], 's_h') ?>
-        <?= numCell($r['types']['ferie_dimanche']['m'], 's_eur') ?>
+        <?= formulaCell('=RC[-1]*Parametres!R8C2',  's_eur', $r['types']['ferie_dimanche']['m']) ?>
         <?= numCell($r['types']['ferie_nuit']['h'],     's_h') ?>
-        <?= numCell($r['types']['ferie_nuit']['m'],     's_eur') ?>
-        <?= numCell($r['total_h'],  's_total_h') ?>
-        <?php
-        $ecart = $r['h_contrat'] !== null ? round($r['total_h'] - $r['h_contrat'], 2) : null;
-        $ecartStyle = ($ecart === null) ? '' : ($ecart >= 0 ? 's_ecart_pos' : 's_ecart_neg');
-        ?>
+        <?= formulaCell('=RC[-1]*Parametres!R9C2',  's_eur', $r['types']['ferie_nuit']['m']) ?>
+        <?php /* col 15 : total h = somme des 6 cols h */ ?>
+        <?= formulaCell('=RC[-12]+RC[-10]+RC[-8]+RC[-6]+RC[-4]+RC[-2]', 's_total_h', $r['total_h']) ?>
+        <?php /* col 16 : h contrat statique, col 17 : hebdo statique */ ?>
+        <?php $ecart = $r['h_contrat'] !== null ? round($r['total_h'] - $r['h_contrat'], 2) : null; ?>
         <?= $r['h_contrat'] !== null ? numCell($r['h_contrat'], 's_contrat_h') : strCell('—', 's_contrat_na') ?>
         <?= strCell($r['temps_hebdo'] ?: '—', 's_hebdo') ?>
-        <?= $ecart !== null ? numCell($ecart, $ecartStyle) : strCell('—', 's_contrat_na') ?>
-        <?= numCell($r['total_m'],                      's_total_eur') ?>
-        <?= numCell($r['cotis_salariale'],              's_sal_eur') ?>
-        <?= numCell($r['net'],                          's_net_eur') ?>
-        <?= numCell($r['cotis_patronale'],              's_pat_eur') ?>
-        <?= numCell($r['cout_employeur'],               's_cout_eur') ?>
+        <?php /* col 18 : écart = total_h - h_contrat */ ?>
+        <?= $r['h_contrat'] !== null
+            ? formulaCell('=IF(ISNUMBER(RC[-2]),RC[-3]-RC[-2],"")', $ecart >= 0 ? 's_ecart_pos' : 's_ecart_neg', $ecart ?? 0)
+            : strCell('—', 's_contrat_na') ?>
+        <?php /* col 19 : brut = somme des 6 cols € */ ?>
+        <?= formulaCell('=RC[-15]+RC[-13]+RC[-11]+RC[-9]+RC[-7]+RC[-5]', 's_total_eur', $r['total_m']) ?>
+        <?php /* col 20 : cotis sal = brut × taux_sal_total% */ ?>
+        <?= formulaCell("=RC[-1]*Parametres!R{$cotisTotalRowP}C2/100", 's_sal_eur', $r['cotis_salariale']) ?>
+        <?php /* col 21 : net = brut - cotis sal */ ?>
+        <?= formulaCell('=RC[-2]-RC[-1]', 's_net_eur', $r['net']) ?>
+        <?php /* col 22 : cotis pat = brut × taux_pat_total% */ ?>
+        <?= formulaCell("=RC[-3]*Parametres!R{$cotisTotalRowP}C3/100", 's_pat_eur', $r['cotis_patronale']) ?>
+        <?php /* col 23 : coût employeur = brut + cotis pat */ ?>
+        <?= formulaCell('=RC[-4]+RC[-1]', 's_cout_eur', $r['cout_employeur']) ?>
       </Row>
       <?php endforeach; ?>
 
-      <!-- Ligne TOTAL -->
+      <!-- Ligne TOTAL — formules SUM sur les lignes de données -->
+      <?php
+      // Génère une formule SUM sur toute la plage de données pour une colonne donnée
+      $fSum = fn(int $col, string $style, float $def) =>
+          formulaCell("=SUM(R{$firstDataRow}C{$col}:R{$lastDataRow}C{$col})", $style, $def);
+      ?>
       <Row ss:Height="24">
         <?= strCell('TOTAL', 's_foot') ?>
         <?= emptyCell('s_foot') ?>
-        <?= numCell($totaux['normal']['h'],         's_foot_h') ?>
-        <?= numCell($totaux['normal']['m'],         's_foot_eur') ?>
-        <?= numCell($totaux['nuit']['h'],           's_foot_h') ?>
-        <?= numCell($totaux['nuit']['m'],           's_foot_eur') ?>
-        <?= numCell($totaux['dimanche']['h'],       's_foot_h') ?>
-        <?= numCell($totaux['dimanche']['m'],       's_foot_eur') ?>
-        <?= numCell($totaux['ferie_normal']['h'],   's_foot_h') ?>
-        <?= numCell($totaux['ferie_normal']['m'],   's_foot_eur') ?>
-        <?= numCell($totaux['ferie_dimanche']['h'], 's_foot_h') ?>
-        <?= numCell($totaux['ferie_dimanche']['m'], 's_foot_eur') ?>
-        <?= numCell($totaux['ferie_nuit']['h'],     's_foot_h') ?>
-        <?= numCell($totaux['ferie_nuit']['m'],     's_foot_eur') ?>
-        <?= numCell($totaux['total_h'],  's_foot_h') ?>
+        <?= $fSum(3,  's_foot_h',   $totaux['normal']['h']) ?>
+        <?= $fSum(4,  's_foot_eur', $totaux['normal']['m']) ?>
+        <?= $fSum(5,  's_foot_h',   $totaux['nuit']['h']) ?>
+        <?= $fSum(6,  's_foot_eur', $totaux['nuit']['m']) ?>
+        <?= $fSum(7,  's_foot_h',   $totaux['dimanche']['h']) ?>
+        <?= $fSum(8,  's_foot_eur', $totaux['dimanche']['m']) ?>
+        <?= $fSum(9,  's_foot_h',   $totaux['ferie_normal']['h']) ?>
+        <?= $fSum(10, 's_foot_eur', $totaux['ferie_normal']['m']) ?>
+        <?= $fSum(11, 's_foot_h',   $totaux['ferie_dimanche']['h']) ?>
+        <?= $fSum(12, 's_foot_eur', $totaux['ferie_dimanche']['m']) ?>
+        <?= $fSum(13, 's_foot_h',   $totaux['ferie_nuit']['h']) ?>
+        <?= $fSum(14, 's_foot_eur', $totaux['ferie_nuit']['m']) ?>
+        <?= $fSum(15, 's_foot_h',   $totaux['total_h']) ?>
         <?= emptyCell('s_foot') ?>
         <?= emptyCell('s_foot') ?>
-        <?= emptyCell('s_foot') ?>
-        <?= numCell($totaux['total_m'],             's_foot_eur') ?>
-        <?= numCell($totaux['cotis_salariale'],     's_foot_sal') ?>
-        <?= numCell($totaux['net'],                 's_foot_net') ?>
-        <?= numCell($totaux['cotis_patronale'],     's_foot_pat') ?>
-        <?= numCell($totaux['cout_employeur'],      's_foot_cout') ?>
+        <?= $fSum(18, 's_foot_h',   0) ?>
+        <?= $fSum(19, 's_foot_eur', $totaux['total_m']) ?>
+        <?= formulaCell("=RC[-1]*Parametres!R{$cotisTotalRowP}C2/100", 's_foot_sal', $totaux['cotis_salariale']) ?>
+        <?= formulaCell('=RC[-2]-RC[-1]', 's_foot_net', $totaux['net']) ?>
+        <?= formulaCell("=RC[-3]*Parametres!R{$cotisTotalRowP}C3/100", 's_foot_pat', $totaux['cotis_patronale']) ?>
+        <?= formulaCell('=RC[-4]+RC[-1]', 's_foot_cout', $totaux['cout_employeur']) ?>
       </Row>
 
       <?php endif; ?>
@@ -606,6 +643,105 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
       <TopRowBottomPane>5</TopRowBottomPane>
       <ActivePane>2</ActivePane>
     </WorksheetOptions>
+  </Worksheet>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       FEUILLE PARAMETRES — Taux horaires + cotisations (modifiables)
+       Les formules de la feuille 1 référencent cette feuille.
+       Modifier les valeurs ici recalcule tout automatiquement.
+  ════════════════════════════════════════════════════════════════ -->
+  <Worksheet ss:Name="Parametres">
+    <Table>
+      <Column ss:Width="200"/>
+      <Column ss:Width="110"/>
+      <Column ss:Width="110"/>
+
+      <!-- Row 1 : Titre -->
+      <Row ss:Height="26">
+        <Cell ss:MergeAcross="2" ss:StyleID="s_title">
+          <Data ss:Type="String">Paramètres de calcul — modifier les valeurs, les montants se recalculent</Data>
+        </Cell>
+      </Row>
+
+      <!-- Row 2 : vide -->
+      <Row ss:Height="8"/>
+
+      <!-- Row 3 : Section taux horaires -->
+      <Row ss:Height="22">
+        <Cell ss:MergeAcross="2" ss:StyleID="s_hdr">
+          <Data ss:Type="String">TAUX HORAIRES (€/heure)</Data>
+        </Cell>
+      </Row>
+
+      <?php
+      // Rows 4-9 : taux (correspondance avec formules feuille 1)
+      $tauxParamRows = [
+          ['Normal',     $taux['normal']         ?? 0],
+          ['Nuit',       $taux['nuit']           ?? 0],
+          ['Dimanche',   $taux['dimanche']       ?? 0],
+          ['Férié',      $taux['ferie_normal']   ?? 0],
+          ['Fér.Dim.',   $taux['ferie_dimanche'] ?? 0],
+          ['Nuit Fér.',  $taux['ferie_nuit']     ?? 0],
+      ];
+      $tauxStyles = [
+          's_hdr',      // Normal → dark
+          's_hdr_nuit', // Nuit → indigo
+          's_hdr_dim',  // Dimanche → red
+          's_hdr_ferie','s_hdr_ferie','s_hdr_ferie',
+      ];
+      foreach ($tauxParamRows as $i => [$label, $val]):
+      ?>
+      <Row ss:Height="20">
+        <Cell ss:StyleID="<?= $tauxStyles[$i] ?>"><Data ss:Type="String"><?= xe($label) ?></Data></Cell>
+        <Cell ss:StyleID="s_param_val"><Data ss:Type="Number"><?= number_format($val, 2, '.', '') ?></Data></Cell>
+        <Cell ss:StyleID="s_info"><Data ss:Type="String">€/h — modifiable</Data></Cell>
+      </Row>
+      <?php endforeach; ?>
+
+      <!-- Row 10 : vide -->
+      <Row ss:Height="8"/>
+
+      <!-- Row 11 : Section cotisations -->
+      <Row ss:Height="22">
+        <Cell ss:MergeAcross="2" ss:StyleID="s_hdr_sal">
+          <Data ss:Type="String">COTISATIONS SOCIALES — modifier les taux (%)</Data>
+        </Cell>
+      </Row>
+
+      <!-- Row 12 : en-têtes colonnes -->
+      <Row ss:Height="20">
+        <?= strCell('Cotisation', 's_hdr') ?>
+        <?= strCell('Taux salarial %', 's_hdr_sal') ?>
+        <?= strCell('Taux patronal %', 's_hdr_pat') ?>
+      </Row>
+
+      <?php
+      // Rows 13 à (12+N) : lignes cotisations (réutilise $cotisLignes déjà chargé)
+      // La ligne TOTAL = $cotisTotalRowP = 13 + count($cotisLignes)
+      foreach ($cotisLignes as $c):
+      ?>
+      <Row ss:Height="18">
+        <?= strCell($c['libelle']) ?>
+        <Cell ss:StyleID="s_param_pct"><Data ss:Type="Number"><?= number_format((float)$c['taux_salarial'], 3, '.', '') ?></Data></Cell>
+        <Cell ss:StyleID="s_param_pct"><Data ss:Type="Number"><?= number_format((float)$c['taux_patronal'], 3, '.', '') ?></Data></Cell>
+      </Row>
+      <?php endforeach; ?>
+
+      <!-- Row TOTAL cotisations (= $cotisTotalRowP) — formules SUM -->
+      <?php $cotisDataEnd = 12 + count($cotisLignes); ?>
+      <Row ss:Height="22">
+        <Cell ss:StyleID="s_foot"><Data ss:Type="String">TOTAL cotisations</Data></Cell>
+        <Cell ss:StyleID="s_foot_sal"
+              ss:Formula="=SUM(R13C2:R<?= $cotisDataEnd ?>C2)">
+          <Data ss:Type="Number"><?= number_format($tSalPct, 3, '.', '') ?></Data>
+        </Cell>
+        <Cell ss:StyleID="s_foot_pat"
+              ss:Formula="=SUM(R13C3:R<?= $cotisDataEnd ?>C3)">
+          <Data ss:Type="Number"><?= number_format($tPatPct, 3, '.', '') ?></Data>
+        </Cell>
+      </Row>
+
+    </Table>
   </Worksheet>
 
   <!-- ═══════════════════════════════════════════════════════════
