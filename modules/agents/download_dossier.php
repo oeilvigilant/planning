@@ -37,7 +37,7 @@ $defaults = [
                               : ($a['motif_embauche'] ?? "accroissement temporaire d'activité"),
     'description_motif'    => "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
     'periode_essai'        => '',
-    'total_heures_contrat' => '',
+    'total_heures_contrat' => $a['total_heures_contrat'] ? (string)$a['total_heures_contrat'] : '',
     'site_affectation'     => $a['lieu_travail'] ?? '',
     'salaire_horaire'      => $a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70',
     'type_remuneration'    => $a['type_remuneration'] ?? 'Brute',
