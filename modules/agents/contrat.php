@@ -115,10 +115,17 @@ if (!$a) { flash('danger','Agent introuvable.'); header('Location: index.php'); 
 $params = getAllParams();
 $taux   = getTauxHoraires();
 
-// ── Migrer les données existantes si aucun contrat en base ────────────────────
+// ── Migrer les données existantes uniquement si l'agent a déjà un contrat ─────
 $stCount = $db->prepare("SELECT COUNT(*) FROM contrats WHERE agent_id=?");
 $stCount->execute([$id]);
-if ((int)$stCount->fetchColumn() === 0) {
+$hasContrats = (int)$stCount->fetchColumn() > 0;
+
+if (!$hasContrats && (
+    !empty($a['date_debut_contrat']) ||
+    !empty($a['date_fin_contrat'])   ||
+    !empty($a['signature'])          ||
+    !empty($a['total_heures_contrat'])
+)) {
     $db->prepare("INSERT INTO contrats (
         agent_id, type_contrat, poste, categorie,
         date_debut, date_fin, motif_embauche,
@@ -147,7 +154,17 @@ if ((int)$stCount->fetchColumn() === 0) {
         $a['signature_date']       ?: null,
         $a['signature_ip']         ?? null,
     ]);
+    $hasContrats = true;
 }
+
+// Nettoyer les contrats vides créés par erreur (sans date ni heures ni signature)
+try {
+    $db->exec("DELETE FROM contrats WHERE date_debut IS NULL AND date_fin IS NULL AND total_heures_contrat IS NULL AND signature IS NULL AND agent_id NOT IN (SELECT id FROM agents WHERE date_debut_contrat IS NOT NULL OR date_fin_contrat IS NOT NULL OR total_heures_contrat IS NOT NULL OR signature IS NOT NULL)");
+} catch (Exception $e) {}
+
+// Recompter après nettoyage
+$stCount->execute([$id]);
+$hasContrats = (int)$stCount->fetchColumn() > 0;
 
 // ── Routing ────────────────────────────────────────────────────────────────────
 $contratId = (int)($_GET['contrat_id'] ?? 0);
@@ -209,10 +226,15 @@ if ($action === 'supprimer' && $contratId) {
 }
 
 // Si pas de contrat_id, charger le plus récent actif (ou tout dernier)
+// Si aucun contrat n'existe, basculer automatiquement en mode "nouveau contrat"
 if (!$contratId && !$isNew) {
-    $stLast = $db->prepare("SELECT id FROM contrats WHERE agent_id=? ORDER BY FIELD(statut,'actif','archive'), created_at DESC, id DESC LIMIT 1");
-    $stLast->execute([$id]);
-    $contratId = (int)($stLast->fetchColumn() ?: 0);
+    if (!$hasContrats) {
+        $isNew = true;
+    } else {
+        $stLast = $db->prepare("SELECT id FROM contrats WHERE agent_id=? ORDER BY FIELD(statut,'actif','archive'), created_at DESC, id DESC LIMIT 1");
+        $stLast->execute([$id]);
+        $contratId = (int)($stLast->fetchColumn() ?: 0);
+    }
 }
 
 // Charger le contrat courant
