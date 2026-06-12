@@ -72,6 +72,7 @@ try {
     )");
     $db->exec("ALTER TABLE signature_tokens ADD COLUMN IF NOT EXISTS contrat_id INT NULL");
     $db->exec("ALTER TABLE signatures_log  ADD COLUMN IF NOT EXISTS contrat_id INT NULL");
+    $db->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS horaires_vacation VARCHAR(100) NULL AFTER total_heures_contrat");
     // Table contrats
     $db->exec("CREATE TABLE IF NOT EXISTS contrats (
         id                   INT AUTO_INCREMENT PRIMARY KEY,
@@ -275,6 +276,7 @@ $defaults = [
     'description_motif'    => ($c['description_motif'] ?? '') ?: "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
     'periode_essai'        => '',
     'total_heures_contrat' => ($c['total_heures_contrat'] ?? '') ? (string)$c['total_heures_contrat'] : '',
+    'horaires_vacation'    => $c['horaires_vacation'] ?? '',
     'site_affectation'     => ($c['lieu_travail'] ?? '') ?: ($a['lieu_travail'] ?? ''),
     'salaire_horaire'      => ($c['remuneration'] ?? '')
                                 ? number_format((float)$c['remuneration'], 2, '.', '')
@@ -427,6 +429,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
         !empty($_POST['salaire_horaire']) ? (float)$_POST['salaire_horaire'] : null,
         $_POST['type_remuneration']    ?? 'Brute',
         !empty($_POST['total_heures_contrat']) ? (float)$_POST['total_heures_contrat'] : null,
+        trim($_POST['horaires_vacation'] ?? ''),
         $_POST['majoration_nuit']      ?? '10',
         $_POST['majoration_dim']       ?? '10',
         $_POST['majoration_ferie']     ?? '100',
@@ -445,7 +448,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
             motif_embauche=?, description_motif=?,
             periode_essai=?, lieu_travail=?,
             remuneration=?, type_remuneration=?,
-            total_heures_contrat=?,
+            total_heures_contrat=?, horaires_vacation=?,
             majoration_nuit=?, majoration_dim=?, majoration_ferie=?,
             non_renouvelable=?, inclure_annexe_24h=?, mutuelle_choix=?,
             lieu_signature=?, date_signature=?
@@ -459,11 +462,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
             motif_embauche, description_motif,
             periode_essai, lieu_travail,
             remuneration, type_remuneration,
-            total_heures_contrat,
+            total_heures_contrat, horaires_vacation,
             majoration_nuit, majoration_dim, majoration_ferie,
             non_renouvelable, inclure_annexe_24h, mutuelle_choix,
             lieu_signature, date_signature, agent_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
         ->execute($fields);
         $contratId = (int)$db->lastInsertId();
     }
@@ -711,6 +714,11 @@ function contratLabel(array $ct): string {
           <div class="col-6">
             <label class="form-label">Période d'essai <small class="text-muted">(auto)</small></label>
             <input type="text" name="periode_essai" id="periodeEssai" class="form-control form-control-sm" value="<?= h($data['periode_essai']) ?>" readonly style="background:#f8f9fa;color:#6b7280">
+          </div>
+          <div class="col-12" id="rowHorairesVacation">
+            <label class="form-label">Horaires de la vacation <small class="text-muted">(ex : 17h30 à 21h30)</small></label>
+            <input type="text" name="horaires_vacation" class="form-control form-control-sm" value="<?= h($data['horaires_vacation'] ?? '') ?>" placeholder="ex : 17h30 à 21h30" oninput="updatePreview()">
+            <div class="form-text">Si renseigné, remplace « selon le planning » par les horaires exacts dans l'article 4.</div>
           </div>
           <div class="col-6">
             <label class="form-label">Motif CDD</label>
