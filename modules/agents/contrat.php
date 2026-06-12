@@ -266,28 +266,28 @@ $defaults = [
     'num_cnaps'            => $a['num_autorisation_cnaps'] ?? '',
     'type_contrat'         => $c['type_contrat'] ?? 'CDD',
     'poste'                => $c['poste'] ?? ($a['poste'] ?? 'Agent de sécurité'),
-    'categorie'            => ($c['categorie'] ?: '') ?: 'Employé - Niveau III - Échelon 2 - Coefficient 140',
-    'date_debut'           => $c['date_debut'] ? date('d/m/Y', strtotime($c['date_debut'])) : '',
-    'date_fin'             => $c['date_fin']   ? date('d/m/Y', strtotime($c['date_fin']))   : '',
-    'motif_cdd'            => $c['motif_embauche'] ?: ($a['motif_embauche'] === 'Accroissement activité'
+    'categorie'            => ($c['categorie'] ?? '') ?: 'Employé - Niveau III - Échelon 2 - Coefficient 140',
+    'date_debut'           => ($c['date_debut'] ?? '') ? date('d/m/Y', strtotime($c['date_debut'])) : '',
+    'date_fin'             => ($c['date_fin']   ?? '') ? date('d/m/Y', strtotime($c['date_fin']))   : '',
+    'motif_cdd'            => ($c['motif_embauche'] ?? '') ?: ($a['motif_embauche'] === 'Accroissement activité'
                                 ? "accroissement temporaire d'activité"
                                 : ($a['motif_embauche'] ?? "accroissement temporaire d'activité")),
-    'description_motif'    => ($c['description_motif'] ?: '') ?: "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
+    'description_motif'    => ($c['description_motif'] ?? '') ?: "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
     'periode_essai'        => '',
-    'total_heures_contrat' => $c['total_heures_contrat'] ? (string)$c['total_heures_contrat'] : '',
-    'site_affectation'     => $c['lieu_travail'] ?? ($a['lieu_travail'] ?? ''),
-    'salaire_horaire'      => $c['remuneration']
+    'total_heures_contrat' => ($c['total_heures_contrat'] ?? '') ? (string)$c['total_heures_contrat'] : '',
+    'site_affectation'     => ($c['lieu_travail'] ?? '') ?: ($a['lieu_travail'] ?? ''),
+    'salaire_horaire'      => ($c['remuneration'] ?? '')
                                 ? number_format((float)$c['remuneration'], 2, '.', '')
                                 : ($a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70'),
-    'type_remuneration'    => $c['type_remuneration'] ?? ($a['type_remuneration'] ?? 'Brute'),
-    'majoration_nuit'      => ($c['majoration_nuit']  ?: '') ?: '10',
-    'majoration_dim'       => ($c['majoration_dim']   ?: '') ?: '10',
-    'majoration_ferie'     => ($c['majoration_ferie'] ?: '') ?: '100',
-    'date_signature'       => ($c['date_signature'] ?: '') ?: ($a['date_signature'] ?? date('d/m/Y')),
-    'lieu_signature'       => ($c['lieu_signature']  ?: '') ?: ($a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris')),
-    'non_renouvelable'     => isset($c['non_renouvelable'])   ? (string)(int)$c['non_renouvelable']   : '1',
-    'inclure_annexe_24h'   => isset($c['inclure_annexe_24h']) ? (string)(int)$c['inclure_annexe_24h'] : '1',
-    'mutuelle_choix'       => $c['mutuelle_choix'] ?? ($a['mutuelle_choix'] ?? 'dispense'),
+    'type_remuneration'    => ($c['type_remuneration'] ?? '') ?: ($a['type_remuneration'] ?? 'Brute'),
+    'majoration_nuit'      => ($c['majoration_nuit']  ?? '') ?: '10',
+    'majoration_dim'       => ($c['majoration_dim']   ?? '') ?: '10',
+    'majoration_ferie'     => ($c['majoration_ferie'] ?? '') ?: '100',
+    'date_signature'       => ($c['date_signature'] ?? '') ?: ($a['date_signature'] ?? date('d/m/Y')),
+    'lieu_signature'       => ($c['lieu_signature']  ?? '') ?: ($a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris')),
+    'non_renouvelable'     => array_key_exists('non_renouvelable',   $c) ? (string)(int)$c['non_renouvelable']   : '1',
+    'inclure_annexe_24h'   => array_key_exists('inclure_annexe_24h', $c) ? (string)(int)$c['inclure_annexe_24h'] : '1',
+    'mutuelle_choix'       => ($c['mutuelle_choix'] ?? '') ?: ($a['mutuelle_choix'] ?? 'dispense'),
 ];
 
 $defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
