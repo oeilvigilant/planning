@@ -18,6 +18,20 @@ if (!$a) { header('Location: index.php'); exit; }
 $params = getAllParams();
 $taux   = getTauxHoraires();
 
+// Charger le contrat actif le plus récent depuis la table contrats
+$c = [];
+try {
+    $stC = $db->prepare("SELECT * FROM contrats WHERE agent_id=? AND statut='actif' ORDER BY created_at DESC, id DESC LIMIT 1");
+    $stC->execute([$id]);
+    $c = $stC->fetch() ?: [];
+    // Fallback : même archivé, prendre le plus récent
+    if (!$c) {
+        $stC2 = $db->prepare("SELECT * FROM contrats WHERE agent_id=? ORDER BY created_at DESC, id DESC LIMIT 1");
+        $stC2->execute([$id]);
+        $c = $stC2->fetch() ?: [];
+    }
+} catch (Exception $e) { $c = []; }
+
 $defaults = [
     'civilite'             => 'M.',
     'nom_prenom'           => strtoupper($a['nom']) . ' ' . $a['prenom'],
@@ -27,28 +41,28 @@ $defaults = [
     'nationalite'          => $a['nationalite'] ?? '',
     'num_secu'             => $a['num_secu'] ?? '',
     'num_cnaps'            => $a['num_autorisation_cnaps'] ?? '',
-    'type_contrat'         => $a['type_contrat'] ?? 'CDD',
-    'poste'                => $a['poste'] ?? 'Agent de sécurité',
-    'categorie'            => 'Employé - Niveau III - Échelon 2 - Coefficient 140',
-    'date_debut'           => $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
-    'date_fin'             => $a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : '',
-    'motif_cdd'            => $a['motif_embauche'] === 'Accroissement activité'
+    'type_contrat'         => $c['type_contrat'] ?? ($a['type_contrat'] ?? 'CDD'),
+    'poste'                => $c['poste'] ?? ($a['poste'] ?? 'Agent de sécurité'),
+    'categorie'            => ($c['categorie'] ?: '') ?: 'Employé - Niveau III - Échelon 2 - Coefficient 140',
+    'date_debut'           => $c['date_debut'] ? date('d/m/Y', strtotime($c['date_debut'])) : ($a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : ''),
+    'date_fin'             => $c['date_fin']   ? date('d/m/Y', strtotime($c['date_fin']))   : ($a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : ''),
+    'motif_cdd'            => $c['motif_embauche'] ?: ($a['motif_embauche'] === 'Accroissement activité'
                               ? "accroissement temporaire d'activité"
-                              : ($a['motif_embauche'] ?? "accroissement temporaire d'activité"),
-    'description_motif'    => "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
+                              : ($a['motif_embauche'] ?? "accroissement temporaire d'activité")),
+    'description_motif'    => ($c['description_motif'] ?: '') ?: "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
     'periode_essai'        => '',
-    'total_heures_contrat' => $a['total_heures_contrat'] ? (string)$a['total_heures_contrat'] : '',
-    'site_affectation'     => $a['lieu_travail'] ?? '',
-    'salaire_horaire'      => $a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70',
-    'type_remuneration'    => $a['type_remuneration'] ?? 'Brute',
-    'majoration_nuit'      => '10',
-    'majoration_dim'       => '10',
-    'majoration_ferie'     => '100',
-    'date_signature'       => $a['date_signature'] ?? date('d/m/Y'),
-    'lieu_signature'       => $a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris'),
-    'non_renouvelable'     => '1',
-    'inclure_annexe_24h'   => (string)($a['inclure_annexe_24h'] ?? '1'),
-    'mutuelle_choix'       => $a['mutuelle_choix'] ?? 'dispense',
+    'total_heures_contrat' => $c['total_heures_contrat'] ? (string)$c['total_heures_contrat'] : ($a['total_heures_contrat'] ? (string)$a['total_heures_contrat'] : ''),
+    'site_affectation'     => $c['lieu_travail'] ?? ($a['lieu_travail'] ?? ''),
+    'salaire_horaire'      => $c['remuneration'] ? number_format((float)$c['remuneration'], 2, '.', '') : ($a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70'),
+    'type_remuneration'    => $c['type_remuneration'] ?? ($a['type_remuneration'] ?? 'Brute'),
+    'majoration_nuit'      => ($c['majoration_nuit']  ?: '') ?: '10',
+    'majoration_dim'       => ($c['majoration_dim']   ?: '') ?: '10',
+    'majoration_ferie'     => ($c['majoration_ferie'] ?: '') ?: '100',
+    'date_signature'       => ($c['date_signature'] ?: '') ?: ($a['date_signature'] ?? date('d/m/Y')),
+    'lieu_signature'       => ($c['lieu_signature']  ?: '') ?: ($a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris')),
+    'non_renouvelable'     => isset($c['non_renouvelable']) ? (string)(int)$c['non_renouvelable'] : '1',
+    'inclure_annexe_24h'   => isset($c['inclure_annexe_24h']) ? (string)(int)$c['inclure_annexe_24h'] : (string)($a['inclure_annexe_24h'] ?? '1'),
+    'mutuelle_choix'       => $c['mutuelle_choix'] ?? ($a['mutuelle_choix'] ?? 'dispense'),
 ];
 
 $defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
@@ -86,8 +100,15 @@ if (empty($defaults['total_heures_contrat']) && $defaults['date_debut'] && $defa
 $nomBase = strtoupper(preg_replace('/[^A-Za-z0-9]/', '_', $a['nom']))
          . '_' . preg_replace('/[^A-Za-z0-9]/', '_', $a['prenom']);
 
+// Passer la signature du contrat actif au builder
+$aForPdf = $a;
+if (!empty($c['signature'])) {
+    $aForPdf['signature']      = $c['signature'];
+    $aForPdf['signature_date'] = $c['signature_date'] ?? $a['signature_date'];
+}
+
 // ── 1. Contrat PDF ────────────────────────────────────────────────────────────
-$contratPdf = renderPdfToString(buildContratHtml($defaults, $params, $a));
+$contratPdf = renderPdfToString(buildContratHtml($defaults, $params, $aForPdf));
 
 // ── 2. Fiche agent comptable PDF (même logique qu'export_pdf.php) ─────────────
 $pdfChamps = $db->query("SELECT * FROM pdf_champs WHERE actif=1 ORDER BY ordre")->fetchAll();

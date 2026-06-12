@@ -35,7 +35,7 @@ if (($_GET['action'] ?? '') === 'get_heures_planning') {
     exit;
 }
 
-// ── Init BDD signature (auto-migration) ──────────────────────────────────────
+// ── Auto-migration ─────────────────────────────────────────────────────────────
 try {
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature LONGTEXT NULL");
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature_date DATETIME NULL");
@@ -48,6 +48,7 @@ try {
     $db->exec("CREATE TABLE IF NOT EXISTS signatures_log (
         id        INT AUTO_INCREMENT PRIMARY KEY,
         agent_id  INT NOT NULL,
+        contrat_id INT NULL,
         contrat_hash VARCHAR(64) NOT NULL,
         ip_address   VARCHAR(45),
         user_agent   TEXT,
@@ -57,6 +58,7 @@ try {
     $db->exec("CREATE TABLE IF NOT EXISTS signature_tokens (
         id           INT AUTO_INCREMENT PRIMARY KEY,
         agent_id     INT NOT NULL,
+        contrat_id   INT NULL,
         token        VARCHAR(64) NOT NULL UNIQUE,
         email        VARCHAR(255) NOT NULL,
         contrat_data LONGTEXT NULL,
@@ -68,8 +70,43 @@ try {
         INDEX idx_token (token),
         INDEX idx_agent_sig (agent_id)
     )");
+    $db->exec("ALTER TABLE signature_tokens ADD COLUMN IF NOT EXISTS contrat_id INT NULL");
+    $db->exec("ALTER TABLE signatures_log  ADD COLUMN IF NOT EXISTS contrat_id INT NULL");
+    // Table contrats
+    $db->exec("CREATE TABLE IF NOT EXISTS contrats (
+        id                   INT AUTO_INCREMENT PRIMARY KEY,
+        agent_id             INT NOT NULL,
+        type_contrat         VARCHAR(50)  DEFAULT 'CDD',
+        poste                VARCHAR(100),
+        categorie            VARCHAR(200),
+        date_debut           DATE         NULL,
+        date_fin             DATE         NULL,
+        motif_embauche       VARCHAR(100),
+        description_motif    TEXT,
+        periode_essai        VARCHAR(50),
+        lieu_travail         VARCHAR(200),
+        remuneration         DECIMAL(8,2),
+        type_remuneration    VARCHAR(20)  DEFAULT 'Brute',
+        total_heures_contrat DECIMAL(8,2) NULL,
+        majoration_nuit      VARCHAR(5)   DEFAULT '10',
+        majoration_dim       VARCHAR(5)   DEFAULT '10',
+        majoration_ferie     VARCHAR(5)   DEFAULT '100',
+        non_renouvelable     TINYINT(1)   DEFAULT 1,
+        inclure_annexe_24h   TINYINT(1)   DEFAULT 1,
+        mutuelle_choix       VARCHAR(20)  DEFAULT 'dispense',
+        lieu_signature       VARCHAR(100),
+        date_signature       VARCHAR(10),
+        signature            LONGTEXT     NULL,
+        signature_date       DATETIME     NULL,
+        signature_ip         VARCHAR(45)  NULL,
+        statut               ENUM('actif','archive') DEFAULT 'actif',
+        notes                TEXT         NULL,
+        created_at           DATETIME     DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_agent_id (agent_id)
+    )");
 } catch (Exception $e) {}
 
+// ── Charger l'agent ────────────────────────────────────────────────────────────
 $stmt = $db->prepare("SELECT * FROM agents WHERE id = ?");
 $stmt->execute([$id]);
 $a = $stmt->fetch();
@@ -78,70 +115,205 @@ if (!$a) { flash('danger','Agent introuvable.'); header('Location: index.php'); 
 $params = getAllParams();
 $taux   = getTauxHoraires();
 
+// ── Migrer les données existantes si aucun contrat en base ────────────────────
+$stCount = $db->prepare("SELECT COUNT(*) FROM contrats WHERE agent_id=?");
+$stCount->execute([$id]);
+if ((int)$stCount->fetchColumn() === 0) {
+    $db->prepare("INSERT INTO contrats (
+        agent_id, type_contrat, poste, categorie,
+        date_debut, date_fin, motif_embauche,
+        periode_essai, lieu_travail, remuneration, type_remuneration,
+        total_heures_contrat, inclure_annexe_24h, mutuelle_choix,
+        lieu_signature, date_signature, signature, signature_date, signature_ip
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    ->execute([
+        $id,
+        $a['type_contrat']         ?? 'CDD',
+        $a['poste']                ?? 'Agent de sécurité',
+        'Employé - Niveau III - Échelon 2 - Coefficient 140',
+        $a['date_debut_contrat']   ?: null,
+        $a['date_fin_contrat']     ?: null,
+        $a['motif_embauche']       ?? null,
+        $a['periode_essai']        ?? null,
+        $a['lieu_travail']         ?? null,
+        $a['remuneration']         ?? null,
+        $a['type_remuneration']    ?? 'Brute',
+        $a['total_heures_contrat'] ?? null,
+        (int)($a['inclure_annexe_24h'] ?? 1),
+        $a['mutuelle_choix']       ?? 'dispense',
+        $a['lieu_signature']       ?? null,
+        $a['date_signature']       ?? null,
+        $a['signature']            ?? null,
+        $a['signature_date']       ?: null,
+        $a['signature_ip']         ?? null,
+    ]);
+}
+
+// ── Routing ────────────────────────────────────────────────────────────────────
+$contratId = (int)($_GET['contrat_id'] ?? 0);
+$action    = $_GET['action'] ?? '';
+$isNew     = ($action === 'new');
+$isDl      = (($_GET['dl'] ?? '') === '1');
+
+// Archiver / Restaurer
+if (in_array($action, ['archive','restore']) && $contratId) {
+    requirePerm('agents','edit');
+    $newStatut = $action === 'archive' ? 'archive' : 'actif';
+    $db->prepare("UPDATE contrats SET statut=? WHERE id=? AND agent_id=?")->execute([$newStatut, $contratId, $id]);
+    flash('success', $action === 'archive' ? 'Contrat archivé.' : 'Contrat restauré.');
+    header("Location: contrat.php?id=$id"); exit;
+}
+
+// Dupliquer
+if ($action === 'dupliquer' && $contratId) {
+    requirePerm('agents','edit');
+    $stSrc = $db->prepare("SELECT * FROM contrats WHERE id=? AND agent_id=?");
+    $stSrc->execute([$contratId, $id]);
+    $src = $stSrc->fetch();
+    if ($src) {
+        $db->prepare("INSERT INTO contrats (
+            agent_id, type_contrat, poste, categorie,
+            date_debut, date_fin, motif_embauche, description_motif,
+            periode_essai, lieu_travail, remuneration, type_remuneration,
+            total_heures_contrat, majoration_nuit, majoration_dim, majoration_ferie,
+            non_renouvelable, inclure_annexe_24h, mutuelle_choix,
+            lieu_signature, date_signature
+        ) VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?)")
+        ->execute([
+            $id, $src['type_contrat'], $src['poste'], $src['categorie'],
+            $src['motif_embauche'], $src['description_motif'],
+            $src['periode_essai'], $src['lieu_travail'], $src['remuneration'], $src['type_remuneration'],
+            $src['majoration_nuit'], $src['majoration_dim'], $src['majoration_ferie'],
+            $src['non_renouvelable'], $src['inclure_annexe_24h'], $src['mutuelle_choix'],
+            $src['lieu_signature'], date('d/m/Y'),
+        ]);
+        $newId = (int)$db->lastInsertId();
+        flash('success', 'Contrat dupliqué — dates à compléter.');
+        header("Location: contrat.php?id=$id&contrat_id=$newId"); exit;
+    }
+    header("Location: contrat.php?id=$id"); exit;
+}
+
+// Supprimer un contrat
+if ($action === 'supprimer' && $contratId) {
+    requirePerm('agents','edit');
+    $stCount2 = $db->prepare("SELECT COUNT(*) FROM contrats WHERE agent_id=?");
+    $stCount2->execute([$id]);
+    if ((int)$stCount2->fetchColumn() > 1) {
+        $db->prepare("DELETE FROM contrats WHERE id=? AND agent_id=?")->execute([$contratId, $id]);
+        flash('success', 'Contrat supprimé.');
+    } else {
+        flash('danger', 'Impossible de supprimer le seul contrat de cet agent.');
+    }
+    header("Location: contrat.php?id=$id"); exit;
+}
+
+// Si pas de contrat_id, charger le plus récent actif (ou tout dernier)
+if (!$contratId && !$isNew) {
+    $stLast = $db->prepare("SELECT id FROM contrats WHERE agent_id=? ORDER BY FIELD(statut,'actif','archive'), created_at DESC, id DESC LIMIT 1");
+    $stLast->execute([$id]);
+    $contratId = (int)($stLast->fetchColumn() ?: 0);
+}
+
+// Charger le contrat courant
+$c = [];
+if ($contratId) {
+    $stC = $db->prepare("SELECT * FROM contrats WHERE id=? AND agent_id=?");
+    $stC->execute([$contratId, $id]);
+    $c = $stC->fetch() ?: [];
+    if (!$c && !$isNew) {
+        flash('danger','Contrat introuvable.');
+        header("Location: contrat.php?id=$id"); exit;
+    }
+}
+
+// Tous les contrats pour le sélecteur
+$stAll = $db->prepare("SELECT id, date_debut, date_fin, type_contrat, statut, created_at FROM contrats WHERE agent_id=? ORDER BY created_at DESC, id DESC");
+$stAll->execute([$id]);
+$allContrats = $stAll->fetchAll();
+
+// ── Construire $defaults depuis le contrat ─────────────────────────────────────
 $defaults = [
-    'civilite'         => 'M.',
-    'nom_prenom'       => strtoupper($a['nom']) . ' ' . $a['prenom'],
-    'adresse'          => trim(($a['adresse']??'') . ', ' . ($a['cp']??'') . ' ' . ($a['ville']??''), ', '),
-    'date_naissance'   => $a['date_naissance'] ? date('d/m/Y', strtotime($a['date_naissance'])) : '',
-    'lieu_naissance'   => $a['lieu_naissance'] ?? '',
-    'nationalite'      => $a['nationalite'] ?? '',
-    'num_secu'         => $a['num_secu'] ?? '',
-    'num_cnaps'        => $a['num_autorisation_cnaps'] ?? '',
-    'type_contrat'     => $a['type_contrat'] ?? 'CDD',
-    'poste'            => $a['poste'] ?? 'Agent de sécurité',
-    'categorie'        => 'Employé - Niveau III - Échelon 2 - Coefficient 140',
-    'date_debut'       => $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
-    'date_fin'         => $a['date_fin_contrat'] ? date('d/m/Y', strtotime($a['date_fin_contrat'])) : '',
-    'motif_cdd'        => $a['motif_embauche'] === 'Accroissement activité'
-                          ? "accroissement temporaire d'activité"
-                          : ($a['motif_embauche'] ?? "accroissement temporaire d'activité"),
-    'description_motif'=> "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
-    'periode_essai'    => calculerPeriodeEssai(
-                              $a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : '',
-                              $a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : ''
-                          ),
-    'total_heures_contrat' => $a['total_heures_contrat'] ? (string)$a['total_heures_contrat'] : '',
-    'site_affectation' => $a['lieu_travail'] ?? '',
-    'salaire_horaire'  => $a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70',
-    'type_remuneration'=> $a['type_remuneration'] ?? 'Brute',
-    'majoration_nuit'  => '10',
-    'majoration_dim'   => '10',
-    'majoration_ferie' => '100',
-    'date_signature'     => $a['date_signature'] ?? date('d/m/Y'),
-    'lieu_signature'     => $a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris'),
-    'non_renouvelable'   => '1',
-    'inclure_annexe_24h' => (string)($a['inclure_annexe_24h'] ?? '1'),
-    'mutuelle_choix'     => $a['mutuelle_choix'] ?? 'dispense',
+    'civilite'             => 'M.',
+    'nom_prenom'           => strtoupper($a['nom']) . ' ' . $a['prenom'],
+    'adresse'              => trim(($a['adresse']??'') . ', ' . ($a['cp']??'') . ' ' . ($a['ville']??''), ', '),
+    'date_naissance'       => $a['date_naissance'] ? date('d/m/Y', strtotime($a['date_naissance'])) : '',
+    'lieu_naissance'       => $a['lieu_naissance'] ?? '',
+    'nationalite'          => $a['nationalite'] ?? '',
+    'num_secu'             => $a['num_secu'] ?? '',
+    'num_cnaps'            => $a['num_autorisation_cnaps'] ?? '',
+    'type_contrat'         => $c['type_contrat'] ?? 'CDD',
+    'poste'                => $c['poste'] ?? ($a['poste'] ?? 'Agent de sécurité'),
+    'categorie'            => ($c['categorie'] ?: '') ?: 'Employé - Niveau III - Échelon 2 - Coefficient 140',
+    'date_debut'           => $c['date_debut'] ? date('d/m/Y', strtotime($c['date_debut'])) : '',
+    'date_fin'             => $c['date_fin']   ? date('d/m/Y', strtotime($c['date_fin']))   : '',
+    'motif_cdd'            => $c['motif_embauche'] ?: ($a['motif_embauche'] === 'Accroissement activité'
+                                ? "accroissement temporaire d'activité"
+                                : ($a['motif_embauche'] ?? "accroissement temporaire d'activité")),
+    'description_motif'    => ($c['description_motif'] ?: '') ?: "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
+    'periode_essai'        => '',
+    'total_heures_contrat' => $c['total_heures_contrat'] ? (string)$c['total_heures_contrat'] : '',
+    'site_affectation'     => $c['lieu_travail'] ?? ($a['lieu_travail'] ?? ''),
+    'salaire_horaire'      => $c['remuneration']
+                                ? number_format((float)$c['remuneration'], 2, '.', '')
+                                : ($a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70'),
+    'type_remuneration'    => $c['type_remuneration'] ?? ($a['type_remuneration'] ?? 'Brute'),
+    'majoration_nuit'      => ($c['majoration_nuit']  ?: '') ?: '10',
+    'majoration_dim'       => ($c['majoration_dim']   ?: '') ?: '10',
+    'majoration_ferie'     => ($c['majoration_ferie'] ?: '') ?: '100',
+    'date_signature'       => ($c['date_signature'] ?: '') ?: ($a['date_signature'] ?? date('d/m/Y')),
+    'lieu_signature'       => ($c['lieu_signature']  ?: '') ?: ($a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris')),
+    'non_renouvelable'     => isset($c['non_renouvelable'])   ? (string)(int)$c['non_renouvelable']   : '1',
+    'inclure_annexe_24h'   => isset($c['inclure_annexe_24h']) ? (string)(int)$c['inclure_annexe_24h'] : '1',
+    'mutuelle_choix'       => $c['mutuelle_choix'] ?? ($a['mutuelle_choix'] ?? 'dispense'),
 ];
 
-// ── Signature électronique : enregistrement ──────────────────────────────────
+$defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
+
+// Auto-détecter dates depuis le planning si absentes
+if (!$defaults['date_debut'] || !$defaults['date_fin']) {
+    $stP = $db->prepare("SELECT MIN(pl.date_travail) AS min_date, MAX(pl.date_travail) AS max_date
+        FROM planning_lignes pl JOIN planning_versions pv ON pv.id=pl.version_id AND pv.is_current=1
+        WHERE pl.agent_id=?");
+    $stP->execute([$id]);
+    $planRow = $stP->fetch();
+    if ($planRow && $planRow['min_date']) {
+        if (!$defaults['date_debut']) $defaults['date_debut'] = date('d/m/Y', strtotime($planRow['min_date']));
+        if (!$defaults['date_fin'])   $defaults['date_fin']   = date('d/m/Y', strtotime($planRow['max_date']));
+        $defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
+    }
+}
+
+// ── POST : Signature électronique — enregistrement ───────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_signature'])) {
     $sigData = $_POST['signature_data'] ?? '';
-    if (preg_match('/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/', $sigData)) {
-        $ip      = $_SERVER['REMOTE_ADDR'] ?? '';
-        $ua      = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
+    if ($contratId && preg_match('/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/', $sigData)) {
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+        $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
+        $db->prepare("UPDATE contrats SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=? AND agent_id=?")
+           ->execute([$sigData, $ip, $contratId, $id]);
         $db->prepare("UPDATE agents SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=?")
            ->execute([$sigData, $ip, $id]);
-        $db->prepare("INSERT INTO signatures_log (agent_id, contrat_hash, ip_address, user_agent) VALUES (?,?,?,?)")
-           ->execute([$id, hash('sha256', $sigData . $id . date('Y-m-d')), $ip, $ua]);
-        // Rafraîchir $a pour le reste de la page
-        $a = $db->prepare("SELECT * FROM agents WHERE id=?")->execute([$id]) ? null : null;
-        $stmt2 = $db->prepare("SELECT * FROM agents WHERE id=?"); $stmt2->execute([$id]); $a = $stmt2->fetch();
+        $db->prepare("INSERT INTO signatures_log (agent_id, contrat_id, contrat_hash, ip_address, user_agent) VALUES (?,?,?,?,?)")
+           ->execute([$id, $contratId, hash('sha256', $sigData . $id . date('Y-m-d')), $ip, $ua]);
         flash('success', 'Signature enregistrée — horodatage conservé.');
     } else {
         flash('danger', 'Données de signature invalides.');
     }
-    header('Location: contrat.php?id=' . $id); exit;
+    header('Location: contrat.php?id=' . $id . '&contrat_id=' . $contratId); exit;
 }
 
-// ── Signature électronique : suppression ─────────────────────────────────────
+// ── POST : Signature électronique — suppression ──────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['delete_signature'])) {
-    $db->prepare("UPDATE agents SET signature=NULL, signature_date=NULL, signature_ip=NULL WHERE id=?")->execute([$id]);
+    if ($contratId) {
+        $db->prepare("UPDATE contrats SET signature=NULL, signature_date=NULL, signature_ip=NULL WHERE id=? AND agent_id=?")->execute([$contratId, $id]);
+        $db->prepare("UPDATE agents SET signature=NULL, signature_date=NULL, signature_ip=NULL WHERE id=?")->execute([$id]);
+    }
     flash('success', 'Signature supprimée.');
-    header('Location: contrat.php?id=' . $id); exit;
+    header('Location: contrat.php?id=' . $id . '&contrat_id=' . $contratId); exit;
 }
 
-// ── Envoyer un lien de signature par email ───────────────────────────────────
+// ── POST : Envoyer un lien de signature par email ────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature'])) {
     require_once __DIR__ . '/../../includes/mailer.php';
     $emailDest = trim($_POST['sig_email'] ?? $a['email'] ?? '');
@@ -155,22 +327,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature']
         $snapData  = (is_array($snap) && !empty($snap)) ? array_merge($defaults, $snap) : $defaults;
         unset($snapData['export_pdf'], $snapData['save_contrat'], $snapData['sign_submit']);
         $dataSnap  = json_encode($snapData, JSON_UNESCAPED_UNICODE);
-        $db->prepare("INSERT INTO signature_tokens (agent_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?)")
-           ->execute([$id, $token, $emailDest, $dataSnap, $expiresAt]);
+        $db->prepare("INSERT INTO signature_tokens (agent_id, contrat_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?,?)")
+           ->execute([$id, $contratId ?: null, $token, $emailDest, $dataSnap, $expiresAt]);
         $sigLink   = rtrim(APP_URL, '/') . '/token/signer.php?t=' . $token;
         $expiryFmt = date('d/m/Y à H:i', strtotime($expiresAt));
         $linkHtml  = '<div class="mt-2 p-2" style="background:#f8f9fa;border-radius:4px;word-break:break-all;font-size:12px"><strong>Lien à copier :</strong><br><a href="' . htmlspecialchars($sigLink) . '" target="_blank">' . htmlspecialchars($sigLink) . '</a></div>';
 
         if (empty($params['smtp_host'])) {
-            // No SMTP configured — show link directly, no attempt to send
             flash('warning', '<i class="fa fa-exclamation-triangle me-1"></i>SMTP non configuré — copiez ce lien et transmettez-le à l\'agent. <a href="' . APP_URL . '/modules/parametres/index.php?tab=email" class="alert-link">Configurer le SMTP</a>' . $linkHtml);
         } else {
-            $result = sendMail(
-                $emailDest,
-                trim($a['prenom'] . ' ' . strtoupper($a['nom'])),
+            $result = sendMail($emailDest, trim($a['prenom'] . ' ' . strtoupper($a['nom'])),
                 'Signature de votre contrat — ' . ($params['entreprise_nom'] ?? 'Oeil Vigilant'),
-                buildSignatureEmailHtml($a, $params, $sigLink, $expiryFmt)
-            );
+                buildSignatureEmailHtml($a, $params, $sigLink, $expiryFmt));
             if ($result['ok']) {
                 flash('success', '<i class="fa fa-check-circle me-1"></i>Email envoyé à <strong>' . htmlspecialchars($emailDest) . '</strong>. Lien valide jusqu\'au ' . $expiryFmt . '.' . $linkHtml);
             } else {
@@ -178,12 +346,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature']
             }
         }
     }
-    header('Location: contrat.php?id=' . $id); exit;
+    header('Location: contrat.php?id=' . $id . '&contrat_id=' . $contratId); exit;
 }
 
-// ── Regénérer un lien de signature (sans envoyer par email) ──────────────────
+// ── POST : Regénérer un lien de signature ────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['regenerate_token'])) {
-    // Auto-détecter les dates depuis le planning si absentes
     if (!$defaults['date_debut'] || !$defaults['date_fin']) {
         $stR = $db->prepare("SELECT MIN(pl.date_travail) AS min_date, MAX(pl.date_travail) AS max_date
             FROM planning_lignes pl JOIN planning_versions pv ON pv.id=pl.version_id AND pv.is_current=1
@@ -203,17 +370,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['regenerate_token']))
     $snapData  = (is_array($snap) && !empty($snap)) ? array_merge($defaults, $snap) : $defaults;
     unset($snapData['export_pdf'], $snapData['save_contrat'], $snapData['sign_submit']);
     $dataSnap  = json_encode($snapData, JSON_UNESCAPED_UNICODE);
-    $db->prepare("INSERT INTO signature_tokens (agent_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?)")
-       ->execute([$id, $token, $a['email'] ?? '', $dataSnap, $expiresAt]);
+    $db->prepare("INSERT INTO signature_tokens (agent_id, contrat_id, token, email, contrat_data, expires_at) VALUES (?,?,?,?,?,?)")
+       ->execute([$id, $contratId ?: null, $token, $a['email'] ?? '', $dataSnap, $expiresAt]);
     $sigLink   = rtrim(APP_URL, '/') . '/token/signer.php?t=' . $token;
     $expiryFmt = date('d/m/Y à H:i', strtotime($expiresAt));
     $linkHtml  = '<div class="mt-2 p-2" style="background:#f8f9fa;border-radius:4px;word-break:break-all;font-size:12px"><strong>Lien à copier :</strong><br><a href="' . htmlspecialchars($sigLink) . '" target="_blank">' . htmlspecialchars($sigLink) . '</a></div>';
-    flash('success', '<i class="fa fa-link me-1"></i>Nouveau lien généré — données du contrat à jour. Valide jusqu\'au ' . $expiryFmt . '.' . $linkHtml);
-    header('Location: contrat.php?id=' . $id); exit;
+    flash('success', '<i class="fa fa-link me-1"></i>Nouveau lien généré. Valide jusqu\'au ' . $expiryFmt . '.' . $linkHtml);
+    header('Location: contrat.php?id=' . $id . '&contrat_id=' . $contratId); exit;
 }
 
-// ── Sauvegarder les données du contrat ───────────────────────────────────────
+// ── POST : Sauvegarder le contrat ─────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
+    requirePerm('agents','edit');
     $dateDebut = null;
     $dateFin   = null;
     if (!empty($_POST['date_debut'])) {
@@ -224,93 +392,214 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
         $d = DateTime::createFromFormat('d/m/Y', trim($_POST['date_fin']));
         if ($d) $dateFin = $d->format('Y-m-d');
     }
-    $stmt = $db->prepare("
-        UPDATE agents SET
-            type_contrat          = ?,
-            date_debut_contrat    = ?,
-            date_fin_contrat      = ?,
-            remuneration          = ?,
-            type_remuneration     = ?,
-            periode_essai         = ?,
-            lieu_travail          = ?,
-            poste                 = ?,
-            lieu_signature        = ?,
-            date_signature        = ?,
-            inclure_annexe_24h    = ?,
-            mutuelle_choix        = ?,
-            total_heures_contrat  = ?
-        WHERE id = ?
-    ");
-    $stmt->execute([
-        $_POST['type_contrat']        ?? null,
+    $fields = [
+        $_POST['type_contrat']         ?? null,
+        $_POST['poste']                ?? null,
+        $_POST['categorie']            ?? null,
         $dateDebut,
         $dateFin,
-        $_POST['salaire_horaire']     ?? null,
-        $_POST['type_remuneration']   ?? 'Brute',
-        $_POST['periode_essai']       ?? null,
-        $_POST['site_affectation']    ?? null,
-        $_POST['poste']               ?? null,
+        $_POST['motif_cdd']            ?? null,
+        $_POST['description_motif']    ?? null,
+        $_POST['periode_essai']        ?? null,
+        $_POST['site_affectation']     ?? null,
+        !empty($_POST['salaire_horaire']) ? (float)$_POST['salaire_horaire'] : null,
+        $_POST['type_remuneration']    ?? 'Brute',
+        !empty($_POST['total_heures_contrat']) ? (float)$_POST['total_heures_contrat'] : null,
+        $_POST['majoration_nuit']      ?? '10',
+        $_POST['majoration_dim']       ?? '10',
+        $_POST['majoration_ferie']     ?? '100',
+        (int)($_POST['non_renouvelable']   ?? 1),
+        ($_POST['inclure_annexe_24h']  ?? '0') === '1' ? 1 : 0,
+        $_POST['mutuelle_choix']       ?? 'dispense',
+        trim($_POST['lieu_signature']  ?? ''),
+        trim($_POST['date_signature']  ?? ''),
+    ];
+    if ($contratId) {
+        $fields[] = $contratId;
+        $fields[] = $id;
+        $db->prepare("UPDATE contrats SET
+            type_contrat=?, poste=?, categorie=?,
+            date_debut=?, date_fin=?,
+            motif_embauche=?, description_motif=?,
+            periode_essai=?, lieu_travail=?,
+            remuneration=?, type_remuneration=?,
+            total_heures_contrat=?,
+            majoration_nuit=?, majoration_dim=?, majoration_ferie=?,
+            non_renouvelable=?, inclure_annexe_24h=?, mutuelle_choix=?,
+            lieu_signature=?, date_signature=?
+            WHERE id=? AND agent_id=?")
+        ->execute($fields);
+    } else {
+        $fields[] = $id;
+        $db->prepare("INSERT INTO contrats (
+            type_contrat, poste, categorie,
+            date_debut, date_fin,
+            motif_embauche, description_motif,
+            periode_essai, lieu_travail,
+            remuneration, type_remuneration,
+            total_heures_contrat,
+            majoration_nuit, majoration_dim, majoration_ferie,
+            non_renouvelable, inclure_annexe_24h, mutuelle_choix,
+            lieu_signature, date_signature, agent_id
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        ->execute($fields);
+        $contratId = (int)$db->lastInsertId();
+    }
+    // Sync champs principaux dans agents pour compatibilité
+    $db->prepare("UPDATE agents SET
+        type_contrat=?, poste=?, lieu_travail=?, remuneration=?, type_remuneration=?,
+        date_debut_contrat=?, date_fin_contrat=?, total_heures_contrat=?,
+        inclure_annexe_24h=?, mutuelle_choix=?, lieu_signature=?, date_signature=?
+        WHERE id=?")
+    ->execute([
+        $_POST['type_contrat'] ?? null,
+        $_POST['poste'] ?? null,
+        $_POST['site_affectation'] ?? null,
+        !empty($_POST['salaire_horaire']) ? (float)$_POST['salaire_horaire'] : null,
+        $_POST['type_remuneration'] ?? 'Brute',
+        $dateDebut,
+        $dateFin,
+        !empty($_POST['total_heures_contrat']) ? (float)$_POST['total_heures_contrat'] : null,
+        ($_POST['inclure_annexe_24h'] ?? '0') === '1' ? 1 : 0,
+        $_POST['mutuelle_choix'] ?? 'dispense',
         trim($_POST['lieu_signature'] ?? ''),
         trim($_POST['date_signature'] ?? ''),
-        isset($_POST['inclure_annexe_24h']) ? 1 : 0,
-        $_POST['mutuelle_choix']      ?? 'dispense',
-        !empty($_POST['total_heures_contrat']) ? (float)$_POST['total_heures_contrat'] : null,
         $id,
     ]);
-    flash('success', 'Données du contrat sauvegardées dans la fiche agent.');
-    header('Location: contrat.php?id=' . $id);
+    flash('success', 'Contrat sauvegardé.');
+    header('Location: contrat.php?id=' . $id . '&contrat_id=' . $contratId);
     exit;
 }
 
-// ── Auto-détecter dates depuis le planning si absentes de la fiche agent ──────
-if (!$defaults['date_debut'] || !$defaults['date_fin']) {
-    $stmt = $db->prepare("
-        SELECT MIN(pl.date_travail) AS min_date, MAX(pl.date_travail) AS max_date
-        FROM planning_lignes pl
-        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
-        WHERE pl.agent_id = ?
-    ");
-    $stmt->execute([$id]);
-    $planRow = $stmt->fetch();
-    if ($planRow && $planRow['min_date']) {
-        if (!$defaults['date_debut']) $defaults['date_debut'] = date('d/m/Y', strtotime($planRow['min_date']));
-        if (!$defaults['date_fin'])   $defaults['date_fin']   = date('d/m/Y', strtotime($planRow['max_date']));
-        // Recalculer la période d'essai avec les dates détectées
-        $defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
-    }
-}
-
-
+// ── Construire $data pour le rendu ─────────────────────────────────────────────
 $data      = $_SERVER['REQUEST_METHOD'] === 'POST' ? array_merge($defaults, $_POST) : $defaults;
 $exportPdf = $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['export_pdf']) && $_POST['export_pdf'] === '1';
 
-// Export PDF — avant tout output HTML
+// Passer la signature du contrat courant à buildContratHtml
+$aForPdf = $a;
+if (!empty($c['signature'])) {
+    $aForPdf['signature']      = $c['signature'];
+    $aForPdf['signature_date'] = $c['signature_date'] ?? $a['signature_date'];
+}
+
 if ($exportPdf) {
-    $html = buildContratHtml($data, $params, $a);
+    $html = buildContratHtml($data, $params, $aForPdf);
     renderPdf($html, 'contrat_' . strtolower(str_replace(' ','_',$a['nom'])) . '_' . strtolower(str_replace(' ','_',$a['prenom'])) . '.pdf');
 }
 
-// Téléchargement direct depuis la fiche agent (?dl=1)
-if (($_GET['dl'] ?? '') === '1') {
-    $html = buildContratHtml($defaults, $params, $a);
+if ($isDl) {
+    $html = buildContratHtml($defaults, $params, $aForPdf);
     renderPdf($html, 'Contrat_' . strtoupper(str_replace(' ', '_', $a['nom'])) . '_' . str_replace(' ', '_', $a['prenom']) . '.pdf');
 }
 
-$pageTitle    = 'Édition du contrat';
+// ── Statut signature du contrat courant ────────────────────────────────────────
+$sigStatus   = 'aucun';
+$sigTokenRow = null;
+try {
+    $sigFromContrat = !empty($c['signature']);
+    if ($sigFromContrat) {
+        $sigStatus = 'signe';
+    } else {
+        $stTok = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? AND (contrat_id=? OR contrat_id IS NULL) ORDER BY sent_at DESC LIMIT 1");
+        $stTok->execute([$id, $contratId]);
+        $sigTokenRow = $stTok->fetch();
+        if ($sigTokenRow) {
+            if (!empty($sigTokenRow['signed_at']))                           $sigStatus = 'signe';
+            elseif (strtotime($sigTokenRow['expires_at']) > time())          $sigStatus = 'lien_actif';
+            else                                                              $sigStatus = 'lien_expire';
+        }
+    }
+} catch (Exception $e) {}
+
+$pageTitle     = 'Édition du contrat';
 $currentModule = 'agents';
 require_once __DIR__ . '/../../includes/header.php';
+
+// Helper : libellé d'un contrat pour le sélecteur
+function contratLabel(array $ct): string {
+    $debut = $ct['date_debut'] ? date('d/m/Y', strtotime($ct['date_debut'])) : '?';
+    $fin   = $ct['date_fin']   ? date('d/m/Y', strtotime($ct['date_fin']))   : '...';
+    return ($ct['type_contrat'] ?? 'CDD') . ' — ' . $debut . ' → ' . $fin;
+}
 ?>
 
-<div class="d-flex gap-2 mb-3 flex-wrap">
-    <a href="view.php?id=<?= $id ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i>Retour fiche</a>
+<!-- Barre de navigation contrats -->
+<div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+  <a href="view.php?id=<?= $id ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i>Retour fiche</a>
+
+  <?php if (!$isNew && count($allContrats) > 0): ?>
+  <div class="dropdown">
+    <button class="btn btn-sm dropdown-toggle" style="background:#f0f2f5;border:1px solid #e5e7eb;font-size:0.82rem" type="button" data-bs-toggle="dropdown">
+      <i class="fa fa-file-contract me-1 text-warning"></i>
+      <?= $c ? h(contratLabel($c)) : 'Sélectionner' ?>
+      <?php if ($c && $c['statut'] === 'archive'): ?><span class="badge bg-secondary ms-1" style="font-size:0.65rem">Archivé</span><?php endif; ?>
+    </button>
+    <ul class="dropdown-menu" style="min-width:280px">
+      <?php foreach ($allContrats as $ct): ?>
+      <li>
+        <a class="dropdown-item d-flex align-items-center gap-2 <?= $ct['id'] == $contratId ? 'active' : '' ?>" href="contrat.php?id=<?= $id ?>&contrat_id=<?= $ct['id'] ?>">
+          <i class="fa fa-file-contract fa-fw" style="font-size:0.8rem"></i>
+          <span style="font-size:0.82rem"><?= h(contratLabel($ct)) ?></span>
+          <?php if ($ct['statut'] === 'archive'): ?><span class="badge bg-secondary ms-auto" style="font-size:0.6rem">Archivé</span><?php endif; ?>
+        </a>
+      </li>
+      <?php endforeach; ?>
+      <li><hr class="dropdown-divider"></li>
+      <li><a class="dropdown-item text-primary" href="contrat.php?id=<?= $id ?>&action=new"><i class="fa fa-plus me-2"></i>Nouveau contrat</a></li>
+    </ul>
+  </div>
+  <?php endif; ?>
+
+  <?php if (!$isNew && $c): ?>
+    <?php if ($c['statut'] === 'actif'): ?>
+    <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $contratId ?>&action=dupliquer"
+       class="btn btn-sm" style="background:rgba(99,102,241,0.1);color:#3730a3;border:1px solid rgba(99,102,241,0.3)"
+       title="Créer un nouveau contrat avec les mêmes paramètres (dates vides)">
+      <i class="fa fa-copy me-1"></i>Dupliquer
+    </a>
+    <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $contratId ?>&action=archive"
+       class="btn btn-sm" style="background:rgba(107,114,128,0.1);color:#6b7280;border:1px solid rgba(107,114,128,0.3)"
+       onclick="return confirm('Archiver ce contrat ?')">
+      <i class="fa fa-box-archive me-1"></i>Archiver
+    </a>
+    <?php else: ?>
+    <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $contratId ?>&action=restore"
+       class="btn btn-sm" style="background:rgba(34,197,94,0.1);color:#16a34a;border:1px solid rgba(34,197,94,0.3)">
+      <i class="fa fa-rotate-left me-1"></i>Restaurer
+    </a>
+    <?php endif; ?>
+    <?php if (count($allContrats) > 1): ?>
+    <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $contratId ?>&action=supprimer"
+       class="btn btn-sm" style="background:rgba(239,68,68,0.08);color:#dc2626;border:1px solid rgba(239,68,68,0.2)"
+       onclick="return confirm('Supprimer définitivement ce contrat ?')">
+      <i class="fa fa-trash me-1"></i>
+    </a>
+    <?php endif; ?>
+  <?php endif; ?>
+
+  <a href="contrat.php?id=<?= $id ?>&action=new" class="btn btn-sm btn-ov-primary ms-auto">
+    <i class="fa fa-plus me-1"></i>Nouveau contrat
+  </a>
 </div>
+
+<?php if ($isNew): ?>
+<div class="alert alert-info py-2 mb-3" style="font-size:0.85rem">
+  <i class="fa fa-circle-info me-1"></i>
+  <strong>Nouveau contrat</strong> — Les informations du salarié sont pré-remplies. Complétez les dates et les heures, puis sauvegardez.
+</div>
+<?php elseif ($c && $c['statut'] === 'archive'): ?>
+<div class="alert alert-secondary py-2 mb-3" style="font-size:0.85rem">
+  <i class="fa fa-box-archive me-1"></i>
+  Contrat archivé — lecture seule. <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $contratId ?>&action=restore">Restaurer</a> pour le modifier.
+</div>
+<?php endif; ?>
 
 <div class="row g-3">
 
 <!-- Formulaire gauche -->
 <div class="col-lg-5">
   <form method="POST" id="contratForm">
-    <input type="hidden" name="export_pdf"  value="0" id="exportFlag">
+    <input type="hidden" name="export_pdf"   value="0" id="exportFlag">
     <input type="hidden" name="save_contrat" value="0" id="saveFlag">
 
     <!-- Parties -->
@@ -365,10 +654,10 @@ require_once __DIR__ . '/../../includes/header.php';
           <div class="col-6">
             <label class="form-label">Type de contrat</label>
             <select name="type_contrat" class="form-select form-select-sm" onchange="updatePreview()">
-              <option value="CDD" <?= $data['type_contrat']==='CDD'?'selected':'' ?>>CDD</option>
-              <option value="CDI" <?= $data['type_contrat']==='CDI'?'selected':'' ?>>CDI</option>
+              <option value="CDD"       <?= $data['type_contrat']==='CDD'      ?'selected':'' ?>>CDD</option>
+              <option value="CDI"       <?= $data['type_contrat']==='CDI'      ?'selected':'' ?>>CDI</option>
               <option value="CDD Usage" <?= $data['type_contrat']==='CDD Usage'?'selected':'' ?>>CDD d'Usage</option>
-              <option value="Saisonnier" <?= $data['type_contrat']==='Saisonnier'?'selected':'' ?>>Saisonnier</option>
+              <option value="Saisonnier"<?= $data['type_contrat']==='Saisonnier'?'selected':'' ?>>Saisonnier</option>
             </select>
           </div>
           <div class="col-6">
@@ -398,8 +687,8 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
           </div>
           <div class="col-6">
-            <label class="form-label">Période d'essai <small class="text-muted">(auto-calculée)</small></label>
-            <input type="text" name="periode_essai" id="periodeEssai" class="form-control form-control-sm" value="<?= h($data['periode_essai']) ?>" oninput="updatePreview()" readonly style="background:#f8f9fa;color:#6b7280">
+            <label class="form-label">Période d'essai <small class="text-muted">(auto)</small></label>
+            <input type="text" name="periode_essai" id="periodeEssai" class="form-control form-control-sm" value="<?= h($data['periode_essai']) ?>" readonly style="background:#f8f9fa;color:#6b7280">
           </div>
           <div class="col-6">
             <label class="form-label">Motif CDD</label>
@@ -501,16 +790,18 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 
     <div class="d-grid gap-2">
+      <?php if (!$c || $c['statut'] === 'actif'): ?>
       <button type="button" onclick="saveContrat()" class="btn" style="background:rgba(16,185,129,0.1);color:#065f46;border:1px solid rgba(16,185,129,0.4);font-weight:500">
-        <i class="fa fa-floppy-disk me-2"></i>Sauvegarder dans la fiche agent
+        <i class="fa fa-floppy-disk me-2"></i>Sauvegarder
       </button>
+      <?php endif; ?>
       <button type="button" onclick="exportPdf()" class="btn btn-ov-primary">
         <i class="fa fa-file-pdf me-2"></i>Générer &amp; Télécharger le contrat PDF
       </button>
-      <?php if (!empty($a['signature'])): ?>
+      <?php if (!empty($c['signature'])): ?>
       <button type="button" onclick="exportPdf()" class="btn btn-success">
         <i class="fa fa-file-pdf me-2"></i>Télécharger le contrat <strong>signé</strong>
-        <span class="badge bg-white text-success ms-1" style="font-size:0.7rem">✓ Signé le <?= date('d/m/Y', strtotime($a['signature_date'])) ?></span>
+        <span class="badge bg-white text-success ms-1" style="font-size:0.7rem">✓ Signé le <?= date('d/m/Y', strtotime($c['signature_date'])) ?></span>
       </button>
       <?php endif; ?>
       <button type="button" onclick="document.getElementById('contratPreview').contentWindow.print()" class="btn btn-ov-secondary">
@@ -519,22 +810,22 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
   </form>
 
-  <!-- ── Signature électronique (hors formulaire contrat) ─────────────────── -->
+  <!-- ── Signature électronique ──────────────────────────────────────────────── -->
+  <?php if (!$isNew && $contratId): ?>
   <div class="ov-card mt-3">
     <div class="ov-card-header">
       <h2 class="ov-card-title"><i class="fa fa-pen-nib me-2" style="color:var(--ov-gold)"></i>Signature électronique du salarié</h2>
     </div>
     <div class="ov-card-body">
 
-      <?php if (!empty($a['signature'])): ?>
-      <!-- Signature déjà enregistrée -->
+      <?php if (!empty($c['signature'])): ?>
       <div class="d-flex align-items-center gap-3 p-2 mb-3" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px">
-        <img src="<?= h($a['signature']) ?>" style="height:54px;max-width:140px;background:#fff;border:1px solid #d1fae5;border-radius:4px;padding:3px;object-fit:contain">
+        <img src="<?= h($c['signature']) ?>" style="height:54px;max-width:140px;background:#fff;border:1px solid #d1fae5;border-radius:4px;padding:3px;object-fit:contain">
         <div class="small">
           <div class="fw-semibold text-success"><i class="fa fa-check-circle me-1"></i>Signature enregistrée</div>
-          <?php if ($a['signature_date']): ?>
-          <div class="text-muted"><?= date('d/m/Y à H:i', strtotime($a['signature_date'])) ?></div>
-          <div class="text-muted">IP : <?= h($a['signature_ip'] ?? '—') ?></div>
+          <?php if ($c['signature_date']): ?>
+          <div class="text-muted"><?= date('d/m/Y à H:i', strtotime($c['signature_date'])) ?></div>
+          <div class="text-muted">IP : <?= h($c['signature_ip'] ?? '—') ?></div>
           <?php endif; ?>
         </div>
         <form method="post" class="ms-auto" onsubmit="return confirm('Supprimer définitivement la signature ?')">
@@ -542,9 +833,9 @@ require_once __DIR__ . '/../../includes/header.php';
           <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer"><i class="fa fa-trash"></i></button>
         </form>
       </div>
-      <p class="text-muted small mb-2">Pour re-signer, effacez la signature ci-dessus puis tracez et enregistrez la nouvelle.</p>
+      <p class="text-muted small mb-2">Pour re-signer, effacez la signature ci-dessus puis tracez et enregistrez.</p>
       <?php else: ?>
-      <p class="text-muted small mb-2">Le salarié signe ici (souris ou écran tactile). La signature est horodatée et liée à l'identifiant du contrat.</p>
+      <p class="text-muted small mb-2">Le salarié signe ici (souris ou écran tactile). La signature est horodatée.</p>
       <?php endif; ?>
 
       <div style="border:2px dashed #d1d5db;border-radius:6px;background:#fafafa;position:relative;user-select:none">
@@ -553,12 +844,8 @@ require_once __DIR__ . '/../../includes/header.php';
       </div>
 
       <div class="d-flex gap-2 mt-2 align-items-center">
-        <button type="button" onclick="clearSig()" class="btn btn-sm btn-outline-secondary">
-          <i class="fa fa-eraser me-1"></i>Effacer
-        </button>
-        <button type="button" onclick="saveSig()" class="btn btn-sm btn-ov-primary ms-auto">
-          <i class="fa fa-check me-1"></i>Enregistrer la signature
-        </button>
+        <button type="button" onclick="clearSig()" class="btn btn-sm btn-outline-secondary"><i class="fa fa-eraser me-1"></i>Effacer</button>
+        <button type="button" onclick="saveSig()" class="btn btn-sm btn-ov-primary ms-auto"><i class="fa fa-check me-1"></i>Enregistrer la signature</button>
       </div>
 
       <form method="post" id="sigForm">
@@ -567,18 +854,15 @@ require_once __DIR__ . '/../../includes/header.php';
       </form>
 
       <p class="text-muted mt-2 mb-0" style="font-size:10px">
-        <i class="fa fa-shield-halved me-1 text-success"></i>
-        Signature électronique simple — règlement eIDAS (UE 910/2014). Horodatage + IP conservés à des fins probatoires.
+        <i class="fa fa-shield-halved me-1 text-success"></i>Signature électronique simple — règlement eIDAS (UE 910/2014).
       </p>
 
       <hr class="my-3">
 
-      <!-- Envoi par email -->
       <h6 class="mb-2"><i class="fa fa-envelope me-2 text-warning"></i>Envoyer pour signature par email</h6>
       <?php
-        // Récupérer le dernier token envoyé pour cet agent
-        $lastToken = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? ORDER BY sent_at DESC LIMIT 1");
-        $lastToken->execute([$id]);
+        $lastToken = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? AND (contrat_id=? OR contrat_id IS NULL) ORDER BY sent_at DESC LIMIT 1");
+        $lastToken->execute([$id, $contratId]);
         $lastTok = $lastToken->fetch();
       ?>
       <?php if ($lastTok): ?>
@@ -586,13 +870,6 @@ require_once __DIR__ . '/../../includes/header.php';
         <?php if ($lastTok['signed_at']): ?>
           <i class="fa fa-check-circle text-success me-1"></i>
           <strong>Signé</strong> le <?= date('d/m/Y à H:i', strtotime($lastTok['signed_at'])) ?> — envoyé à <?= h($lastTok['email'] ?: '(sans email)') ?>
-          <?php if (empty($a['signature'])): ?>
-          <div class="alert alert-warning py-1 px-2 mt-2 mb-0" style="font-size:0.78rem">
-            <i class="fa fa-triangle-exclamation me-1"></i>
-            <strong>Signature manquante</strong> — le token est marqué signé mais la signature n'a pas été enregistrée (bug corrigé).
-            Regénérez un nouveau lien et demandez à l'agent de re-signer.
-          </div>
-          <?php endif; ?>
         <?php elseif (strtotime($lastTok['expires_at']) < time()): ?>
           <i class="fa fa-clock text-muted me-1"></i>
           <strong>Lien expiré</strong> — envoyé à <?= h($lastTok['email']) ?> le <?= date('d/m/Y', strtotime($lastTok['sent_at'])) ?>
@@ -608,7 +885,6 @@ require_once __DIR__ . '/../../includes/header.php';
       </div>
       <?php endif; ?>
 
-      <!-- Regénérer le lien -->
       <form method="post" class="mb-2" id="regenForm">
         <input type="hidden" name="regenerate_token" value="1">
         <input type="hidden" name="contrat_snapshot" id="regenSnapshot">
@@ -621,7 +897,7 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
           </div>
           <div class="col-auto">
-            <button type="submit" class="btn btn-sm btn-outline-secondary" style="white-space:nowrap" title="Génère un nouveau lien avec les données actuelles du formulaire">
+            <button type="submit" class="btn btn-sm btn-outline-secondary" style="white-space:nowrap">
               <i class="fa fa-rotate me-1"></i>Regénérer le lien
             </button>
           </div>
@@ -634,8 +910,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="row g-2 align-items-end">
           <div class="col">
             <label class="form-label mb-1 small">Email du salarié</label>
-            <input type="email" name="sig_email" class="form-control form-control-sm"
-                   value="<?= h($a['email'] ?? '') ?>" placeholder="prenom.nom@email.com" required>
+            <input type="email" name="sig_email" class="form-control form-control-sm" value="<?= h($a['email'] ?? '') ?>" placeholder="prenom.nom@email.com" required>
           </div>
           <div class="col-auto">
             <label class="form-label mb-1 small">Validité</label>
@@ -651,9 +926,11 @@ require_once __DIR__ . '/../../includes/header.php';
           </div>
         </div>
       </form>
-      <p class="text-muted mt-1 mb-0" style="font-size:10px">Le salarié lit le contrat et signe directement depuis son téléphone ou PC. Validité de 1 à 30 jours.</p>
+      <p class="text-muted mt-1 mb-0" style="font-size:10px">Le salarié lit le contrat et signe depuis son téléphone ou PC.</p>
     </div>
   </div>
+  <?php endif; ?>
+
 </div>
 
 <!-- Aperçu droite -->
@@ -688,23 +965,19 @@ function calcPeriodeEssai() {
     if (!d1 || !d2 || d2 <= d1) { el.value = '0 jour'; return; }
     var diffDays = Math.round((d2 - d1) / 86400000);
     var nbSem    = Math.floor(diffDays / 7);
-    if (nbSem === 0) { el.value = '0 jour'; }
-    else if (nbSem === 1) { el.value = '1 jour travaillé'; }
-    else { el.value = nbSem + ' jours travaillés'; }
+    if (nbSem === 0) el.value = '0 jour';
+    else if (nbSem === 1) el.value = '1 jour travaillé';
+    else el.value = nbSem + ' jours travaillés';
 }
 
 function calcHeuresPlanning() {
     var debut = document.getElementById('dateDebut').value;
     var fin   = document.getElementById('dateFin').value;
-    if (!debut || !fin) {
-        alert('Veuillez renseigner les dates de début et de fin avant de calculer.');
-        return;
-    }
+    if (!debut || !fin) { alert('Veuillez renseigner les dates avant de calculer.'); return; }
     var icon = document.getElementById('calcHeuresIcon');
     var btn  = document.getElementById('btnCalcHeures');
     icon.className = 'fa fa-spinner fa-spin';
     btn.disabled = true;
-
     var url = 'contrat.php?id=<?= $id ?>&action=get_heures_planning&agent_id=<?= $id ?>'
             + '&date_debut=' + encodeURIComponent(debut)
             + '&date_fin='   + encodeURIComponent(fin);
@@ -713,8 +986,7 @@ function calcHeuresPlanning() {
         .then(function(data) {
             if (data.ok && data.total_heures > 0) {
                 document.getElementById('totalHeuresContrat').value = data.total_heures;
-                updatePreview();
-                check24hCoherence();
+                updatePreview(); check24hCoherence();
                 icon.className = 'fa fa-check text-success';
                 setTimeout(function() { icon.className = 'fa fa-rotate'; }, 2000);
             } else {
@@ -723,10 +995,7 @@ function calcHeuresPlanning() {
             }
             btn.disabled = false;
         })
-        .catch(function() {
-            icon.className = 'fa fa-rotate';
-            btn.disabled = false;
-        });
+        .catch(function() { icon.className = 'fa fa-rotate'; btn.disabled = false; });
 }
 
 function check24hCoherence() {
@@ -795,11 +1064,12 @@ document.addEventListener('DOMContentLoaded', function() {
     check24hCoherence();
     initSigPad();
 
-    // Capture snapshot du formulaire contrat avant chaque envoi de token
-    document.getElementById('regenForm').addEventListener('submit', function() {
+    var regenForm = document.getElementById('regenForm');
+    var sendForm  = document.getElementById('sendForm');
+    if (regenForm) regenForm.addEventListener('submit', function() {
         document.getElementById('regenSnapshot').value = JSON.stringify(getFormData());
     });
-    document.getElementById('sendForm').addEventListener('submit', function() {
+    if (sendForm) sendForm.addEventListener('submit', function() {
         document.getElementById('sendSnapshot').value = JSON.stringify(getFormData());
     });
 });
@@ -812,47 +1082,31 @@ var _sigPad = null;
 function initSigPad() {
     var canvas = document.getElementById('sigCanvas');
     if (!canvas) return;
-
     function setCanvasSize() {
         var ratio = window.devicePixelRatio || 1;
-        var w = canvas.offsetWidth;
-        var h = canvas.offsetHeight;
+        var w = canvas.offsetWidth, h = canvas.offsetHeight;
         canvas.width  = w * ratio;
         canvas.height = h * ratio;
         canvas.getContext('2d').scale(ratio, ratio);
         if (_sigPad) _sigPad.clear();
     }
-
     setCanvasSize();
     window.addEventListener('resize', setCanvasSize);
-
-    _sigPad = new SignaturePad(canvas, {
-        backgroundColor: 'rgba(255,255,255,0)',
-        penColor: '#1a2332',
-        minWidth: 1,
-        maxWidth: 2.5
-    });
-
+    _sigPad = new SignaturePad(canvas, { backgroundColor:'rgba(255,255,255,0)', penColor:'#1a2332', minWidth:1, maxWidth:2.5 });
     canvas.addEventListener('mousedown', hidePlaceholder);
     canvas.addEventListener('touchstart', hidePlaceholder);
 }
-
 function hidePlaceholder() {
     var p = document.getElementById('sigPlaceholder');
     if (p) p.style.display = 'none';
 }
-
 function clearSig() {
     if (_sigPad) _sigPad.clear();
     var p = document.getElementById('sigPlaceholder');
     if (p) p.style.display = '';
 }
-
 function saveSig() {
-    if (!_sigPad || _sigPad.isEmpty()) {
-        alert('Veuillez tracer votre signature avant d\'enregistrer.');
-        return;
-    }
+    if (!_sigPad || _sigPad.isEmpty()) { alert('Veuillez tracer votre signature avant d\'enregistrer.'); return; }
     document.getElementById('sigData').value = _sigPad.toDataURL('image/png');
     document.getElementById('sigForm').submit();
 }

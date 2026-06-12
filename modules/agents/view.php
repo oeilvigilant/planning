@@ -37,25 +37,33 @@ $docs = $db->prepare("SELECT * FROM agent_documents WHERE agent_id = ? ORDER BY 
 $docs->execute([$id]);
 $documents = $docs->fetchAll();
 
-// Statut du contrat de signature
+// Charger tous les contrats de l'agent
+$allContrats = [];
+try {
+    $stAllC = $db->prepare("SELECT * FROM contrats WHERE agent_id=? ORDER BY created_at DESC, id DESC");
+    $stAllC->execute([$id]);
+    $allContrats = $stAllC->fetchAll();
+} catch (Exception $e) { $allContrats = []; }
+
+// Statut du dernier contrat actif
 $contratSigStatus = 'aucun';
 $sigTokenRow      = null;
+$dernierContrat   = null;
 try {
-    if (!empty($a['signature'])) {
+    foreach ($allContrats as $ct) { if ($ct['statut'] === 'actif') { $dernierContrat = $ct; break; } }
+    if (!$dernierContrat && !empty($allContrats)) $dernierContrat = $allContrats[0];
+
+    if ($dernierContrat && !empty($dernierContrat['signature'])) {
         $contratSigStatus = 'signe';
     } else {
-        $stTok = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? ORDER BY created_at DESC LIMIT 1");
+        $stTok = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? ORDER BY sent_at DESC LIMIT 1");
         $stTok->execute([$id]);
         $sigTokenRow = $stTok->fetch();
         if ($sigTokenRow) {
-            if (!empty($sigTokenRow['signed_at'])) {
-                $contratSigStatus = 'signe';
-            } elseif (strtotime($sigTokenRow['expires_at']) > time()) {
-                $contratSigStatus = 'lien_actif';
-            } else {
-                $contratSigStatus = 'lien_expire';
-            }
-        } elseif (!empty($a['contrat_realise'])) {
+            if (!empty($sigTokenRow['signed_at']))                          $contratSigStatus = 'signe';
+            elseif (strtotime($sigTokenRow['expires_at']) > time())         $contratSigStatus = 'lien_actif';
+            else                                                             $contratSigStatus = 'lien_expire';
+        } elseif (!empty($a['contrat_realise']) || !empty($allContrats)) {
             $contratSigStatus = 'cree';
         }
     }
@@ -219,84 +227,53 @@ if (canDo('agents','delete')) {
     </div>
   </div>
 
-  <!-- Contrat -->
-  <?php
-  $sigBadgeMap = [
-    'signe'       => ['Signé',                   'fa-circle-check',         '#16a34a', 'rgba(34,197,94,0.12)'],
-    'lien_actif'  => ['En attente de signature',  'fa-paper-plane',          '#d97706', 'rgba(245,158,11,0.12)'],
-    'lien_expire' => ['Lien expiré',              'fa-triangle-exclamation', '#dc2626', 'rgba(239,68,68,0.1)'],
-    'cree'        => ['Contrat créé',             'fa-file-contract',        '#2563eb', 'rgba(37,99,235,0.1)'],
-    'aucun'       => ['Aucun contrat',            'fa-file-circle-question', '#6b7280', 'rgba(107,114,128,0.1)'],
-  ];
-  $sb = $sigBadgeMap[$contratSigStatus];
-  ?>
+  <!-- Contrats (liste) -->
   <div class="ov-card mb-3">
     <div class="ov-card-header d-flex align-items-center justify-content-between">
-      <h2 class="ov-card-title mb-0"><i class="fa fa-file-contract me-2" style="color:var(--ov-gold)"></i>Contrat</h2>
-      <div class="d-flex align-items-center gap-2">
-        <a href="contrat.php?id=<?= $id ?>&dl=1" class="btn-sm-icon" title="Télécharger le contrat PDF" style="color:#2563eb"><i class="fa fa-download"></i></a>
-        <span style="font-size:0.75rem;background:<?= $sb[3] ?>;color:<?= $sb[2] ?>;padding:3px 12px;border-radius:20px;font-weight:600;white-space:nowrap">
-          <i class="fa <?= $sb[1] ?> me-1"></i><?= $sb[0] ?>
-        </span>
-      </div>
+      <h2 class="ov-card-title mb-0"><i class="fa fa-file-contract me-2" style="color:var(--ov-gold)"></i>Contrats
+        <?php if (count($allContrats) > 0): ?>
+        <span class="badge ms-1" style="background:rgba(201,168,76,0.15);color:#92400e;font-size:0.72rem"><?= count($allContrats) ?></span>
+        <?php endif; ?>
+      </h2>
+      <a href="contrat.php?id=<?= $id ?>&action=new" class="btn btn-sm btn-ov-primary" style="font-size:0.78rem;padding:3px 10px">
+        <i class="fa fa-plus me-1"></i>Nouveau
+      </a>
     </div>
-    <div class="ov-card-body">
-    <?php if ($contratSigStatus === 'signe' && !empty($a['signature_date'])): ?>
-    <div class="mb-3 d-flex align-items-center gap-2 px-2 py-2 rounded" style="background:rgba(34,197,94,0.07);font-size:0.82rem;color:#15803d">
-      <i class="fa fa-circle-check"></i>
-      Signé électroniquement le <strong><?= date('d/m/Y à H:i', strtotime($a['signature_date'])) ?></strong>
-    </div>
-    <?php elseif ($contratSigStatus === 'lien_actif' && $sigTokenRow): ?>
-    <div class="mb-3 d-flex align-items-center gap-2 px-2 py-2 rounded" style="background:rgba(245,158,11,0.08);font-size:0.82rem;color:#b45309">
-      <i class="fa fa-clock"></i>
-      Lien envoyé — en attente de signature · expire le <strong><?= date('d/m/Y à H:i', strtotime($sigTokenRow['expires_at'])) ?></strong>
-    </div>
-    <?php elseif ($contratSigStatus === 'lien_expire' && $sigTokenRow): ?>
-    <div class="mb-3 d-flex align-items-center gap-2 px-2 py-2 rounded" style="background:rgba(239,68,68,0.07);font-size:0.82rem;color:#dc2626">
-      <i class="fa fa-triangle-exclamation"></i>
-      Lien expiré le <strong><?= date('d/m/Y à H:i', strtotime($sigTokenRow['expires_at'])) ?></strong> — non signé · <a href="contrat.php?id=<?= $id ?>" style="color:#dc2626;text-decoration:underline">Régénérer un lien</a>
-    </div>
-    <?php endif; ?>
-      <?php
-      $rows2 = [
-        ['Type de contrat', $a['type_contrat'], 'Statut', $a['statut']],
-        ['Date début', formatDate($a['date_debut_contrat']), 'Date fin', formatDate($a['date_fin_contrat'])],
-        ['Lieu de travail', $a['lieu_travail'], 'Période d\'essai', $a['periode_essai']],
-        ['Rémunération', $a['remuneration'] ? number_format($a['remuneration'],2).' € '.$a['type_remuneration'] : '—', 'Temps hebdomadaire', $a['temps_travail_hebdo']],
-        ['Motif d\'embauche', $a['motif_embauche'], 'Bulletins depuis', $a['bulletins_depuis']],
-      ];
-      ?>
-      <div class="row g-2">
-      <?php foreach ($rows2 as $row): ?>
-        <div class="col-md-6">
-          <div class="p-2 rounded" style="background:#f8f9fa">
-            <div style="font-size:0.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px"><?= h($row[0]) ?></div>
-            <div style="font-size:0.875rem;color:#1a2332;font-weight:500"><?= h($row[1] ?: '—') ?></div>
+    <div class="ov-card-body p-0">
+      <?php if (empty($allContrats)): ?>
+        <p class="text-center text-muted py-3 mb-0" style="font-size:0.85rem">Aucun contrat</p>
+      <?php else: ?>
+        <?php foreach ($allContrats as $ct):
+          $debut   = $ct['date_debut'] ? date('d/m/Y', strtotime($ct['date_debut'])) : '?';
+          $fin     = $ct['date_fin']   ? date('d/m/Y', strtotime($ct['date_fin']))   : '—';
+          $archive = $ct['statut'] === 'archive';
+          $signed  = !empty($ct['signature']);
+        ?>
+        <div class="d-flex align-items-center gap-2 px-3 py-2" style="border-bottom:1px solid #f0f2f5;<?= $archive ? 'opacity:0.6' : '' ?>">
+          <i class="fa fa-file-contract fa-fw text-muted" style="font-size:0.85rem"></i>
+          <div class="flex-grow-1" style="min-width:0">
+            <div style="font-size:0.85rem;font-weight:600;color:#1a2332">
+              <?= h($ct['type_contrat'] ?? 'CDD') ?>
+              <span class="text-muted fw-normal"><?= h($debut) ?> → <?= h($fin) ?></span>
+            </div>
+            <div style="font-size:0.72rem;color:#9ca3af">
+              <?= $ct['total_heures_contrat'] ? h(number_format($ct['total_heures_contrat'],2)).'h' : '' ?>
+              <?= !empty($ct['remuneration']) ? ' · '.number_format($ct['remuneration'],2).' €/h' : '' ?>
+            </div>
+          </div>
+          <div class="d-flex align-items-center gap-1 flex-shrink-0">
+            <?php if ($signed): ?>
+              <span title="Signé" style="font-size:0.7rem;background:rgba(34,197,94,0.1);color:#16a34a;padding:2px 7px;border-radius:10px"><i class="fa fa-check me-1"></i>Signé</span>
+            <?php endif; ?>
+            <?php if ($archive): ?>
+              <span style="font-size:0.7rem;background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:10px">Archivé</span>
+            <?php endif; ?>
+            <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $ct['id'] ?>&dl=1" class="btn-sm-icon" title="Télécharger PDF" style="color:#2563eb"><i class="fa fa-download"></i></a>
+            <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $ct['id'] ?>" class="btn-sm-icon" title="Éditer" style="color:#6b7280"><i class="fa fa-pen"></i></a>
           </div>
         </div>
-        <div class="col-md-6">
-          <div class="p-2 rounded" style="background:#f8f9fa">
-            <div style="font-size:0.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px"><?= h($row[2]) ?></div>
-            <div style="font-size:0.875rem;color:#1a2332;font-weight:500"><?= h($row[3] ?: '—') ?></div>
-          </div>
-        </div>
-      <?php endforeach; ?>
-      </div>
-
-      <!-- Répartition horaire -->
-      <?php $jours = ['lundi'=>'Lun','mardi'=>'Mar','mercredi'=>'Mer','jeudi'=>'Jeu','vendredi'=>'Ven','samedi'=>'Sam','dimanche'=>'Dim']; ?>
-      <div class="mt-3">
-        <div style="font-size:0.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.5rem">Répartition hebdomadaire</div>
-        <div class="d-flex gap-2 flex-wrap">
-          <?php foreach ($jours as $k => $v): ?>
-          <?php $h_val = (float)$a['h_'.$k]; ?>
-          <div class="text-center p-2 rounded" style="background:<?= $h_val > 0 ? 'rgba(201,168,76,0.1)' : '#f8f9fa' ?>;min-width:50px">
-            <div style="font-size:0.7rem;color:#9ca3af"><?= $v ?></div>
-            <div style="font-weight:700;color:<?= $h_val > 0 ? 'var(--ov-gold-dark)' : '#9ca3af' ?>"><?= $h_val > 0 ? $h_val.'h' : '—' ?></div>
-          </div>
-          <?php endforeach; ?>
-        </div>
-      </div>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
   </div>
 
