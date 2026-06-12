@@ -53,6 +53,7 @@ $defaults = [
     'periode_essai'        => '',
     'total_heures_contrat' => $c['total_heures_contrat'] ? (string)$c['total_heures_contrat'] : ($a['total_heures_contrat'] ? (string)$a['total_heures_contrat'] : ''),
     'horaires_vacation'    => $c['horaires_vacation'] ?? '',
+    'nom_evenement'        => $c['nom_evenement'] ?? '',
     'site_affectation'     => $c['lieu_travail'] ?? ($a['lieu_travail'] ?? ''),
     'salaire_horaire'      => $c['remuneration'] ? number_format((float)$c['remuneration'], 2, '.', '') : ($a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70'),
     'type_remuneration'    => $c['type_remuneration'] ?? ($a['type_remuneration'] ?? 'Brute'),

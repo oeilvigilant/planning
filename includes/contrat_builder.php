@@ -158,7 +158,10 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <?php endif; ?>
     <br><br>
     <?php if ($isCddUsage): ?>
-    Il est conclu sur le fondement de l'article L1242-2-3° du Code du travail, le secteur de la sécurité privée étant expressément reconnu comme secteur d'emploi à caractère par nature temporaire par le décret n°2014-714 du 27 juin 2014. Le présent contrat n'est pas soumis à la durée maximale légale applicable aux CDD standard et peut être renouvelé sans limitation du nombre de renouvellements.
+    Il est conclu sur le fondement de l'article L1242-2-3° du Code du travail, le secteur de la sécurité privée étant expressément reconnu comme secteur d'emploi à caractère par nature temporaire par le décret n°2014-714 du 27 juin 2014. Le présent contrat n'est pas soumis à la durée maximale légale applicable aux CDD standard et peut être renouvelé sans limitation du nombre de renouvellements.<br>
+    <?php if (!empty($d['nom_evenement'])): ?>
+    Ce contrat est spécifiquement lié à la couverture de l'événement suivant : <strong><?= $e($d['nom_evenement']) ?></strong>.
+    <?php endif; ?>
     <?php else: ?>
     Ce contrat est conclu pour faire face à un <strong><?= $e($d['motif_cdd']) ?></strong>, <?= $e($d['description_motif']) ?><br>
     Conformément à l'article L1243-13 du Code du travail, la durée totale du présent contrat, renouvellements éventuels inclus, ne peut excéder <strong>18 mois</strong>.
@@ -237,7 +240,7 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <?php if ($typeCdd && !$isCddUsage): ?>
     Conformément à l'article L1243-8 du Code du travail, une <strong>prime de précarité de 10%</strong> de la rémunération brute totale sera versée en fin de contrat. Cette indemnité ne sera pas due en cas de requalification en CDI, de faute grave ou de force majeure (Art L1243-10 CT).
     <?php elseif ($isCddUsage): ?>
-    <span class="legal-note">Le présent contrat relevant du régime du CDD d'Usage, il ne donne pas droit à l'indemnité de fin de contrat (Art L1243-10-3° CT). Vérifier la compatibilité avec la CCN applicable.</span>
+    <span class="legal-note">Le présent contrat relevant du régime du CDD d'Usage, il ne donne pas droit à l'indemnité de fin de contrat (Art L1243-10-3° CT).</span>
     <?php endif; ?>
   </div>
 </div>
@@ -327,7 +330,7 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <?php if (!$isCddUsage): ?>
     Le présent contrat donne lieu au versement d'une <strong>indemnité de fin de contrat égale à 10% de la rémunération brute totale</strong>, versée à l'échéance par l'Employeur, sauf cas d'exclusion légaux (faute grave, force majeure, proposition de CDI refusée — Art L1243-10 CT).
     <?php else: ?>
-    Le présent contrat relevant du régime du CDD d'Usage, aucune indemnité de précarité n'est due à son terme (Art L1243-10-3° CT). Vérifier la compatibilité avec la CCN applicable avant signature.
+    Le présent contrat relevant du régime du CDD d'Usage, aucune indemnité de précarité n'est due à son terme (Art L1243-10-3° CT).
     <?php endif; ?>
   </div>
 </div>
