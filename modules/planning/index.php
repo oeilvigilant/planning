@@ -27,16 +27,17 @@ function detectShift(string $hD, string $hF, array $shifts) {
 }
 
 function dayStat(array $allAgents, array $planningData, string $date): array {
-    $j = $n = $tot = $h = 0;
+    $j = $n = $tot = $h = $f = $m = 0;
     foreach ($allAgents as $ag) {
         $l = $planningData[$ag['id']][$date] ?? null;
         if ($l) {
             $tot++;
             $h += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
             if (($l['min_nuit']+$l['min_ferie_nuit']) > 0) $n++; else $j++;
+            if (($ag['sexe'] ?? 'M') === 'F') $f++; else $m++;
         }
     }
-    return ['j' => $j, 'n' => $n, 't' => $tot, 'h' => $h];
+    return ['j' => $j, 'n' => $n, 't' => $tot, 'h' => $h, 'f' => $f, 'm' => $m];
 }
 
 function covBorderColor(array $stat): string {
@@ -324,10 +325,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 $hiddenAgents = $_SESSION['planning_hidden'] ?? [];
 
 $allAgents = $db->query("
-    SELECT a.id, a.nom, a.prenom, a.matricule, a.poste
+    SELECT a.id, a.nom, a.prenom, a.matricule, a.poste, a.sexe
     FROM agents a
     WHERE a.actif = 1
-    ORDER BY a.nom, a.prenom
+    ORDER BY CASE WHEN a.sexe='F' THEN 0 ELSE 1 END, a.nom, a.prenom
 ")->fetchAll();
 
 $agents = array_values(array_filter($allAgents, fn($ag) => !in_array($ag['id'], $hiddenAgents)));
@@ -488,7 +489,7 @@ if ($vue === 'semaine') {
             </tr>
           </thead>
           <tbody>
-          <?php foreach ($agents as $agent):
+          <?php $prevSexeSem = null; foreach ($agents as $agent):
             $totalMin = 0;
             foreach ($dates as $dt) {
                 $ds = $dt->format('Y-m-d');
@@ -497,9 +498,12 @@ if ($vue === 'semaine') {
                     $totalMin += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
                 }
             }
+            $curSexeSem = $agent['sexe'] ?? 'M';
+            $isSepSem   = ($prevSexeSem === 'F' && $curSexeSem === 'M');
+            $prevSexeSem = $curSexeSem;
           ?>
-          <tr class="planning-row" data-agent-id="<?= $agent['id'] ?>">
-            <td style="padding:8px 12px;border-bottom:1px solid #f0f2f5;position:sticky;left:0;background:white;z-index:1">
+          <tr class="planning-row" data-agent-id="<?= $agent['id'] ?>" style="<?= $isSepSem ? 'border-top:2px dashed #cbd5e1' : '' ?>">
+            <td style="padding:8px 12px;border-bottom:1px solid #f0f2f5;position:sticky;left:0;background:white;z-index:1;<?= $isSepSem ? 'border-top:2px dashed #cbd5e1' : '' ?>">
               <div class="planning-agent-name" style="font-weight:600;font-size:0.875rem"><?= h($agent['prenom'].' '.$agent['nom']) ?></div>
               <div style="font-size:0.7rem;color:#9ca3af"><?= h($agent['poste'] ?? '') ?></div>
             </td>
@@ -573,6 +577,11 @@ if ($vue === 'semaine') {
               <?php if ($stat['j'] > 0): ?><div style="font-size:0.72rem;font-weight:800;color:#16a34a;line-height:1.3">J:<?= $stat['j'] ?></div><?php endif; ?>
               <?php if ($stat['n'] > 0): ?><div style="font-size:0.72rem;font-weight:800;color:#4f46e5;line-height:1.3">N:<?= $stat['n'] ?></div><?php endif; ?>
               <div style="font-size:0.65rem;color:#6b7280;margin-top:2px"><?= number_format($stat['h']/60,1) ?>h</div>
+              <div style="font-size:0.6rem;color:#9ca3af;line-height:1.3;margin-top:1px">
+                <?php if ($stat['f'] > 0): ?><span style="color:#ec4899;font-weight:700">F<?= $stat['f'] ?></span><?php endif; ?>
+                <?php if ($stat['f'] > 0 && $stat['m'] > 0): ?><span style="color:#d1d5db"> / </span><?php endif; ?>
+                <?php if ($stat['m'] > 0): ?><span style="color:#3b82f6;font-weight:700">M<?= $stat['m'] ?></span><?php endif; ?>
+              </div>
               <?php else: ?>
               <div style="font-size:0.8rem;color:#fca5a5;font-weight:700">—</div>
               <?php endif; ?>
@@ -714,7 +723,7 @@ if ($vue === 'semaine') {
             </tr>
           </thead>
           <tbody>
-          <?php foreach ($agents as $agent):
+          <?php $prevSexeMois = null; foreach ($agents as $agent):
             $totalMin = 0;
             for ($d = 1; $d <= $nbJours; $d++) {
                 $date = sprintf('%04d-%02d-%02d', $annee, $mois, $d);
@@ -723,9 +732,12 @@ if ($vue === 'semaine') {
                     $totalMin += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
                 }
             }
+            $curSexeMois = $agent['sexe'] ?? 'M';
+            $isSepMois   = ($prevSexeMois === 'F' && $curSexeMois === 'M');
+            $prevSexeMois = $curSexeMois;
           ?>
-          <tr class="planning-row" data-agent-id="<?= $agent['id'] ?>">
-            <td style="padding:6px 10px;border-bottom:1px solid #f0f2f5;position:sticky;left:0;background:white;z-index:1;min-width:130px">
+          <tr class="planning-row" data-agent-id="<?= $agent['id'] ?>" style="<?= $isSepMois ? 'border-top:2px dashed #cbd5e1' : '' ?>">
+            <td style="padding:6px 10px;border-bottom:1px solid #f0f2f5;position:sticky;left:0;background:white;z-index:1;min-width:130px;<?= $isSepMois ? 'border-top:2px dashed #cbd5e1' : '' ?>">
               <div class="planning-agent-name" style="font-weight:600;font-size:0.82rem"><?= h($agent['prenom'].' '.$agent['nom']) ?></div>
               <div style="font-size:0.65rem;color:#9ca3af"><?= h($agent['poste'] ?? '') ?></div>
             </td>
@@ -795,6 +807,10 @@ if ($vue === 'semaine') {
               <?php if ($stat['t'] > 0): ?>
               <?php if ($stat['j'] > 0): ?><div style="font-size:0.62rem;font-weight:800;color:#16a34a;line-height:1.2">J<?= $stat['j'] ?></div><?php endif; ?>
               <?php if ($stat['n'] > 0): ?><div style="font-size:0.62rem;font-weight:800;color:#4f46e5;line-height:1.2">N<?= $stat['n'] ?></div><?php endif; ?>
+              <div style="font-size:0.52rem;line-height:1.3;margin-top:1px">
+                <?php if ($stat['f'] > 0): ?><span style="color:#ec4899;font-weight:700">F<?= $stat['f'] ?></span><?php endif; ?>
+                <?php if ($stat['m'] > 0): ?><span style="color:#3b82f6;font-weight:700"> M<?= $stat['m'] ?></span><?php endif; ?>
+              </div>
               <?php else: ?>
               <div style="font-size:0.7rem;color:#fca5a5">—</div>
               <?php endif; ?>
@@ -1117,6 +1133,25 @@ if ($vue === 'semaine') {
               <input class="form-check-input" type="radio" name="exportFormat" id="exportFmtZip" value="zip">
               <label class="form-check-label" style="font-size:0.82rem" for="exportFmtZip"><i class="fa fa-file-zipper me-1" style="color:#7c3aed"></i>PDF individuels (ZIP)</label>
             </div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" style="font-size:0.82rem;font-weight:600">Affichage des heures (export)</label>
+          <div class="form-check mb-1">
+            <input class="form-check-input" type="radio" name="exportHours" id="exportHoursFull" value="full" checked>
+            <label class="form-check-label" style="font-size:0.82rem" for="exportHoursFull">Heures réelles</label>
+          </div>
+          <div class="form-check mb-1">
+            <input class="form-check-input" type="radio" name="exportHours" id="exportHoursNone" value="none">
+            <label class="form-check-label" style="font-size:0.82rem" for="exportHoursNone">Ne pas afficher les heures</label>
+          </div>
+          <div class="form-check mb-1">
+            <input class="form-check-input" type="radio" name="exportHours" id="exportHoursFactor" value="factor">
+            <label class="form-check-label" style="font-size:0.82rem" for="exportHoursFactor">Fraction des heures</label>
+          </div>
+          <div id="exportHoursFactorRow" style="display:none;padding-left:24px;margin-top:4px" class="d-flex align-items-center gap-2">
+            <input type="number" id="exportHoursPct" class="form-control form-control-sm" style="width:80px" value="50" min="1" max="200">
+            <span style="font-size:0.82rem;color:#6b7280">% des heures affichées</span>
           </div>
         </div>
         <div class="mb-0">
@@ -1542,6 +1577,12 @@ if (exportCustomDatesCb) {
     });
 }
 
+document.querySelectorAll('input[name="exportHours"]').forEach(function(r) {
+    r.addEventListener('change', function() {
+        document.getElementById('exportHoursFactorRow').style.display = this.value === 'factor' ? '' : 'none';
+    });
+});
+
 window.doExport = function() {
     var format    = document.querySelector('input[name="exportFormat"]:checked').value;
     var allAgents = document.getElementById('exportAllAgents').checked;
@@ -1573,6 +1614,12 @@ window.doExport = function() {
     if (dateDebut) url += '&date_debut='  + encodeURIComponent(dateDebut);
     if (dateFin)   url += '&date_fin='    + encodeURIComponent(dateFin);
     if (document.getElementById('exportShowFooter').checked) url += '&footer=1';
+    var hoursDisplay = document.querySelector('input[name="exportHours"]:checked').value;
+    if (hoursDisplay !== 'full') url += '&hours_display=' + hoursDisplay;
+    if (hoursDisplay === 'factor') {
+        var pct = parseInt(document.getElementById('exportHoursPct').value, 10) || 50;
+        url += '&hours_pct=' + pct;
+    }
     exportModal.hide();
     window.location.href = url;
 };

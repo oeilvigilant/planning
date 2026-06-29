@@ -15,18 +15,24 @@ if ($agentIds !== '') {
     $ids = array_values(array_filter(array_map('intval', explode(',', $agentIds))));
     if ($ids) {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $db->prepare("SELECT id, nom, prenom, matricule, poste FROM agents WHERE actif=1 AND id IN ($placeholders) ORDER BY nom, prenom");
+        $stmt = $db->prepare("SELECT id, nom, prenom, matricule, poste, sexe FROM agents WHERE actif=1 AND id IN ($placeholders) ORDER BY CASE WHEN sexe='F' THEN 0 ELSE 1 END, nom, prenom");
         $stmt->execute($ids);
         $agents = $stmt->fetchAll();
     } else {
         $agents = [];
     }
 } else {
-    $agents = $db->query("SELECT id, nom, prenom, matricule, poste FROM agents WHERE actif=1 ORDER BY nom, prenom")->fetchAll();
+    $agents = $db->query("SELECT id, nom, prenom, matricule, poste, sexe FROM agents WHERE actif=1 ORDER BY CASE WHEN sexe='F' THEN 0 ELSE 1 END, nom, prenom")->fetchAll();
 }
 
 $nomsJs = ['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
 $params = getAllParams();
+
+// Options d'affichage des heures
+$hoursDisplay = $_GET['hours_display'] ?? 'full'; // full | none | factor
+$hoursPct     = max(1, min(200, (int)($_GET['hours_pct'] ?? 100)));
+$hoursFactor  = $hoursDisplay === 'factor' ? ($hoursPct / 100) : ($hoursDisplay === 'none' ? 0.0 : 1.0);
+$showHours    = ($hoursDisplay !== 'none');
 
 $shifts = [
     'J'  => ['label'=>'Journée', 'debut'=>'07:00', 'fin'=>'19:00', 'color'=>'#16a34a'],
@@ -307,9 +313,13 @@ if ($type === 'week') {
 }
 $html .= '<th class="total-col">Total</th></tr></thead><tbody>';
 
+$prevSexeExp = null;
 foreach ($agents as $ag) {
-    $totalMin = 0;
-    $row      = '';
+    $totalMin    = 0;
+    $row         = '';
+    $curSexeExp  = $ag['sexe'] ?? 'M';
+    $sepStyle    = ($prevSexeExp === 'F' && $curSexeExp === 'M') ? 'border-top:2px dashed #c9a84c;' : '';
+    $prevSexeExp = $curSexeExp;
 
     if ($type === 'week') {
         foreach ($dates as $dt) {
@@ -324,16 +334,18 @@ foreach ($agents as $ag) {
                 $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$dateStr] += $minT;
-                $code  = detectShiftExport($hDeb, $hFin, $shifts);
-                $color = $code ? $shifts[$code]['color'] : '#374151';
-                $dur   = round($minT/60).'h';
-                $hDebFmt = formatHeureCourte($hDeb);
-                $hFinFmt = formatHeureCourte($hFin);
+                $code     = detectShiftExport($hDeb, $hFin, $shifts);
+                $color    = $code ? $shifts[$code]['color'] : '#374151';
+                $minDisp  = (int)round($minT * $hoursFactor);
+                $dur      = $showHours ? round($minDisp/60).'h' : '';
+                $hDebFmt  = formatHeureCourte($hDeb);
+                $hFinFmt  = formatHeureCourte($hFin);
                 $row .= '<td class="'.$cls.'">'
                     .'<span class="shift-code" style="color:'.$color.'">'
                     .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
                 if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
-                $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
+                if ($showHours) $row .= '<br><span class="shift-dur">'.$dur.'</span>';
+                $row .= '</td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
@@ -346,21 +358,23 @@ foreach ($agents as $ag) {
             $isFer   = in_array($date, $feries);
             $cls     = $isFer ? 'ferie' : ($jourSem==7 ? 'dimanche' : '');
             if ($ligne) {
-                $hDeb  = substr($ligne['heure_debut'],0,5);
-                $hFin  = substr($ligne['heure_fin'],0,5);
-                $minT  = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $hDeb     = substr($ligne['heure_debut'],0,5);
+                $hFin     = substr($ligne['heure_fin'],0,5);
+                $minT     = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$date] += $minT;
-                $code  = detectShiftExport($hDeb, $hFin, $shifts);
-                $color = $code ? $shifts[$code]['color'] : '#374151';
-                $dur   = round($minT/60).'h';
-                $hDebFmt = formatHeureCourte($hDeb);
-                $hFinFmt = formatHeureCourte($hFin);
+                $code     = detectShiftExport($hDeb, $hFin, $shifts);
+                $color    = $code ? $shifts[$code]['color'] : '#374151';
+                $minDisp  = (int)round($minT * $hoursFactor);
+                $dur      = $showHours ? round($minDisp/60).'h' : '';
+                $hDebFmt  = formatHeureCourte($hDeb);
+                $hFinFmt  = formatHeureCourte($hFin);
                 $row .= '<td class="'.$cls.'">'
                     .'<span class="shift-code" style="color:'.$color.'">'
                     .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
                 if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
-                $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
+                if ($showHours) $row .= '<br><span class="shift-dur">'.$dur.'</span>';
+                $row .= '</td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
@@ -368,18 +382,34 @@ foreach ($agents as $ag) {
     }
 
     if ($totalMin == 0) continue;
-    $html .= '<tr><td class="agent-name">'.htmlspecialchars($ag['prenom'].' '.$ag['nom']).'</td>';
+    $html .= '<tr style="'.$sepStyle.'"><td class="agent-name" style="'.$sepStyle.'">'.htmlspecialchars($ag['prenom'].' '.$ag['nom']).'</td>';
     $html .= $row;
-    $html .= '<td class="total-col">'.number_format($totalMin/60,1).'h</td></tr>';
+    if ($showHours) {
+        $totalDisp = number_format($totalMin * $hoursFactor / 60, 1);
+        $html .= '<td class="total-col">'.$totalDisp.'h</td>';
+    } else {
+        $html .= '<td class="total-col">—</td>';
+    }
+    $html .= '</tr>';
 }
 
 // Ligne total h/jour
 $grandTotal = array_sum($totauxJour);
 $html .= '</tbody><tfoot><tr><td class="agent-name">Total h/jour</td>';
 foreach ($totauxJour as $min) {
-    $html .= '<td>' . ($min > 0 ? number_format($min/60,1).'h' : '—') . '</td>';
+    if ($showHours) {
+        $dispMin = (int)round($min * $hoursFactor);
+        $html .= '<td>' . ($min > 0 ? number_format($dispMin/60,1).'h' : '—') . '</td>';
+    } else {
+        $html .= '<td>—</td>';
+    }
 }
-$html .= '<td class="total-col">' . number_format($grandTotal/60,1) . 'h</td></tr></tfoot>';
+if ($showHours) {
+    $html .= '<td class="total-col">' . number_format($grandTotal * $hoursFactor / 60, 1) . 'h</td>';
+} else {
+    $html .= '<td class="total-col">—</td>';
+}
+$html .= '</tr></tfoot>';
 $html .= '</table>';
 
 // Footer légal (optionnel)
