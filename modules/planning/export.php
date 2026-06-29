@@ -338,14 +338,23 @@ foreach ($agents as $ag) {
                 $color    = $code ? $shifts[$code]['color'] : '#374151';
                 $minDisp  = (int)round($minT * $hoursFactor);
                 $dur      = $showHours ? round($minDisp/60).'h' : '';
-                $hDebFmt  = formatHeureCourte($hDeb);
-                $hFinFmt  = formatHeureCourte($hFin);
-                $row .= '<td class="'.$cls.'">'
-                    .'<span class="shift-code" style="color:'.$color.'">'
-                    .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
-                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
-                if ($showHours) $row .= '<br><span class="shift-dur">'.$dur.'</span>';
-                $row .= '</td>';
+                $hDebFmt = formatHeureCourte($hDeb);
+                if ($hoursDisplay === 'factor' && $showHours) {
+                    list($hh, $mm) = explode(':', $hDeb);
+                    $endTotal   = (int)$hh * 60 + (int)$mm + $minDisp;
+                    $hFinAdjFmt = formatHeureCourte(sprintf('%02d:%02d', (int)floor($endTotal/60) % 24, $endTotal % 60));
+                    $row .= '<td class="'.$cls.'">'
+                        .'<span class="shift-code" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinAdjFmt.'</span>'
+                        .'<br><span class="shift-dur">'.$dur.'</span></td>';
+                } else {
+                    $hFinFmt = formatHeureCourte($hFin);
+                    $row .= '<td class="'.$cls.'">'
+                        .'<span class="shift-code" style="color:'.$color.'">'
+                        .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
+                    if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
+                    if ($showHours) $row .= '<br><span class="shift-dur">'.$dur.'</span>';
+                    $row .= '</td>';
+                }
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
@@ -367,14 +376,23 @@ foreach ($agents as $ag) {
                 $color    = $code ? $shifts[$code]['color'] : '#374151';
                 $minDisp  = (int)round($minT * $hoursFactor);
                 $dur      = $showHours ? round($minDisp/60).'h' : '';
-                $hDebFmt  = formatHeureCourte($hDeb);
-                $hFinFmt  = formatHeureCourte($hFin);
-                $row .= '<td class="'.$cls.'">'
-                    .'<span class="shift-code" style="color:'.$color.'">'
-                    .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
-                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
-                if ($showHours) $row .= '<br><span class="shift-dur">'.$dur.'</span>';
-                $row .= '</td>';
+                $hDebFmt = formatHeureCourte($hDeb);
+                if ($hoursDisplay === 'factor' && $showHours) {
+                    list($hh, $mm) = explode(':', $hDeb);
+                    $endTotal   = (int)$hh * 60 + (int)$mm + $minDisp;
+                    $hFinAdjFmt = formatHeureCourte(sprintf('%02d:%02d', (int)floor($endTotal/60) % 24, $endTotal % 60));
+                    $row .= '<td class="'.$cls.'">'
+                        .'<span class="shift-code" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinAdjFmt.'</span>'
+                        .'<br><span class="shift-dur">'.$dur.'</span></td>';
+                } else {
+                    $hFinFmt = formatHeureCourte($hFin);
+                    $row .= '<td class="'.$cls.'">'
+                        .'<span class="shift-code" style="color:'.$color.'">'
+                        .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
+                    if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
+                    if ($showHours) $row .= '<br><span class="shift-dur">'.$dur.'</span>';
+                    $row .= '</td>';
+                }
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
