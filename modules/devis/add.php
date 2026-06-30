@@ -362,7 +362,10 @@ require_once __DIR__ . '/../../includes/header.php';
             '        </div>',
             '    </div>',
             '    <div class="d-flex align-items-center justify-content-between mb-2">',
-            '        <div style="font-size:0.72rem;color:var(--ov-gold);text-transform:uppercase;letter-spacing:1px">Taux horaires HT (€)</div>',
+            '        <div>',
+            '            <div style="font-size:0.72rem;color:var(--ov-gold);text-transform:uppercase;letter-spacing:1px">Taux horaires HT (€)</div>',
+            '            <div style="font-size:0.62rem;color:#9ca3af;margin-top:1px"><i class="fa fa-wand-magic-sparkles me-1" style="color:var(--ov-gold)"></i>Modifier <strong>JOUR Normal</strong> → suggestions automatiques</div>',
+            '        </div>',
             '        <select class="form-select form-select-sm g-type-select" style="width:200px">',
             '            <option value="">— Appliquer un profil type —</option>',
             '            <option value="agent-jour">Agent de Jour (07h-19h)</option>',
@@ -418,15 +421,48 @@ require_once __DIR__ . '/../../includes/header.php';
             this.value = '';
         });
 
+        // Auto-calcul des majorations depuis le tarif journée normal
+        var jnInput = block.querySelector('.g-taux-jn');
+        if (jnInput) {
+            jnInput.addEventListener('input', function() {
+                var jn = parseFloat(this.value) || 0;
+                if (jn <= 0) return;
+                Object.keys(MAJORATION_RULES).forEach(function(k) {
+                    var inp = block.querySelector('.g-taux-' + k);
+                    if (inp) inp.value = MAJORATION_RULES[k].fn(jn).toFixed(2);
+                });
+            });
+        }
+
         groupesContainer.appendChild(block);
     }
 
+    // Règles de majoration depuis le tarif journée normal
+    var MAJORATION_RULES = {
+        nn: { label: 'Nuit Normal',    fn: function(jn) { return jn + 2; } },
+        jd: { label: 'Jour Dim.',      fn: function(jn) { return jn + 2; } },
+        nd: { label: 'Nuit Dim.',      fn: function(jn) { return jn + 5; } },
+        jf: { label: 'Jour Férié',     fn: function(jn) { return jn * 2; } },
+        nf: { label: 'Nuit Férié',     fn: function(jn) { return jn * 2 + 4; } },
+    };
+
     function makeTauxField(gIdx, key, sub, grp, val) {
+        var isBase  = (key === 'jn');
+        var majRule = !isBase && MAJORATION_RULES[key] ? MAJORATION_RULES[key] : null;
+        var inputStyle = isBase
+            ? 'style="border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700"'
+            : '';
+        var hint = isBase
+            ? '<div style="font-size:0.58rem;color:var(--ov-gold);text-align:center;margin-top:2px;white-space:nowrap">' +
+              '<i class="fa fa-wand-magic-sparkles me-1"></i>Base de calcul</div>'
+            : '';
         return '<div class="col">' +
             '<label class="form-label text-center d-block" style="font-size:0.72rem">' + sub + '<br><small class="text-muted">' + grp + '</small></label>' +
             '<input type="number" name="groupes[' + gIdx + '][taux_' + key + ']"' +
             '   class="form-control form-control-sm text-center g-taux-' + key + '"' +
-            '   step="0.01" min="0" value="' + parseFloat(val).toFixed(2) + '">' +
+            '   step="0.01" min="0" value="' + parseFloat(val).toFixed(2) + '"' +
+            '   ' + inputStyle + '>' +
+            hint +
             '</div>';
     }
 

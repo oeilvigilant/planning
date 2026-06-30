@@ -456,7 +456,16 @@ $PROFILS_TYPES = [
                 </div>
                 <div class="row g-2 mt-1">
                     <?php foreach (['jn'=>'JN Normal','nn'=>'NN Normal','jd'=>'JD Dim.','nd'=>'ND Dim.','jf'=>'JF Férié','nf'=>'NF Férié'] as $k => $lbl): ?>
-                    <div class="col"><label class="form-label text-center d-block" style="font-size:0.72rem"><?= $lbl ?></label><input type="number" name="taux_<?= $k ?>" class="form-control form-control-sm text-center" step="0.01" min="0" value="<?= h($p['taux_'.$k]) ?>"></div>
+                    <div class="col">
+                        <label class="form-label text-center d-block" style="font-size:0.72rem"><?= $lbl ?></label>
+                        <input type="number" name="taux_<?= $k ?>"
+                            class="form-control form-control-sm text-center ep-taux-<?= $k ?>"
+                            step="0.01" min="0" value="<?= h($p['taux_'.$k]) ?>"
+                            <?= $k==='jn' ? 'style="border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700"' : '' ?>>
+                        <?php if ($k==='jn'): ?>
+                        <div style="font-size:0.58rem;color:var(--ov-gold);text-align:center;margin-top:2px"><i class="fa fa-wand-magic-sparkles me-1"></i>Base</div>
+                        <?php endif; ?>
+                    </div>
                     <?php endforeach; ?>
                 </div>
                 <div class="mt-2 d-flex gap-2">
@@ -495,7 +504,16 @@ $PROFILS_TYPES = [
             </div>
             <div class="row g-2 mt-1">
                 <?php foreach (['jn'=>[25.90,'JN'],'nn'=>[27.90,'NN'],'jd'=>[27.90,'JD'],'nd'=>[30.90,'ND'],'jf'=>[51.80,'JF'],'nf'=>[55.80,'NF']] as $k => [$def,$abr]): ?>
-                <div class="col"><label class="form-label text-center d-block" style="font-size:0.75rem"><?= $abr ?></label><input type="number" name="taux_<?= $k ?>" id="new_<?= $k ?>" class="form-control form-control-sm text-center" step="0.01" min="0" value="<?= $def ?>"></div>
+                <div class="col">
+                    <label class="form-label text-center d-block" style="font-size:0.75rem"><?= $abr ?></label>
+                    <input type="number" name="taux_<?= $k ?>" id="new_<?= $k ?>"
+                        class="form-control form-control-sm text-center"
+                        step="0.01" min="0" value="<?= $def ?>"
+                        <?= $k==='jn' ? 'style="border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700"' : '' ?>>
+                    <?php if ($k==='jn'): ?>
+                    <div style="font-size:0.58rem;color:var(--ov-gold);text-align:center;margin-top:2px"><i class="fa fa-wand-magic-sparkles me-1"></i>Base</div>
+                    <?php endif; ?>
+                </div>
                 <?php endforeach; ?>
             </div>
             <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-plus me-2"></i>Ajouter ce profil</button></div>
@@ -532,6 +550,38 @@ document.getElementById('newTplSelect').addEventListener('change', function() {
         document.getElementById('new_' + k).value = t[k].toFixed(2);
     });
     this.value = '';
+});
+
+// Règles de majoration
+var MAJ_RULES = {
+    nn: function(jn) { return jn + 2; },
+    jd: function(jn) { return jn + 2; },
+    nd: function(jn) { return jn + 5; },
+    jf: function(jn) { return jn * 2; },
+    nf: function(jn) { return jn * 2 + 4; },
+};
+
+// Auto-calcul pour "Ajouter un profil"
+document.getElementById('new_jn').addEventListener('input', function() {
+    var jn = parseFloat(this.value) || 0;
+    if (jn <= 0) return;
+    Object.keys(MAJ_RULES).forEach(function(k) {
+        var inp = document.getElementById('new_' + k);
+        if (inp) inp.value = MAJ_RULES[k](jn).toFixed(2);
+    });
+});
+
+// Auto-calcul pour les éditions de profil existant (délégation)
+document.addEventListener('input', function(e) {
+    if (!e.target.classList.contains('ep-taux-jn')) return;
+    var jn = parseFloat(e.target.value) || 0;
+    if (jn <= 0) return;
+    var form = e.target.closest('form');
+    if (!form) return;
+    Object.keys(MAJ_RULES).forEach(function(k) {
+        var inp = form.querySelector('.ep-taux-' + k);
+        if (inp) inp.value = MAJ_RULES[k](jn).toFixed(2);
+    });
 });
 </script>
 
