@@ -289,8 +289,9 @@ $html .= '</div>';
 $html .= '<table><thead><tr>';
 $html .= '<th class="agent-col" style="min-width:80px">Agent</th>';
 
-// Accumulateurs par colonne (date => minutes)
-$totauxJour = [];
+// Accumulateurs par colonne (date => minutes + stats couverture)
+$totauxJour  = [];
+$covJour     = []; // j, n, f, m par date
 
 if ($type === 'week') {
     foreach ($dates as $dt) {
@@ -300,6 +301,7 @@ if ($type === 'week') {
         $bg      = $isFer ? 'background:#fde68a;color:#92400e;' : ($jourSem==7 ? 'background:#fca5a5;color:#7f1d1d;' : '');
         $html   .= '<th style="'.$bg.'">'.$nomsJs[$jourSem].'<br>'.$dt->format('d').'</th>';
         $totauxJour[$dateStr] = 0;
+        $covJour[$dateStr]    = ['j'=>0,'n'=>0,'f'=>0,'m'=>0];
     }
 } else {
     for ($d = $jourDebut; $d <= $jourFin; $d++) {
@@ -309,6 +311,7 @@ if ($type === 'week') {
         $bg      = $isFer ? 'background:#fde68a;color:#92400e;' : ($jourSem==7 ? 'background:#fca5a5;color:#7f1d1d;' : '');
         $html   .= '<th style="'.$bg.'">'.$nomsJs[$jourSem].'<br>'.$d.'</th>';
         $totauxJour[$date] = 0;
+        $covJour[$date]    = ['j'=>0,'n'=>0,'f'=>0,'m'=>0];
     }
 }
 $html .= '<th class="total-col">Total</th></tr></thead><tbody>';
@@ -335,6 +338,8 @@ foreach ($agents as $ag) {
                 $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$dateStr] += $minT;
+                if ($ligne['min_nuit']>0||$ligne['min_ferie_nuit']>0) $covJour[$dateStr]['n']++; else $covJour[$dateStr]['j']++;
+                if ($curSexeExp==='F') $covJour[$dateStr]['f']++; else $covJour[$dateStr]['m']++;
                 $code     = detectShiftExport($hDeb, $hFin, $shifts);
                 $color    = $code ? $shifts[$code]['color'] : '#374151';
                 $minDisp  = (int)round($minT * $hoursFactor);
@@ -373,6 +378,8 @@ foreach ($agents as $ag) {
                 $minT     = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$date] += $minT;
+                if ($ligne['min_nuit']>0||$ligne['min_ferie_nuit']>0) $covJour[$date]['n']++; else $covJour[$date]['j']++;
+                if ($curSexeExp==='F') $covJour[$date]['f']++; else $covJour[$date]['m']++;
                 $code     = detectShiftExport($hDeb, $hFin, $shifts);
                 $color    = $code ? $shifts[$code]['color'] : '#374151';
                 $minDisp  = (int)round($minT * $hoursFactor);
@@ -418,9 +425,22 @@ foreach ($agents as $ag) {
     $html .= '</tr>';
 }
 
+// Ligne couverture (J/N/F/H par jour)
+$html .= '</tbody><tfoot>';
+$html .= '<tr style="background:#f1f5f9"><td class="agent-name" style="font-size:6pt;color:#6b7280">Couverture</td>';
+foreach ($covJour as $dateStr => $cov) {
+    $cell = '';
+    if ($cov['j'] > 0) $cell .= '<span style="color:#16a34a;font-weight:700">J'.$cov['j'].'</span> ';
+    if ($cov['n'] > 0) $cell .= '<span style="color:#4f46e5;font-weight:700">N'.$cov['n'].'</span> ';
+    if ($cov['f'] > 0) $cell .= '<span style="color:#ec4899;font-weight:700">F'.$cov['f'].'</span> ';
+    if ($cov['m'] > 0) $cell .= '<span style="color:#3b82f6;font-weight:700">H'.$cov['m'].'</span>';
+    $html .= '<td style="text-align:center;font-size:5.5pt;line-height:1.4;padding:2px 1px">'.($cell ?: '—').'</td>';
+}
+$html .= '<td class="total-col"></td></tr>';
+
 // Ligne total h/jour
 $grandTotal = array_sum($totauxJour);
-$html .= '</tbody><tfoot><tr><td class="agent-name">Total h/jour</td>';
+$html .= '<tr><td class="agent-name">Total h/jour</td>';
 foreach ($totauxJour as $min) {
     if ($showHours) {
         $dispMin = (int)round($min * $hoursFactor);
@@ -436,49 +456,6 @@ if ($showHours) {
 }
 $html .= '</tr></tfoot>';
 $html .= '</table>';
-
-// ── Résumé effectif ──────────────────────────────────────────────────────────
-$totFJ = $totFN = $totMJ = $totMN = 0;
-foreach ($summaryStats as $s) {
-    if ($s['sex'] === 'F') { if ($s['nuit']) $totFN++; else $totFJ++; }
-    else                   { if ($s['nuit']) $totMN++; else $totMJ++; }
-}
-$totF = $totFJ + $totFN; $totM = $totMJ + $totMN;
-$totJ = $totFJ + $totMJ; $totN = $totFN + $totMN;
-if ($totF + $totM > 0):
-$html .= '<div style="margin-top:10px;page-break-inside:avoid">'
-    . '<div style="font-size:7.5pt;font-weight:700;color:#1a2332;margin-bottom:4px;border-bottom:1.5px solid #c9a84c;padding-bottom:2px">Récapitulatif effectif</div>'
-    . '<table style="border-collapse:collapse;font-size:7pt;width:auto">'
-    . '<thead><tr>'
-    .   '<th style="padding:3px 10px;background:#f1f5f9;border:1px solid #d1d5db;text-align:left"></th>'
-    .   '<th style="padding:3px 10px;background:#f1f5f9;border:1px solid #d1d5db;text-align:center">Journée</th>'
-    .   '<th style="padding:3px 10px;background:#f1f5f9;border:1px solid #d1d5db;text-align:center;color:#4f46e5">Nuit</th>'
-    .   '<th style="padding:3px 10px;background:#f1f5f9;border:1px solid #d1d5db;text-align:center;font-weight:700">Total</th>'
-    . '</tr></thead><tbody>';
-if ($totF > 0) {
-    $html .= '<tr>'
-        . '<td style="padding:3px 10px;border:1px solid #d1d5db;color:#ec4899;font-weight:700">Femmes</td>'
-        . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center">'.($totFJ > 0 ? $totFJ : '—').'</td>'
-        . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center;color:#4f46e5">'.($totFN > 0 ? $totFN : '—').'</td>'
-        . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center;font-weight:700">'.$totF.'</td>'
-        . '</tr>';
-}
-if ($totM > 0) {
-    $html .= '<tr>'
-        . '<td style="padding:3px 10px;border:1px solid #d1d5db;color:#3b82f6;font-weight:700">Hommes</td>'
-        . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center">'.($totMJ > 0 ? $totMJ : '—').'</td>'
-        . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center;color:#4f46e5">'.($totMN > 0 ? $totMN : '—').'</td>'
-        . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center;font-weight:700">'.$totM.'</td>'
-        . '</tr>';
-}
-$html .= '<tr style="background:#f8f9fa">'
-    . '<td style="padding:3px 10px;border:1px solid #d1d5db;font-weight:700;color:#1a2332">Total</td>'
-    . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center;font-weight:700">'.($totJ > 0 ? $totJ : '—').'</td>'
-    . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center;font-weight:700;color:#4f46e5">'.($totN > 0 ? $totN : '—').'</td>'
-    . '<td style="padding:3px 10px;border:1px solid #d1d5db;text-align:center;font-weight:700;font-size:8pt">'.($totF+$totM).'</td>'
-    . '</tr>'
-    . '</tbody></table></div>';
-endif;
 
 // Footer légal (optionnel)
 if ($showFooter) {

@@ -45,16 +45,17 @@ function detectShiftM(string $hD, string $hF, array $shifts): ?array {
 }
 
 function dayStatM(array $allAgents, array $planningData, string $date): array {
-    $j=$n=$tot=$h=0;
+    $j=$n=$tot=$h=$f=$m=0;
     foreach ($allAgents as $ag) {
         $l = $planningData[$ag['id']][$date] ?? null;
         if ($l) {
             $tot++;
             $h += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
             if (($l['min_nuit']+$l['min_ferie_nuit']) > 0) $n++; else $j++;
+            if (($ag['sexe'] ?? 'M') === 'F') $f++; else $m++;
         }
     }
-    return ['j'=>$j,'n'=>$n,'t'=>$tot,'h'=>$h];
+    return ['j'=>$j,'n'=>$n,'t'=>$tot,'h'=>$h,'f'=>$f,'m'=>$m];
 }
 
 // ── Paramètres URL ────────────────────────────────────────────────────────────
@@ -79,7 +80,7 @@ for ($i = 0; $i < $nbJours; $i++) {
 
 // ── Agents ────────────────────────────────────────────────────────────────────
 $hiddenAgents = $_SESSION['planning_hidden'] ?? [];
-$allAgents    = $db->query("SELECT id, nom, prenom, poste FROM agents WHERE actif=1 ORDER BY nom, prenom")->fetchAll();
+$allAgents    = $db->query("SELECT id, nom, prenom, poste, sexe FROM agents WHERE actif=1 ORDER BY CASE WHEN sexe='F' THEN 0 ELSE 1 END, nom, prenom")->fetchAll();
 $agents       = array_values(array_filter($allAgents, fn($ag) => !in_array($ag['id'], $hiddenAgents)));
 
 // ── Jours fériés ──────────────────────────────────────────────────────────────
@@ -257,11 +258,14 @@ require_once __DIR__ . '/../../includes/header.php';
         </tr>
       </thead>
       <tbody>
-      <?php foreach ($agents as $ag):
+      <?php $prevSexeMis = null; foreach ($agents as $ag):
         $totalMin = 0;
+        $curSexeMis = $ag['sexe'] ?? 'M';
+        $isSepMis   = ($prevSexeMis === 'F' && $curSexeMis === 'M');
+        $prevSexeMis = $curSexeMis;
       ?>
-      <tr class="planning-row" style="border-bottom:1px solid #f0f2f5">
-        <td style="position:sticky;left:0;z-index:1;background:#fff;padding:6px 10px;border-right:1px solid #e5e7eb">
+      <tr class="planning-row" style="border-bottom:1px solid #f0f2f5;<?= $isSepMis ? 'border-top:2px dashed #cbd5e1' : '' ?>">
+        <td style="position:sticky;left:0;z-index:1;background:#fff;padding:6px 10px;border-right:1px solid #e5e7eb;<?= $isSepMis ? 'border-top:2px dashed #cbd5e1' : '' ?>">
           <div class="planning-agent-name" style="font-weight:600;font-size:0.78rem;color:var(--ov-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px" title="<?= h($ag['prenom'].' '.$ag['nom']) ?>"><?= h($ag['prenom'].' '.$ag['nom']) ?></div>
           <?php if ($ag['poste']): ?><div style="font-size:0.62rem;color:#9ca3af"><?= h($ag['poste']) ?></div><?php endif; ?>
         </td>
@@ -330,6 +334,10 @@ require_once __DIR__ . '/../../includes/header.php';
           <?php if ($stat['t'] > 0): ?>
           <?php if ($stat['j'] > 0): ?><div style="font-size:0.57rem;color:#16a34a;font-weight:700;line-height:1.2">J<?= $stat['j'] ?></div><?php endif; ?>
           <?php if ($stat['n'] > 0): ?><div style="font-size:0.57rem;color:#4f46e5;font-weight:700;line-height:1.2">N<?= $stat['n'] ?></div><?php endif; ?>
+          <div style="font-size:0.52rem;line-height:1.3;margin-top:1px">
+            <?php if ($stat['f'] > 0): ?><span style="color:#ec4899;font-weight:700">F<?= $stat['f'] ?></span><?php endif; ?>
+            <?php if ($stat['m'] > 0): ?><span style="color:#3b82f6;font-weight:700"> H<?= $stat['m'] ?></span><?php endif; ?>
+          </div>
           <?php else: ?><div style="font-size:0.55rem;color:#f87171">—</div><?php endif; ?>
         </td>
         <?php endforeach; ?>
