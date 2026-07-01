@@ -35,7 +35,7 @@ if (!$version) {
     $version = $stmtV->fetch();
 }
 
-$agents = $db->query("SELECT id, nom, prenom, matricule, poste FROM agents WHERE actif=1 ORDER BY nom, prenom")->fetchAll();
+$agents = $db->query("SELECT id, nom, prenom, matricule, poste, sexe FROM agents WHERE actif=1 ORDER BY CASE WHEN sexe='F' THEN 0 ELSE 1 END, nom, prenom")->fetchAll();
 $feries = getJoursFeries($annee);
 
 // Charger les lignes de la semaine
@@ -126,14 +126,22 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
             <?php if (empty($agentsJour)): ?>
             <div style="font-size:0.72rem;color:#d1d5db;text-align:center;padding-top:10px">—</div>
             <?php else: ?>
-            <?php foreach ($agents as $ag):
+            <?php
+            $cntF = $cntM = 0;
+            $prevSexeCard = null;
+            foreach ($agents as $ag):
                 $l = $planningData[$ag['id']][$j['date']] ?? null;
                 if (!$l) continue;
+                $curSexeCard = $ag['sexe'] ?? 'M';
+                $isSepCard   = ($prevSexeCard === 'F' && $curSexeCard === 'M');
+                $prevSexeCard = $curSexeCard;
+                if ($curSexeCard === 'F') $cntF++; else $cntM++;
                 $hDeb   = substr($l['heure_debut'], 0, 5);
                 $hFin   = substr($l['heure_fin'],   0, 5);
                 $totMin = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
                 $hasNuit= $l['min_nuit']>0 || $l['min_ferie_nuit']>0;
             ?>
+            <?php if ($isSepCard): ?><div style="border-top:1px dashed #cbd5e1;margin:3px 0"></div><?php endif; ?>
             <div class="mb-1 p-1 rounded" style="background:rgba(0,0,0,0.04)">
                 <div style="font-size:0.68rem;font-weight:600;color:var(--ov-navy);line-height:1.2"><?= h($ag['prenom'].' '.strtoupper($ag['nom'])) ?></div>
                 <div style="font-size:0.62rem;color:#6b7280">
@@ -145,9 +153,11 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
             <?php endforeach; ?>
             <?php endif; ?>
 
-            <!-- Comptage -->
+            <!-- Comptage F/H -->
             <div style="margin-top:6px;padding-top:4px;border-top:1px solid <?= $bdCard ?>;font-size:0.65rem;color:<?= $colJour ?>;font-weight:700">
-                <?= count($agentsJour) ?> agent<?= count($agentsJour)>1?'s':'' ?>
+                <?= ($cntF+$cntM) ?> agent<?= ($cntF+$cntM)>1?'s':'' ?>
+                <?php if ($cntF > 0): ?>&nbsp;<span style="color:#ec4899">F<?= $cntF ?></span><?php endif; ?>
+                <?php if ($cntM > 0): ?>&nbsp;<span style="color:#3b82f6">H<?= $cntM ?></span><?php endif; ?>
             </div>
         </div>
     </div>
@@ -180,14 +190,18 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
         <tbody>
         <?php
         $hasAny = false;
+        $prevSexeRec = null;
         foreach ($agents as $ag):
             $semMins = totalSemaineAgent($planningData, $ag['id'], $jours);
             $semTotal = array_sum($semMins);
             if ($semTotal === 0) continue;
             $hasAny = true;
+            $curSexeRec = $ag['sexe'] ?? 'M';
+            $isSepRec   = ($prevSexeRec === 'F' && $curSexeRec === 'M');
+            $prevSexeRec = $curSexeRec;
         ?>
-        <tr>
-            <td>
+        <tr style="<?= $isSepRec ? 'border-top:2px dashed #cbd5e1' : '' ?>">
+            <td style="<?= $isSepRec ? 'border-top:2px dashed #cbd5e1' : '' ?>">
                 <div style="font-size:0.875rem;font-weight:600"><?= h($ag['prenom'].' '.$ag['nom']) ?></div>
                 <div style="font-size:0.72rem;color:#9ca3af"><?= h($ag['poste']??'') ?></div>
             </td>
