@@ -301,7 +301,7 @@ if ($type === 'week') {
         $bg      = $isFer ? 'background:#fde68a;color:#92400e;' : ($jourSem==7 ? 'background:#fca5a5;color:#7f1d1d;' : '');
         $html   .= '<th style="'.$bg.'">'.$nomsJs[$jourSem].'<br>'.$dt->format('d').'</th>';
         $totauxJour[$dateStr] = 0;
-        $covJour[$dateStr]    = ['j'=>0,'n'=>0,'f'=>0,'m'=>0];
+        $covJour[$dateStr]    = ['hj'=>0,'hn'=>0,'fj'=>0,'fn'=>0];
     }
 } else {
     for ($d = $jourDebut; $d <= $jourFin; $d++) {
@@ -338,8 +338,9 @@ foreach ($agents as $ag) {
                 $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$dateStr] += $minT;
-                if ($ligne['min_nuit']>0||$ligne['min_ferie_nuit']>0) $covJour[$dateStr]['n']++; else $covJour[$dateStr]['j']++;
-                if ($curSexeExp==='F') $covJour[$dateStr]['f']++; else $covJour[$dateStr]['m']++;
+                $isNuitCell = $ligne['min_nuit']>0||$ligne['min_ferie_nuit']>0;
+                if ($curSexeExp==='F') { if ($isNuitCell) $covJour[$dateStr]['fn']++; else $covJour[$dateStr]['fj']++; }
+                else                   { if ($isNuitCell) $covJour[$dateStr]['hn']++; else $covJour[$dateStr]['hj']++; }
                 $code     = detectShiftExport($hDeb, $hFin, $shifts);
                 $color    = $code ? $shifts[$code]['color'] : '#374151';
                 $minDisp  = (int)round($minT * $hoursFactor);
@@ -429,12 +430,22 @@ foreach ($agents as $ag) {
 $html .= '</tbody><tfoot>';
 $html .= '<tr style="background:#f1f5f9"><td class="agent-name" style="font-size:6pt;color:#6b7280">Couverture</td>';
 foreach ($covJour as $dateStr => $cov) {
+    $hTot = $cov['hj'] + $cov['hn'];
+    $fTot = $cov['fj'] + $cov['fn'];
     $cell = '';
-    if ($cov['j'] > 0) $cell .= '<span style="color:#16a34a;font-weight:700">J'.$cov['j'].'</span> ';
-    if ($cov['n'] > 0) $cell .= '<span style="color:#4f46e5;font-weight:700">N'.$cov['n'].'</span> ';
-    if ($cov['f'] > 0) $cell .= '<span style="color:#ec4899;font-weight:700">F'.$cov['f'].'</span> ';
-    if ($cov['m'] > 0) $cell .= '<span style="color:#3b82f6;font-weight:700">H'.$cov['m'].'</span>';
-    $html .= '<td style="text-align:center;font-size:5.5pt;line-height:1.4;padding:2px 1px">'.($cell ?: '—').'</td>';
+    if ($hTot > 0) {
+        $cell .= '<div style="color:#3b82f6;font-weight:700">H:';
+        if ($cov['hj'] > 0) $cell .= ' <span style="color:#16a34a">'.$cov['hj'].'j</span>';
+        if ($cov['hn'] > 0) $cell .= ($cov['hj']>0?',':'').' <span style="color:#4f46e5">'.$cov['hn'].'n</span>';
+        $cell .= '</div>';
+    }
+    if ($fTot > 0) {
+        $cell .= '<div style="color:#ec4899;font-weight:700">F:';
+        if ($cov['fj'] > 0) $cell .= ' <span style="color:#16a34a">'.$cov['fj'].'j</span>';
+        if ($cov['fn'] > 0) $cell .= ($cov['fj']>0?',':'').' <span style="color:#4f46e5">'.$cov['fn'].'n</span>';
+        $cell .= '</div>';
+    }
+    $html .= '<td style="text-align:center;font-size:5.5pt;line-height:1.5;padding:2px 1px">'.($cell ?: '—').'</td>';
 }
 $html .= '<td class="total-col"></td></tr>';
 
