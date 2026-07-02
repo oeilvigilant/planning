@@ -311,7 +311,7 @@ if ($type === 'week') {
         $bg      = $isFer ? 'background:#fde68a;color:#92400e;' : ($jourSem==7 ? 'background:#fca5a5;color:#7f1d1d;' : '');
         $html   .= '<th style="'.$bg.'">'.$nomsJs[$jourSem].'<br>'.$d.'</th>';
         $totauxJour[$date] = 0;
-        $covJour[$date]    = ['j'=>0,'n'=>0,'f'=>0,'m'=>0];
+        $covJour[$date]    = ['hj'=>0,'hn'=>0,'fj'=>0,'fn'=>0];
     }
 }
 $html .= '<th class="total-col">Total</th></tr></thead><tbody>';
