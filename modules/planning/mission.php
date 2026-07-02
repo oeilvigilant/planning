@@ -45,17 +45,18 @@ function detectShiftM(string $hD, string $hF, array $shifts): ?array {
 }
 
 function dayStatM(array $allAgents, array $planningData, string $date): array {
-    $j=$n=$tot=$h=$f=$m=0;
+    $tot=$h=$hj=$hn=$fj=$fn=0;
     foreach ($allAgents as $ag) {
         $l = $planningData[$ag['id']][$date] ?? null;
         if ($l) {
             $tot++;
             $h += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
-            if (($l['min_nuit']+$l['min_ferie_nuit']) > 0) $n++; else $j++;
-            if (($ag['sexe'] ?? 'M') === 'F') $f++; else $m++;
+            $isNuit = ($l['min_nuit']+$l['min_ferie_nuit']) > 0;
+            if (($ag['sexe'] ?? 'M') === 'F') { if ($isNuit) $fn++; else $fj++; }
+            else                               { if ($isNuit) $hn++; else $hj++; }
         }
     }
-    return ['j'=>$j,'n'=>$n,'t'=>$tot,'h'=>$h,'f'=>$f,'m'=>$m];
+    return ['hj'=>$hj,'hn'=>$hn,'fj'=>$fj,'fn'=>$fn,'j'=>$hj+$fj,'n'=>$hn+$fn,'t'=>$tot,'h'=>$h];
 }
 
 // ── Paramètres URL ────────────────────────────────────────────────────────────
@@ -331,13 +332,10 @@ require_once __DIR__ . '/../../includes/header.php';
           else                                           { $covBg='#fffbeb'; $covBord='#fbbf24'; }
         ?>
         <td style="text-align:center;background:<?= $covBg ?>;border-top:2px solid <?= $covBord ?>;padding:3px 1px;<?= $blCov ?>">
-          <?php if ($stat['t'] > 0): ?>
-          <?php if ($stat['j'] > 0): ?><div style="font-size:0.57rem;color:#16a34a;font-weight:700;line-height:1.2">J<?= $stat['j'] ?></div><?php endif; ?>
-          <?php if ($stat['n'] > 0): ?><div style="font-size:0.57rem;color:#4f46e5;font-weight:700;line-height:1.2">N<?= $stat['n'] ?></div><?php endif; ?>
-          <div style="font-size:0.52rem;line-height:1.3;margin-top:1px">
-            <?php if ($stat['f'] > 0): ?><span style="color:#ec4899;font-weight:700">F<?= $stat['f'] ?></span><?php endif; ?>
-            <?php if ($stat['m'] > 0): ?><span style="color:#3b82f6;font-weight:700"> H<?= $stat['m'] ?></span><?php endif; ?>
-          </div>
+          <?php if ($stat['t'] > 0):
+            $hTot = $stat['hj']+$stat['hn']; $fTot = $stat['fj']+$stat['fn']; ?>
+          <?php if ($hTot > 0): ?><div style="font-size:0.52rem;color:#3b82f6;font-weight:700;line-height:1.3">H:<?php if ($stat['hj']>0): ?> <span style="color:#16a34a"><?= $stat['hj'] ?>j</span><?php endif; ?><?php if ($stat['hn']>0): ?><?= $stat['hj']>0?' ,':'' ?> <span style="color:#4f46e5"><?= $stat['hn'] ?>n</span><?php endif; ?></div><?php endif; ?>
+          <?php if ($fTot > 0): ?><div style="font-size:0.52rem;color:#ec4899;font-weight:700;line-height:1.3">F:<?php if ($stat['fj']>0): ?> <span style="color:#16a34a"><?= $stat['fj'] ?>j</span><?php endif; ?><?php if ($stat['fn']>0): ?><?= $stat['fj']>0?' ,':'' ?> <span style="color:#4f46e5"><?= $stat['fn'] ?>n</span><?php endif; ?></div><?php endif; ?>
           <?php else: ?><div style="font-size:0.55rem;color:#f87171">—</div><?php endif; ?>
         </td>
         <?php endforeach; ?>

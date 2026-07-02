@@ -27,17 +27,18 @@ function detectShift(string $hD, string $hF, array $shifts) {
 }
 
 function dayStat(array $allAgents, array $planningData, string $date): array {
-    $j = $n = $tot = $h = $f = $m = 0;
+    $tot = $h = $hj = $hn = $fj = $fn = 0;
     foreach ($allAgents as $ag) {
         $l = $planningData[$ag['id']][$date] ?? null;
         if ($l) {
             $tot++;
             $h += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
-            if (($l['min_nuit']+$l['min_ferie_nuit']) > 0) $n++; else $j++;
-            if (($ag['sexe'] ?? 'M') === 'F') $f++; else $m++;
+            $isNuit = ($l['min_nuit']+$l['min_ferie_nuit']) > 0;
+            if (($ag['sexe'] ?? 'M') === 'F') { if ($isNuit) $fn++; else $fj++; }
+            else                               { if ($isNuit) $hn++; else $hj++; }
         }
     }
-    return ['j' => $j, 'n' => $n, 't' => $tot, 'h' => $h, 'f' => $f, 'm' => $m];
+    return ['hj'=>$hj,'hn'=>$hn,'fj'=>$fj,'fn'=>$fn,'j'=>$hj+$fj,'n'=>$hn+$fn,'t'=>$tot,'h'=>$h];
 }
 
 function covBorderColor(array $stat): string {
@@ -573,15 +574,11 @@ if ($vue === 'semaine') {
               $bg   = covCellBg($stat);
             ?>
             <td style="text-align:center;padding:6px 3px;background:<?= $bg ?>;border-left:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;vertical-align:middle">
-              <?php if ($stat['t'] > 0): ?>
-              <?php if ($stat['j'] > 0): ?><div style="font-size:0.72rem;font-weight:800;color:#16a34a;line-height:1.3">J:<?= $stat['j'] ?></div><?php endif; ?>
-              <?php if ($stat['n'] > 0): ?><div style="font-size:0.72rem;font-weight:800;color:#4f46e5;line-height:1.3">N:<?= $stat['n'] ?></div><?php endif; ?>
-              <div style="font-size:0.65rem;color:#6b7280;margin-top:2px"><?= number_format($stat['h']/60,1) ?>h</div>
-              <div style="font-size:0.6rem;color:#9ca3af;line-height:1.3;margin-top:1px">
-                <?php if ($stat['f'] > 0): ?><span style="color:#ec4899;font-weight:700">F<?= $stat['f'] ?></span><?php endif; ?>
-                <?php if ($stat['f'] > 0 && $stat['m'] > 0): ?><span style="color:#d1d5db"> / </span><?php endif; ?>
-                <?php if ($stat['m'] > 0): ?><span style="color:#3b82f6;font-weight:700">M<?= $stat['m'] ?></span><?php endif; ?>
-              </div>
+              <?php if ($stat['t'] > 0):
+                $hTot = $stat['hj']+$stat['hn']; $fTot = $stat['fj']+$stat['fn']; ?>
+              <?php if ($hTot > 0): ?><div style="font-size:0.6rem;color:#3b82f6;font-weight:700;line-height:1.4">H:<?php if ($stat['hj']>0): ?> <span style="color:#16a34a"><?= $stat['hj'] ?>j</span><?php endif; ?><?php if ($stat['hn']>0): ?><?= $stat['hj']>0?' ,':'' ?> <span style="color:#4f46e5"><?= $stat['hn'] ?>n</span><?php endif; ?></div><?php endif; ?>
+              <?php if ($fTot > 0): ?><div style="font-size:0.6rem;color:#ec4899;font-weight:700;line-height:1.4">F:<?php if ($stat['fj']>0): ?> <span style="color:#16a34a"><?= $stat['fj'] ?>j</span><?php endif; ?><?php if ($stat['fn']>0): ?><?= $stat['fj']>0?' ,':'' ?> <span style="color:#4f46e5"><?= $stat['fn'] ?>n</span><?php endif; ?></div><?php endif; ?>
+              <div style="font-size:0.58rem;color:#9ca3af;margin-top:1px"><?= number_format($stat['h']/60,1) ?>h</div>
               <?php else: ?>
               <div style="font-size:0.8rem;color:#fca5a5;font-weight:700">—</div>
               <?php endif; ?>
@@ -804,13 +801,10 @@ if ($vue === 'semaine') {
               $bg   = covCellBg($stat);
             ?>
             <td style="text-align:center;padding:3px 1px;background:<?= $bg ?>;border-left:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;vertical-align:middle">
-              <?php if ($stat['t'] > 0): ?>
-              <?php if ($stat['j'] > 0): ?><div style="font-size:0.62rem;font-weight:800;color:#16a34a;line-height:1.2">J<?= $stat['j'] ?></div><?php endif; ?>
-              <?php if ($stat['n'] > 0): ?><div style="font-size:0.62rem;font-weight:800;color:#4f46e5;line-height:1.2">N<?= $stat['n'] ?></div><?php endif; ?>
-              <div style="font-size:0.52rem;line-height:1.3;margin-top:1px">
-                <?php if ($stat['f'] > 0): ?><span style="color:#ec4899;font-weight:700">F<?= $stat['f'] ?></span><?php endif; ?>
-                <?php if ($stat['m'] > 0): ?><span style="color:#3b82f6;font-weight:700"> M<?= $stat['m'] ?></span><?php endif; ?>
-              </div>
+              <?php if ($stat['t'] > 0):
+                $hTot = $stat['hj']+$stat['hn']; $fTot = $stat['fj']+$stat['fn']; ?>
+              <?php if ($hTot > 0): ?><div style="font-size:0.52rem;color:#3b82f6;font-weight:700;line-height:1.3">H:<?php if ($stat['hj']>0): ?> <span style="color:#16a34a"><?= $stat['hj'] ?>j</span><?php endif; ?><?php if ($stat['hn']>0): ?><?= $stat['hj']>0?' ,':'' ?> <span style="color:#4f46e5"><?= $stat['hn'] ?>n</span><?php endif; ?></div><?php endif; ?>
+              <?php if ($fTot > 0): ?><div style="font-size:0.52rem;color:#ec4899;font-weight:700;line-height:1.3">F:<?php if ($stat['fj']>0): ?> <span style="color:#16a34a"><?= $stat['fj'] ?>j</span><?php endif; ?><?php if ($stat['fn']>0): ?><?= $stat['fj']>0?' ,':'' ?> <span style="color:#4f46e5"><?= $stat['fn'] ?>n</span><?php endif; ?></div><?php endif; ?>
               <?php else: ?>
               <div style="font-size:0.7rem;color:#fca5a5">—</div>
               <?php endif; ?>
