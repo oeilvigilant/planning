@@ -379,8 +379,9 @@ foreach ($agents as $ag) {
                 $minT     = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$date] += $minT;
-                if ($ligne['min_nuit']>0||$ligne['min_ferie_nuit']>0) $covJour[$date]['n']++; else $covJour[$date]['j']++;
-                if ($curSexeExp==='F') $covJour[$date]['f']++; else $covJour[$date]['m']++;
+                $isNuitCell = $ligne['min_nuit']>0||$ligne['min_ferie_nuit']>0;
+                if ($curSexeExp==='F') { if ($isNuitCell) $covJour[$date]['fn']++; else $covJour[$date]['fj']++; }
+                else                   { if ($isNuitCell) $covJour[$date]['hn']++; else $covJour[$date]['hj']++; }
                 $code     = detectShiftExport($hDeb, $hFin, $shifts);
                 $color    = $code ? $shifts[$code]['color'] : '#374151';
                 $minDisp  = (int)round($minT * $hoursFactor);
