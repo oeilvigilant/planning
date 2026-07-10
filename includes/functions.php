@@ -571,9 +571,12 @@ function agentCompletion(array $a, array $docTypes, array $documents = []): arra
 
     // ── Document d'identité (selon nationalité) ───────────────────────────────
     $nat = strtolower(trim($a['nationalite'] ?? ''));
-    $isFrancais = ($nat === '' || str_contains($nat, 'fran'));
 
-    if ($isFrancais) {
+    if ($nat === '') {
+        // Nationalité non renseignée : impossible de savoir quel document demander
+        $errors[] = ['label' => 'Nationalité non renseignée (détermine la pièce d\'identité requise)', 'icon' => 'fa-flag', 'cat' => 'Identité'];
+    } elseif (str_contains($nat, 'fran')) {
+        // Français → carte d'identité
         if (!in_array('piece_identite', $docTypes)) {
             $errors[] = ['label' => "Carte d'identité manquante", 'icon' => 'fa-id-card', 'cat' => 'Documents'];
         } elseif (isset($expByType['piece_identite'])) {
@@ -585,6 +588,7 @@ function agentCompletion(array $a, array $docTypes, array $documents = []): arra
             }
         }
     } else {
+        // Étranger → carte de séjour
         if (!in_array('titre_sejour', $docTypes)) {
             $errors[] = ['label' => 'Carte de séjour manquante', 'icon' => 'fa-passport', 'cat' => 'Documents'];
         } elseif (isset($expByType['titre_sejour'])) {
