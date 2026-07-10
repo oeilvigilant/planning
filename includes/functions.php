@@ -625,11 +625,6 @@ function agentCompletion(array $a, array $docTypes, array $documents = [], array
         $add(['label'=>'RIB manquant', 'icon'=>'fa-building-columns', 'cat'=>'Documents', 'key'=>'doc_rib'], 'warning');
     }
 
-    // ── Rémunération ─────────────────────────────────────────────────────────
-    if (empty($a['remuneration'])) {
-        $add(['label'=>'Rémunération horaire non renseignée', 'icon'=>'fa-euro-sign', 'cat'=>'Contrat', 'key'=>'remuneration'], 'warning');
-    }
-
     $count = count($errors) + count($warnings);
     return [
         'ok'       => $count === 0,

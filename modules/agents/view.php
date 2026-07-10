@@ -12,6 +12,7 @@ if (!$id) { header('Location: index.php'); exit; }
 try { getDB()->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS dpae_chemin VARCHAR(255) NULL"); } catch(Exception $e){}
 try { getDB()->exec("ALTER TABLE agent_documents ADD COLUMN IF NOT EXISTS date_expiration DATE NULL"); } catch(Exception $e){}
 try { getDB()->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS alertes_ignorees TEXT NULL"); } catch(Exception $e){}
+try { getDB()->exec("ALTER TABLE agent_documents MODIFY COLUMN type_document ENUM('piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','rib','contrat','autre') NOT NULL"); } catch(Exception $e){}
 
 // ── Upload DPAE pour un contrat ───────────────────────────────────────────────
 if (($_POST['action'] ?? '') === 'upload_dpae') {
