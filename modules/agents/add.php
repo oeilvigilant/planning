@@ -8,6 +8,7 @@ $db     = getDB();
 ensureAgentsSchema();
 $errors = [];
 $data   = [];
+$postesGrille = $db->query("SELECT * FROM postes WHERE actif=1 ORDER BY ordre, label")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = $_POST;
@@ -215,7 +216,18 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
         <div class="col-md-4">
           <label class="form-label">Poste occupé</label>
-          <input type="text" name="poste" class="form-control" value="<?= h($data['poste']??'') ?>" placeholder="Agent de sécurité">
+          <?php if ($postesGrille): ?>
+          <select id="posteGrilleSelect" class="form-select form-select-sm mb-1" style="border-color:var(--ov-gold);background:rgba(201,168,76,0.04)">
+            <option value="">— Sélectionner depuis la grille —</option>
+            <?php foreach ($postesGrille as $pg): ?>
+            <option value="<?= h($pg['id']) ?>"
+                    data-label="<?= h($pg['label']) ?>"
+                    data-taux="<?= h($pg['taux_horaire']) ?>"
+            ><?= h($pg['label']) ?><?= $pg['coefficient'] ? ' (coef.'.$pg['coefficient'].')' : '' ?> — <?= number_format($pg['taux_horaire'],4) ?> €/h</option>
+            <?php endforeach; ?>
+          </select>
+          <?php endif; ?>
+          <input type="text" name="poste" id="posteTexte" class="form-control" value="<?= h($data['poste']??'') ?>" placeholder="Ou saisir librement">
         </div>
         <div class="col-md-4">
           <label class="form-label">Statut</label>
@@ -431,6 +443,24 @@ require_once __DIR__ . '/../../includes/header.php';
 </form>
 
 <script>
+// Poste depuis la grille → auto-remplit le libellé et la rémunération
+document.addEventListener('DOMContentLoaded', function() {
+    var sel = document.getElementById('posteGrilleSelect');
+    if (!sel) return;
+    sel.addEventListener('change', function() {
+        var opt = this.options[this.selectedIndex];
+        if (!opt.value) return;
+        var posteField = document.getElementById('posteTexte');
+        var remuField  = document.querySelector('[name="remuneration"]');
+        if (posteField) posteField.value = opt.dataset.label || '';
+        if (remuField && opt.dataset.taux) {
+            remuField.value = parseFloat(opt.dataset.taux).toFixed(2);
+            remuField.style.borderColor = 'var(--ov-gold)';
+            remuField.style.background  = 'rgba(201,168,76,0.06)';
+        }
+    });
+});
+
 // Toggle carte d'identité / carte de séjour selon nationalité
 function toggleIdentiteDoc() {
     var nat = (document.querySelector('[name="nationalite"]') || {value:''}).value.toLowerCase();

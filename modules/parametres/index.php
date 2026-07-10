@@ -6,6 +6,16 @@ requirePerm('parametres', 'view');
 
 $db = getDB();
 
+// Migration table postes
+try { $db->exec("CREATE TABLE IF NOT EXISTS postes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    label VARCHAR(255) NOT NULL,
+    coefficient INT DEFAULT NULL,
+    taux_horaire DECIMAL(8,4) NOT NULL DEFAULT 0,
+    actif TINYINT(1) NOT NULL DEFAULT 1,
+    ordre INT NOT NULL DEFAULT 0
+)"); } catch(Exception $e){}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
     $action = $_POST['action'] ?? '';
 
@@ -43,7 +53,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
             $db->prepare("UPDATE taux_horaires SET taux=? WHERE type_heure=?")->execute([$taux,$t]);
         }
         flash('success','Taux horaires mis à jour.');
-        header('Location: index.php'); exit;
+        header('Location: index.php?tab=taux'); exit;
+    }
+
+    if ($action === 'add_poste') {
+        $label  = trim($_POST['poste_label'] ?? '');
+        $coef   = (int)($_POST['poste_coefficient'] ?? 0) ?: null;
+        $taux   = (float)($_POST['poste_taux'] ?? 0);
+        if ($label) {
+            $db->prepare("INSERT INTO postes (label, coefficient, taux_horaire, ordre) VALUES (?,?,?,(SELECT COALESCE(MAX(p.ordre),0)+1 FROM postes p))")
+               ->execute([$label, $coef, $taux]);
+            flash('success','Poste ajouté.');
+        }
+        header('Location: index.php?tab=postes'); exit;
+    }
+    if ($action === 'save_postes') {
+        foreach ($_POST['postes'] ?? [] as $pid => $d) {
+            $db->prepare("UPDATE postes SET label=?, coefficient=?, taux_horaire=?, actif=? WHERE id=?")
+               ->execute([
+                   trim($d['label'] ?? ''),
+                   (int)($d['coefficient'] ?? 0) ?: null,
+                   (float)($d['taux_horaire'] ?? 0),
+                   isset($d['actif']) ? 1 : 0,
+                   (int)$pid,
+               ]);
+        }
+        flash('success','Postes mis à jour.');
+        header('Location: index.php?tab=postes'); exit;
+    }
+    if ($action === 'del_poste') {
+        $db->prepare("DELETE FROM postes WHERE id=?")->execute([(int)($_POST['poste_id'] ?? 0)]);
+        flash('success','Poste supprimé.');
+        header('Location: index.php?tab=postes'); exit;
     }
 
     if ($action === 'save_planning') {
@@ -235,6 +276,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
 $params = getAllParams();
 $taux   = $db->query("SELECT * FROM taux_horaires ORDER BY ordre")->fetchAll();
+$postes = $db->query("SELECT * FROM postes ORDER BY ordre, label")->fetchAll();
 $feries = $db->query("SELECT * FROM jours_feries ORDER BY date")->fetchAll();
 $carteChamps = $db->query("SELECT * FROM carte_champs ORDER BY face, ordre")->fetchAll();
 $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll();
@@ -257,6 +299,7 @@ try {
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-email">Email</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-api">API</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-cotisations"><i class="fa fa-percent me-1" style="color:var(--ov-gold)"></i>Cotisations</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-postes"><i class="fa fa-briefcase me-1" style="color:var(--ov-gold)"></i>Postes</a></li>
 </ul>
 
 <div class="tab-content">
@@ -323,14 +366,18 @@ try {
 <div class="ov-card">
   <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-euro-sign me-2" style="color:var(--ov-gold)"></i>Taux horaires (€/heure)</h2></div>
   <div class="ov-card-body">
+    <p style="font-size:0.82rem;color:#6b7280" class="mb-3"><i class="fa fa-lightbulb me-1" style="color:var(--ov-gold)"></i>Modifiez le taux <strong>Heure normale</strong> — les autres seront mis à jour automatiquement selon les majorations légales. Vous pouvez ajuster chaque valeur avant de sauvegarder.</p>
     <form method="POST">
     <input type="hidden" name="action" value="save_taux">
     <div class="row g-3">
       <?php foreach ($taux as $t): ?>
       <div class="col-md-4">
-        <label class="form-label"><?= h($t['label']) ?></label>
+        <label class="form-label"><?= h($t['label']) ?><?= $t['type_heure']==='normal' ? ' <span style="color:var(--ov-gold);font-size:0.75rem">★ base</span>' : '' ?></label>
         <div class="input-group">
-          <input type="number" name="taux_<?= h($t['type_heure']) ?>" class="form-control" step="0.01" min="0" value="<?= h($t['taux']) ?>">
+          <input type="number" name="taux_<?= h($t['type_heure']) ?>" id="taux_<?= h($t['type_heure']) ?>"
+                 class="form-control<?= $t['type_heure']==='normal' ? ' taux-base' : '' ?>"
+                 style="<?= $t['type_heure']==='normal' ? 'border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700' : '' ?>"
+                 step="0.01" min="0" value="<?= h($t['taux']) ?>">
           <span class="input-group-text">€/h</span>
         </div>
       </div>
@@ -872,16 +919,130 @@ document.addEventListener('DOMContentLoaded', function() {
 
 </div><!-- /tab-cotisations -->
 
+<!-- POSTES -->
+<div class="tab-pane fade" id="tab-postes">
+
+<div class="ov-card mb-3">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-plus me-2" style="color:var(--ov-gold)"></i>Ajouter un poste</h2></div>
+  <div class="ov-card-body">
+    <p style="font-size:0.82rem;color:#6b7280" class="mb-3">
+      <i class="fa fa-lightbulb me-1" style="color:var(--ov-gold)"></i>
+      Configurez la grille des postes (convention collective). Le taux horaire sera auto-rempli lors du choix du poste dans la fiche agent.
+    </p>
+    <form method="POST">
+    <input type="hidden" name="action" value="add_poste">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label">Intitulé du poste</label>
+        <input type="text" name="poste_label" class="form-control" required placeholder="Ex : Employé - Niveau III - Échelon 2 - Coefficient 140">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Coefficient <small class="text-muted">(optionnel)</small></label>
+        <input type="number" name="poste_coefficient" class="form-control" min="0" step="1" placeholder="Ex : 140">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Taux horaire (€/h)</label>
+        <div class="input-group">
+          <input type="number" name="poste_taux" class="form-control" step="0.0001" min="0" placeholder="12.0000" required>
+          <span class="input-group-text">€/h</span>
+        </div>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-ov-primary"><i class="fa fa-plus me-1"></i>Ajouter</button>
+      </div>
+    </div>
+    </form>
+  </div>
+</div>
+
+<?php if ($postes): ?>
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-briefcase me-2" style="color:var(--ov-gold)"></i>Grille des postes</h2></div>
+  <div class="ov-card-body p-0">
+    <form method="POST" id="formSavePostes">
+    <input type="hidden" name="action" value="save_postes">
+    <div class="table-responsive">
+    <table class="ov-table">
+      <thead>
+        <tr>
+          <th style="width:40px">Actif</th>
+          <th>Intitulé du poste</th>
+          <th style="width:110px">Coefficient</th>
+          <th style="width:160px">Taux (€/h)</th>
+          <th style="width:40px"></th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach ($postes as $p): ?>
+      <tr <?= !$p['actif'] ? 'style="opacity:0.5"' : '' ?>>
+        <td><input type="checkbox" name="postes[<?= $p['id'] ?>][actif]" <?= $p['actif']?'checked':'' ?> class="form-check-input"></td>
+        <td><input type="text" name="postes[<?= $p['id'] ?>][label]" class="form-control form-control-sm" value="<?= h($p['label']) ?>" style="min-width:280px"></td>
+        <td><input type="number" name="postes[<?= $p['id'] ?>][coefficient]" class="form-control form-control-sm" min="0" step="1" value="<?= h($p['coefficient'] ?? '') ?>" placeholder="—"></td>
+        <td>
+          <div class="input-group input-group-sm">
+            <input type="number" name="postes[<?= $p['id'] ?>][taux_horaire]" class="form-control" step="0.0001" min="0" value="<?= h($p['taux_horaire']) ?>">
+            <span class="input-group-text">€/h</span>
+          </div>
+        </td>
+        <td>
+          <button type="submit" form="delPosteForm<?= $p['id'] ?>" class="btn-sm-icon delete"
+                  data-confirm="Supprimer le poste «<?= addslashes($p['label']) ?>» ?"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    </div>
+    <div class="p-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder la grille</button></div>
+    </form>
+
+    <?php foreach ($postes as $p): ?>
+    <form id="delPosteForm<?= $p['id'] ?>" method="POST" style="display:none">
+      <input type="hidden" name="action" value="del_poste">
+      <input type="hidden" name="poste_id" value="<?= $p['id'] ?>">
+    </form>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php else: ?>
+<div class="ov-card">
+  <div class="ov-card-body text-center text-muted py-4">
+    <i class="fa fa-briefcase fa-2x mb-2 d-block" style="opacity:0.3"></i>
+    Aucun poste configuré. Utilisez le formulaire ci-dessus pour en créer.
+  </div>
+</div>
+<?php endif; ?>
+
+</div><!-- /tab-postes -->
+
 </div><!-- /tab-content -->
 
-<?php if (isset($_GET['tab'])): ?>
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const tab = '<?= h($_GET['tab']) ?>';
-    const el = document.querySelector(`[href="#tab-${tab}"]`);
-    if (el) bootstrap.Tab.getOrCreateInstance(el).show();
+document.addEventListener('DOMContentLoaded', function() {
+    // Activation de l'onglet via ?tab= dans l'URL
+    var urlTab = new URLSearchParams(window.location.search).get('tab');
+    if (urlTab) {
+        var el = document.querySelector('[href="#tab-' + urlTab + '"]');
+        if (el) bootstrap.Tab.getOrCreateInstance(el).show();
+    }
+
+    // Auto-suggestion des taux : quand "heure normale" change, proposer les autres
+    var baseField = document.getElementById('taux_normal');
+    if (baseField) {
+        var coeffs = { nuit: 1.2, dimanche: 1.5, ferie_normal: 2, ferie_dimanche: 2, ferie_nuit: 2 };
+        baseField.addEventListener('input', function() {
+            var base = parseFloat(this.value) || 0;
+            Object.entries(coeffs).forEach(function(e) {
+                var field = document.getElementById('taux_' + e[0]);
+                if (field) {
+                    field.value = (base * e[1]).toFixed(2);
+                    field.style.borderColor = 'var(--ov-gold)';
+                    field.style.background  = 'rgba(201,168,76,0.06)';
+                }
+            });
+        });
+    }
 });
 </script>
-<?php endif; ?>
 
 <?php include __DIR__ . '/../../includes/footer.php'; ?>
