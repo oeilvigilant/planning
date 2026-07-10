@@ -173,7 +173,7 @@ $docsLabels = [
     'autre'               => ['Document','fa-file'],
 ];
 // Types pour lesquels on propose la saisie d'une date d'expiration
-$docsWithExpiry = ['piece_identite','titre_sejour','attestation_cnaps','attestation_domicile'];
+$docsWithExpiry = ['piece_identite','titre_sejour','attestation_domicile'];
 ?>
 
 <?php
@@ -380,7 +380,8 @@ if (canDo('agents','delete')) {
         } else {
             $dsub = $doc['nom_fichier'];
         }
-        $exp    = $doc['date_expiration'] ?? null;
+        // Pour l'attestation CNAPS, réutiliser la date déjà enregistrée sur la fiche agent
+        $exp    = ($dtype === 'attestation_cnaps') ? ($a['date_expiration_cnaps'] ?? null) : ($doc['date_expiration'] ?? null);
         $expTs  = $exp ? strtotime($exp) : null;
         $expCls = '';
         $expTxt = '';
