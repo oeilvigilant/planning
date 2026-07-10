@@ -524,40 +524,87 @@ function getNomMois(int $mois): string {
 }
 
 /**
- * Vérifie la complétude du dossier d'un agent.
+ * Vérifie la complétude contractuelle et légale d'un agent.
  * @param array $a         Ligne agents (SELECT *)
  * @param array $docTypes  Types de documents uploadés (ex: ['rib','carte_vitale'])
- * @return array ['ok'=>bool, 'count'=>int, 'champs'=>[], 'docs'=>[]]
+ * @return array [
+ *   'ok'       => bool,   // aucune erreur ni alerte
+ *   'errors'   => [],     // bloquants : ['label'=>'...','icon'=>'...','cat'=>'...']
+ *   'warnings' => [],     // non-bloquants : même structure
+ *   'count'    => int,    // total errors + warnings
+ * ]
  */
 function agentCompletion(array $a, array $docTypes): array {
-    $champsReq = [
-        'nom'                  => 'Nom',
-        'prenom'               => 'Prénom',
-        'date_naissance'       => 'Date de naissance',
-        'lieu_naissance'       => 'Lieu de naissance',
-        'num_secu'             => 'N° sécurité sociale',
-        'nationalite'          => 'Nationalité',
-        'adresse'              => 'Adresse',
-        'cp'                   => 'Code postal',
-        'ville'                => 'Ville',
-        'num_autorisation_cnaps' => 'N° autorisation CNAPS',
-        'date_expiration_cnaps'  => 'Date expiration CNAPS',
-        'remuneration'         => 'Rémunération',
-    ];
-    $docsReq = [
-        'piece_identite'   => "Pièce d'identité",
-        'carte_vitale'     => 'Carte vitale',
-        'attestation_cnaps'=> 'Attestation CNAPS',
-        'rib'              => 'RIB',
-    ];
-    $missingChamps = [];
-    foreach ($champsReq as $key => $label) {
-        if (empty($a[$key])) $missingChamps[] = $label;
+    $errors   = [];
+    $warnings = [];
+
+    // ── Identité contractuelle ────────────────────────────────────────────────
+    foreach ([
+        'nom'           => 'Nom',
+        'prenom'        => 'Prénom',
+        'date_naissance'=> 'Date de naissance',
+        'lieu_naissance'=> 'Lieu de naissance',
+        'num_secu'      => 'N° sécurité sociale',
+        'adresse'       => 'Adresse',
+        'cp'            => 'Code postal',
+        'ville'         => 'Ville',
+    ] as $k => $lbl) {
+        if (empty($a[$k])) $errors[] = ['label'=>$lbl, 'icon'=>'fa-user', 'cat'=>'Identité'];
     }
-    $missingDocs = [];
-    foreach ($docsReq as $type => $label) {
-        if (!in_array($type, $docTypes)) $missingDocs[] = $label;
+
+    // ── CNAPS (obligatoire pour exercer) ─────────────────────────────────────
+    if (empty($a['num_autorisation_cnaps'])) {
+        $errors[] = ['label'=>'N° autorisation CNAPS', 'icon'=>'fa-shield-halved', 'cat'=>'CNAPS'];
     }
-    $count = count($missingChamps) + count($missingDocs);
-    return ['ok' => $count === 0, 'count' => $count, 'champs' => $missingChamps, 'docs' => $missingDocs];
+    if (empty($a['date_expiration_cnaps'])) {
+        $errors[] = ['label'=>'Date d\'expiration CNAPS manquante', 'icon'=>'fa-calendar-xmark', 'cat'=>'CNAPS'];
+    } else {
+        $expTs = strtotime($a['date_expiration_cnaps']);
+        if ($expTs < time()) {
+            $errors[] = ['label'=>'Autorisation CNAPS expirée le '.date('d/m/Y', $expTs), 'icon'=>'fa-circle-xmark', 'cat'=>'CNAPS'];
+        } elseif ($expTs < strtotime('+60 days')) {
+            $warnings[] = ['label'=>'CNAPS expire le '.date('d/m/Y', $expTs).' ('.ceil(($expTs-time())/86400).' j)', 'icon'=>'fa-hourglass-half', 'cat'=>'CNAPS'];
+        }
+    }
+
+    // ── Document d'identité (selon nationalité) ───────────────────────────────
+    $nat = strtolower(trim($a['nationalite'] ?? ''));
+    $isFrancais = ($nat === '' || str_contains($nat, 'fran'));
+    if ($isFrancais) {
+        if (!in_array('piece_identite', $docTypes)) {
+            $errors[] = ['label'=>"Pièce d'identité (CNI ou passeport)", 'icon'=>'fa-id-card', 'cat'=>'Documents'];
+        }
+    } else {
+        // Étranger : titre de séjour obligatoire
+        if (!in_array('titre_sejour', $docTypes)) {
+            $errors[] = ['label'=>"Titre de séjour / autorisation de travail", 'icon'=>'fa-passport', 'cat'=>'Documents'];
+        }
+    }
+
+    // ── Autres documents contractuels ─────────────────────────────────────────
+    if (!in_array('attestation_cnaps', $docTypes)) {
+        $errors[] = ['label'=>'Attestation CNAPS', 'icon'=>'fa-shield-halved', 'cat'=>'Documents'];
+    }
+    if (!in_array('carte_vitale', $docTypes)) {
+        $warnings[] = ['label'=>'Carte vitale', 'icon'=>'fa-heart-pulse', 'cat'=>'Documents'];
+    }
+    if (!in_array('rib', $docTypes)) {
+        $warnings[] = ['label'=>'RIB', 'icon'=>'fa-building-columns', 'cat'=>'Documents'];
+    }
+
+    // ── Rémunération ─────────────────────────────────────────────────────────
+    if (empty($a['remuneration'])) {
+        $warnings[] = ['label'=>'Rémunération horaire non renseignée', 'icon'=>'fa-euro-sign', 'cat'=>'Contrat'];
+    }
+
+    $count = count($errors) + count($warnings);
+    return [
+        'ok'       => $count === 0,
+        'errors'   => $errors,
+        'warnings' => $warnings,
+        'count'    => $count,
+        // Compat backward
+        'champs'   => array_column(array_filter($errors,   fn($e) => $e['cat'] === 'Identité'), 'label'),
+        'docs'     => array_column(array_filter($errors,   fn($e) => $e['cat'] === 'Documents'), 'label'),
+    ];
 }

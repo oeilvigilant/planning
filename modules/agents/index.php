@@ -150,10 +150,22 @@ $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn(
                     <?php if ($comp['ok']): ?>
                     <span style="color:#16a34a;font-size:0.78rem;font-weight:600"><i class="fa fa-circle-check me-1"></i>Complet</span>
                     <?php else: ?>
+                    <?php
+                        $errCount  = count($comp['errors']);
+                        $warnCount = count($comp['warnings']);
+                        $tipParts  = [];
+                        foreach ($comp['errors']   as $e) $tipParts[] = '⛔ '.$e['label'];
+                        foreach ($comp['warnings']  as $w) $tipParts[] = '⚠ '.$w['label'];
+                        $tipColor  = $errCount > 0 ? '#ef4444' : '#f59e0b';
+                        $tipIcon   = $errCount > 0 ? 'fa-circle-xmark' : 'fa-triangle-exclamation';
+                        $tipLabel  = $errCount > 0
+                            ? $errCount.' erreur'.($errCount>1?'s':'').($warnCount?" + $warnCount alerte".($warnCount>1?'s':''):'')
+                            : $warnCount.' alerte'.($warnCount>1?'s':'');
+                    ?>
                     <a href="view.php?id=<?= $a['id'] ?>#alerte-dossier"
-                       style="color:#f59e0b;font-size:0.78rem;font-weight:600;text-decoration:none"
-                       title="<?= h(implode(', ', array_merge($comp['champs'], $comp['docs']))) ?>">
-                        <i class="fa fa-triangle-exclamation me-1"></i><?= $comp['count'] ?> manquant<?= $comp['count']>1?'s':'' ?>
+                       style="color:<?= $tipColor ?>;font-size:0.78rem;font-weight:600;text-decoration:none"
+                       title="<?= h(implode(' | ', $tipParts)) ?>">
+                        <i class="fa <?= $tipIcon ?> me-1"></i><?= h($tipLabel) ?>
                     </a>
                     <?php endif; ?>
                 </td>

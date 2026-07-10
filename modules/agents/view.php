@@ -129,36 +129,64 @@ if (canDo('agents','delete')) {
 ?>
 
 <?php if (!$completion['ok']): ?>
-<div id="alerte-dossier" class="alert mb-3 p-3" style="background:rgba(245,158,11,0.08);border:1.5px solid #f59e0b;border-radius:12px;color:#92400e">
-    <div class="d-flex align-items-start gap-2">
-        <i class="fa fa-triangle-exclamation mt-1" style="color:#f59e0b;font-size:1.1rem;flex-shrink:0"></i>
-        <div>
-            <div style="font-weight:700;font-size:0.92rem;margin-bottom:4px">
-                Dossier incomplet — <?= $completion['count'] ?> élément<?= $completion['count']>1?'s':'' ?> manquant<?= $completion['count']>1?'s':'' ?>
-            </div>
-            <?php if ($completion['champs']): ?>
-            <div style="font-size:0.82rem;margin-bottom:2px">
-                <strong>Informations :</strong>
-                <?php foreach ($completion['champs'] as $c): ?>
-                <span style="display:inline-block;background:rgba(245,158,11,0.15);padding:1px 7px;border-radius:10px;margin:1px;font-size:0.78rem"><?= h($c) ?></span>
+<div id="alerte-dossier" class="mb-3">
+    <?php if ($completion['errors']): ?>
+    <div class="alert p-3 mb-2" style="background:rgba(239,68,68,0.07);border:1.5px solid #ef4444;border-radius:12px;color:#7f1d1d">
+        <div class="d-flex align-items-start gap-2">
+            <i class="fa fa-circle-xmark mt-1" style="color:#ef4444;font-size:1.1rem;flex-shrink:0"></i>
+            <div class="flex-grow-1">
+                <div style="font-weight:700;font-size:0.92rem;margin-bottom:6px">
+                    <?= count($completion['errors']) ?> élément<?= count($completion['errors'])>1?'s':'' ?> bloquant<?= count($completion['errors'])>1?'s':'' ?> manquant<?= count($completion['errors'])>1?'s':'' ?>
+                </div>
+                <?php
+                $bycat = [];
+                foreach ($completion['errors'] as $e) { $bycat[$e['cat']][] = $e; }
+                foreach ($bycat as $cat => $items):
+                ?>
+                <div style="font-size:0.82rem;margin-bottom:4px">
+                    <strong><?= h($cat) ?> :</strong>
+                    <?php foreach ($items as $e): ?>
+                    <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:10px;margin:2px;font-size:0.78rem">
+                        <i class="fa <?= h($e['icon']) ?>" style="font-size:0.7rem"></i><?= h($e['label']) ?>
+                    </span>
+                    <?php endforeach; ?>
+                </div>
                 <?php endforeach; ?>
             </div>
-            <?php endif; ?>
-            <?php if ($completion['docs']): ?>
-            <div style="font-size:0.82rem">
-                <strong>Documents :</strong>
-                <?php foreach ($completion['docs'] as $d): ?>
-                <span style="display:inline-block;background:rgba(245,158,11,0.15);padding:1px 7px;border-radius:10px;margin:1px;font-size:0.78rem"><?= h($d) ?></span>
-                <?php endforeach; ?>
-            </div>
+            <?php if (canDo('agents','edit')): ?>
+            <a href="edit.php?id=<?= $id ?>" class="btn btn-sm ms-auto" style="white-space:nowrap;background:rgba(239,68,68,0.1);color:#7f1d1d;border:1px solid #ef4444;border-radius:8px;font-size:0.8rem;padding:4px 12px">
+                <i class="fa fa-pen me-1"></i>Compléter
+            </a>
             <?php endif; ?>
         </div>
-        <?php if (canDo('agents','edit')): ?>
-        <a href="edit.php?id=<?= $id ?>" class="btn btn-sm ms-auto" style="white-space:nowrap;background:rgba(245,158,11,0.15);color:#92400e;border:1px solid #f59e0b;border-radius:8px;font-size:0.8rem;padding:4px 12px">
-            <i class="fa fa-pen me-1"></i>Compléter
-        </a>
-        <?php endif; ?>
     </div>
+    <?php endif; ?>
+    <?php if ($completion['warnings']): ?>
+    <div class="alert p-3" style="background:rgba(245,158,11,0.07);border:1.5px solid #f59e0b;border-radius:12px;color:#92400e">
+        <div class="d-flex align-items-start gap-2">
+            <i class="fa fa-triangle-exclamation mt-1" style="color:#f59e0b;font-size:1.1rem;flex-shrink:0"></i>
+            <div class="flex-grow-1">
+                <div style="font-weight:700;font-size:0.92rem;margin-bottom:6px">
+                    <?= count($completion['warnings']) ?> point<?= count($completion['warnings'])>1?'s':'' ?> à surveiller
+                </div>
+                <?php
+                $bycatW = [];
+                foreach ($completion['warnings'] as $w) { $bycatW[$w['cat']][] = $w; }
+                foreach ($bycatW as $cat => $items):
+                ?>
+                <div style="font-size:0.82rem;margin-bottom:4px">
+                    <strong><?= h($cat) ?> :</strong>
+                    <?php foreach ($items as $w): ?>
+                    <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,158,11,0.13);padding:2px 8px;border-radius:10px;margin:2px;font-size:0.78rem">
+                        <i class="fa <?= h($w['icon']) ?>" style="font-size:0.7rem"></i><?= h($w['label']) ?>
+                    </span>
+                    <?php endforeach; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 <?php endif; ?>
 

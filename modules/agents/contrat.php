@@ -571,9 +571,11 @@ $reqContrat = [
 foreach ($reqContrat as $key => $label) {
     if (empty($a[$key])) $controleContrat[] = $label;
 }
-// Vérif CNAPS expirée ou absente
-if (!empty($a['date_expiration_cnaps']) && strtotime($a['date_expiration_cnaps']) < time()) {
-    $controleContrat[] = 'Autorisation CNAPS expirée ('.date('d/m/Y', strtotime($a['date_expiration_cnaps'])).')';
+// Vérif CNAPS expiration
+if (empty($a['date_expiration_cnaps'])) {
+    $controleContrat[] = 'Date d\'expiration CNAPS manquante';
+} elseif (strtotime($a['date_expiration_cnaps']) < time()) {
+    $controleContrat[] = 'Autorisation CNAPS expirée le '.date('d/m/Y', strtotime($a['date_expiration_cnaps']));
 }
 // Vérif dates contrat
 if (empty($defaults['date_debut'])) $controleContrat[] = 'Date de début du contrat';
