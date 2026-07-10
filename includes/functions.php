@@ -573,23 +573,28 @@ function agentCompletion(array $a, array $docTypes, array $documents = []): arra
     $nat = strtolower(trim($a['nationalite'] ?? ''));
     $isFrancais = ($nat === '' || str_contains($nat, 'fran'));
 
-    $checkDocExpiry = function(string $type, string $label, string $icon) use (&$errors, &$warnings, $docTypes, $expByType): void {
-        if (!in_array($type, $docTypes)) {
-            $errors[] = ['label'=>$label.' manquant(e)', 'icon'=>$icon, 'cat'=>'Documents'];
-        } elseif (isset($expByType[$type])) {
-            $exp = strtotime($expByType[$type]);
+    if ($isFrancais) {
+        if (!in_array('piece_identite', $docTypes)) {
+            $errors[] = ['label' => "Carte d'identité manquante", 'icon' => 'fa-id-card', 'cat' => 'Documents'];
+        } elseif (isset($expByType['piece_identite'])) {
+            $exp = strtotime($expByType['piece_identite']);
             if ($exp < time()) {
-                $errors[] = ['label'=>$label.' expiré(e) le '.date('d/m/Y',$exp), 'icon'=>$icon, 'cat'=>'Documents'];
+                $errors[]   = ['label' => "Carte d'identité expirée le ".date('d/m/Y', $exp), 'icon' => 'fa-id-card', 'cat' => 'Documents'];
             } elseif ($exp < strtotime('+60 days')) {
-                $warnings[] = ['label'=>$label.' expire le '.date('d/m/Y',$exp).' ('.ceil(($exp-time())/86400).' j)', 'icon'=>$icon, 'cat'=>'Documents'];
+                $warnings[] = ['label' => "Carte d'identité expire le ".date('d/m/Y', $exp).' ('.ceil(($exp-time())/86400).' j)', 'icon' => 'fa-id-card', 'cat' => 'Documents'];
             }
         }
-    };
-
-    if ($isFrancais) {
-        $checkDocExpiry('piece_identite', "Carte d'identité", 'fa-id-card');
     } else {
-        $checkDocExpiry('titre_sejour', 'Carte de séjour', 'fa-passport');
+        if (!in_array('titre_sejour', $docTypes)) {
+            $errors[] = ['label' => 'Carte de séjour manquante', 'icon' => 'fa-passport', 'cat' => 'Documents'];
+        } elseif (isset($expByType['titre_sejour'])) {
+            $exp = strtotime($expByType['titre_sejour']);
+            if ($exp < time()) {
+                $errors[]   = ['label' => 'Carte de séjour expirée le '.date('d/m/Y', $exp), 'icon' => 'fa-passport', 'cat' => 'Documents'];
+            } elseif ($exp < strtotime('+60 days')) {
+                $warnings[] = ['label' => 'Carte de séjour expire le '.date('d/m/Y', $exp).' ('.ceil(($exp-time())/86400).' j)', 'icon' => 'fa-passport', 'cat' => 'Documents'];
+            }
+        }
     }
 
     // ── Autres documents contractuels ─────────────────────────────────────────
