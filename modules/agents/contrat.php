@@ -742,7 +742,11 @@ if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures
             </select>
           </div>
           <div class="col-6">
-            <label class="form-label">Poste</label>
+            <label class="form-label">Poste <small class="text-muted">(intitulé de la fonction)</small></label>
+            <input type="text" name="poste" id="posteTexte" class="form-control form-control-sm" value="<?= h($data['poste']) ?>" oninput="updatePreview()" placeholder="Ex : Agent de sécurité">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Catégorie / Niveau / Coefficient</label>
             <?php if ($postesGrille): ?>
             <select id="posteGrilleSelect" class="form-select form-select-sm mb-1" style="border-color:var(--ov-gold);background:rgba(201,168,76,0.04)">
               <option value="">— Sélectionner depuis la grille —</option>
@@ -750,16 +754,12 @@ if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures
               <option value="<?= h($pg['id']) ?>"
                       data-label="<?= h($pg['label']) ?>"
                       data-taux="<?= h($pg['taux_horaire']) ?>"
-                      <?= ($data['poste'] ?? '') === $pg['label'] ? 'selected' : '' ?>
+                      <?= ($data['categorie'] ?? '') === $pg['label'] ? 'selected' : '' ?>
               ><?= h($pg['label']) ?><?= $pg['coefficient'] ? ' (coef.'.$pg['coefficient'].')' : '' ?> — <?= number_format($pg['taux_horaire'],4) ?> €/h</option>
               <?php endforeach; ?>
             </select>
             <?php endif; ?>
-            <input type="text" name="poste" id="posteTexte" class="form-control form-control-sm" value="<?= h($data['poste']) ?>" oninput="updatePreview()" placeholder="Ou saisir librement">
-          </div>
-          <div class="col-12">
-            <label class="form-label">Catégorie / Niveau / Coefficient</label>
-            <input type="text" name="categorie" class="form-control form-control-sm" value="<?= h($data['categorie']) ?>" oninput="updatePreview()">
+            <input type="text" name="categorie" id="categorieTexte" class="form-control form-control-sm" value="<?= h($data['categorie']) ?>" oninput="updatePreview()" placeholder="Ex : Employé - Niveau II - Échelon 1 - Coefficient 130">
           </div>
           <div class="col-6">
             <label class="form-label">Date de début</label>
@@ -1167,15 +1167,15 @@ document.addEventListener('DOMContentLoaded', function() {
     check24hCoherence();
     initSigPad();
 
-    // Poste depuis la grille → auto-remplit libellé + salaire horaire
+    // Grille des postes → auto-remplit catégorie + salaire horaire
     var selPoste = document.getElementById('posteGrilleSelect');
     if (selPoste) {
         selPoste.addEventListener('change', function() {
             var opt = this.options[this.selectedIndex];
             if (!opt.value) return;
-            var posteField = document.getElementById('posteTexte');
-            var tauxField  = document.querySelector('[name="salaire_horaire"]');
-            if (posteField) { posteField.value = opt.dataset.label || ''; updatePreview(); }
+            var catField  = document.getElementById('categorieTexte');
+            var tauxField = document.querySelector('[name="salaire_horaire"]');
+            if (catField) { catField.value = opt.dataset.label || ''; updatePreview(); }
             if (tauxField && opt.dataset.taux) {
                 tauxField.value = parseFloat(opt.dataset.taux).toFixed(2);
                 tauxField.style.borderColor = 'var(--ov-gold)';
