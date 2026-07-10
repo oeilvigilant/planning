@@ -617,6 +617,13 @@ function agentCompletion(array $a, array $docTypes, array $documents = [], array
     }
     if (!in_array('attestation_domicile', $docTypes)) {
         $add(['label'=>'Justificatif de domicile manquant', 'icon'=>'fa-house', 'cat'=>'Documents', 'key'=>'doc_domicile'], 'warning');
+    } elseif (isset($expByType['attestation_domicile'])) {
+        $exp = strtotime($expByType['attestation_domicile']);
+        if ($exp < time()) {
+            $add(['label'=>'Justificatif de domicile expiré le '.date('d/m/Y',$exp), 'icon'=>'fa-house', 'cat'=>'Documents', 'key'=>'doc_domicile_exp'], 'warning');
+        } elseif ($exp < strtotime('+60 days')) {
+            $add(['label'=>'Justificatif de domicile expire le '.date('d/m/Y',$exp).' ('.ceil(($exp-time())/86400).' j)', 'icon'=>'fa-house', 'cat'=>'Documents', 'key'=>'doc_domicile_soon'], 'warning');
+        }
     }
     if (!in_array('carte_vitale', $docTypes)) {
         $add(['label'=>'Carte vitale manquante', 'icon'=>'fa-heart-pulse', 'cat'=>'Documents', 'key'=>'doc_vitale'], 'warning');
