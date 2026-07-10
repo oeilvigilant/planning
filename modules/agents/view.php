@@ -68,6 +68,34 @@ if (($_POST['action'] ?? '') === 'upload_doc') {
     header('Location: view.php?id='.$id.'#documents'); exit;
 }
 
+// ── Modifier type / date expiration d'un document existant (sans re-upload) ──
+if (($_POST['action'] ?? '') === 'update_doc_meta') {
+    requirePerm('agents','edit');
+    $docId   = (int)($_POST['doc_id'] ?? 0);
+    $newType = $_POST['type_document'] ?? '';
+    $dateExp = trim($_POST['date_expiration'] ?? '');
+    $validTypes = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','rib','contrat','autre'];
+    if ($docId && in_array($newType, $validTypes)) {
+        // Si changement de type : vérifier qu'il n'y a pas déjà un doc de ce type (sauf 'autre')
+        if ($newType !== 'autre') {
+            $conflict = $db->prepare("SELECT id FROM agent_documents WHERE agent_id=? AND type_document=? AND id!=?");
+            $conflict->execute([$id, $newType, $docId]);
+            if ($row = $conflict->fetch()) {
+                // Supprimer l'ancien doublon
+                $old = $db->prepare("SELECT chemin FROM agent_documents WHERE id=?");
+                $old->execute([$row['id']]);
+                $o = $old->fetchColumn();
+                if ($o) @unlink(UPLOAD_PATH.'/'.$o);
+                $db->prepare("DELETE FROM agent_documents WHERE id=?")->execute([$row['id']]);
+            }
+        }
+        $db->prepare("UPDATE agent_documents SET type_document=?, date_expiration=? WHERE id=? AND agent_id=?")
+           ->execute([$newType, $dateExp ?: null, $docId, $id]);
+        flash('success','Document mis à jour.');
+    }
+    header('Location: view.php?id='.$id.'#documents'); exit;
+}
+
 // Supprimer document — doit se faire avant header.php
 if ($_GET['del_doc'] ?? false) {
     requirePerm('agents','edit');
@@ -362,7 +390,8 @@ if (canDo('agents','delete')) {
             elseif ($expTs < strtotime('+60 days'))    { $expCls = 'text-warning fw-bold'; $expTxt .= ' ('.ceil(($expTs-time())/86400).' j)'; }
         }
         $hasExpiry = in_array($dtype, $docsWithExpiry);
-        $colId     = 'replace-'.$doc['id'];
+        $colMeta    = 'meta-'.$doc['id'];
+        $colReplace = 'replace-'.$doc['id'];
         ?>
         <div>
           <div class="d-flex align-items-center gap-2 px-3 py-2" style="border-bottom:1px solid #f0f2f5;font-size:0.82rem">
@@ -372,19 +401,49 @@ if (canDo('agents','delete')) {
               <div style="font-size:0.72rem;color:#9ca3af"><?= h($dsub) ?></div>
               <?php if ($expTxt): ?>
               <div style="font-size:0.72rem" class="<?= $expCls ?>"><i class="fa fa-calendar-days me-1"></i>Exp : <?= h($expTxt) ?></div>
+              <?php elseif ($hasExpiry): ?>
+              <div style="font-size:0.72rem;color:#f59e0b"><i class="fa fa-calendar-xmark me-1"></i>Date d'expiration non renseignée</div>
               <?php endif; ?>
             </div>
             <a href="<?= UPLOAD_URL ?>/<?= h($doc['chemin']) ?>" target="_blank" class="btn-sm-icon view" title="Voir/télécharger"><i class="fa fa-eye"></i></a>
             <?php if (canDo('agents','edit')): ?>
+            <button type="button" class="btn-sm-icon" style="background:rgba(99,102,241,0.1);color:#4f46e5;border:none;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer"
+                    data-bs-toggle="collapse" data-bs-target="#<?= $colMeta ?>" title="Modifier le type / la date d'expiration">
+              <i class="fa fa-pen" style="font-size:0.7rem"></i>
+            </button>
             <button type="button" class="btn-sm-icon" style="background:rgba(245,158,11,0.1);color:#92400e;border:none;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer"
-                    data-bs-toggle="collapse" data-bs-target="#<?= $colId ?>" title="Remplacer ce document">
+                    data-bs-toggle="collapse" data-bs-target="#<?= $colReplace ?>" title="Remplacer le fichier">
               <i class="fa fa-arrow-up-from-bracket" style="font-size:0.7rem"></i>
             </button>
             <a href="view.php?id=<?= $id ?>&del_doc=<?= $doc['id'] ?>" class="btn-sm-icon delete" title="Supprimer" data-confirm="Supprimer ce document ?"><i class="fa fa-trash"></i></a>
             <?php endif; ?>
           </div>
           <?php if (canDo('agents','edit')): ?>
-          <div class="collapse" id="<?= $colId ?>">
+          <!-- Modifier type / date expiration (sans re-upload) -->
+          <div class="collapse" id="<?= $colMeta ?>">
+            <form method="POST" class="px-3 py-2 d-flex align-items-end gap-2 flex-wrap" style="background:#eef2ff;border-bottom:1px solid #c7d2fe">
+              <input type="hidden" name="action" value="update_doc_meta">
+              <input type="hidden" name="doc_id" value="<?= $doc['id'] ?>">
+              <div>
+                <label class="form-label mb-1" style="font-size:0.72rem;font-weight:600">Type de document</label>
+                <select name="type_document" class="form-select form-select-sm" style="width:180px">
+                  <?php foreach ($docsLabels as $val => [$lbl2, $ico2]): ?>
+                  <option value="<?= $val ?>" <?= $val===$dtype?'selected':'' ?>><?= h($lbl2) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div>
+                <label class="form-label mb-1" style="font-size:0.72rem;font-weight:600">Date d'expiration</label>
+                <input type="date" name="date_expiration" class="form-control form-control-sm" value="<?= h($exp ?? '') ?>" style="width:150px">
+              </div>
+              <button type="submit" class="btn btn-sm" style="background:#4f46e5;color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:0.78rem">
+                <i class="fa fa-check me-1"></i>Enregistrer
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#<?= $colMeta ?>" style="font-size:0.78rem">Annuler</button>
+            </form>
+          </div>
+          <!-- Remplacer le fichier -->
+          <div class="collapse" id="<?= $colReplace ?>">
             <form method="POST" enctype="multipart/form-data" class="px-3 py-2 d-flex align-items-end gap-2 flex-wrap" style="background:#fff8ec;border-bottom:1px solid #fde68a">
               <input type="hidden" name="action" value="upload_doc">
               <input type="hidden" name="type_document" value="<?= h($dtype) ?>">
@@ -407,7 +466,7 @@ if (canDo('agents','delete')) {
               <button type="submit" class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:0.78rem">
                 <i class="fa fa-upload me-1"></i>Remplacer
               </button>
-              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#<?= $colId ?>" style="font-size:0.78rem">Annuler</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#<?= $colReplace ?>" style="font-size:0.78rem">Annuler</button>
             </form>
           </div>
           <?php endif; ?>
