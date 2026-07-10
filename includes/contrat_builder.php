@@ -234,8 +234,8 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
 <div class="art">
   <div class="art-title">ARTICLE N° 05 — Rémunération</div>
   <div class="art-body">
-    Le salarié signataire percevra un salaire <?= $e(strtolower($d['type_remuneration']??'brut')) ?> horaire de
-    <strong class="highlight"><?= $e($d['salaire_horaire']) ?> €</strong> par heure effective de travail, supérieur au minimum conventionnel applicable au coefficient <?= $e(preg_match('/\d+/', $d['categorie']??'', $m) ? $m[0] : '140') ?> de la CCN n°1351.<br>
+    Le salarié signataire percevra un salaire <?= $e(($d['type_remuneration']??'Brute')==='Nette' ? 'net' : 'brut') ?> horaire de
+    <strong class="highlight"><?= $e($d['salaire_horaire']) ?> €</strong> par heure effective de travail, au moins égal au minimum conventionnel applicable au coefficient <?= $e(preg_match('/[Cc]oefficient\s*(\d+)/', $d['categorie']??'', $m) ? $m[1] : (preg_match('/(\d{3,})/', $d['categorie']??'', $m2) ? $m2[1] : '140')) ?> de la CCN n°1351.<br>
     Majorations applicables : heures de nuit <strong><?= $e($d['majoration_nuit']) ?>%</strong>, dimanche <strong><?= $e($d['majoration_dim']) ?>%</strong>, jours fériés <strong><?= $e($d['majoration_ferie']) ?>%</strong>.<br>
     <?php if ($typeCdd && !$isCddUsage): ?>
     Conformément à l'article L1243-8 du Code du travail, une <strong>prime de précarité de 10%</strong> de la rémunération brute totale sera versée en fin de contrat. Cette indemnité ne sera pas due en cas de requalification en CDI, de faute grave ou de force majeure (Art L1243-10 CT).
