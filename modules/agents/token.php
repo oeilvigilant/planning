@@ -114,20 +114,33 @@ function buildEmailBody(array $a, string $tokenUrl, array $completion): string {
         </button>
       </form>
 
-      <?php if ($a['email'] && $tokenUrl): ?>
+      <?php if ($tokenUrl): ?>
       <?php
         $emailSubject = 'Mise à jour de votre dossier — Oeil Vigilant';
         $emailBody    = buildEmailBody($a, $tokenUrl, $completion);
-        $mailtoUrl    = 'mailto:'.rawurlencode($a['email']).'?subject='.rawurlencode($emailSubject).'&body='.rawurlencode($emailBody);
       ?>
       <div class="mt-3">
-        <a href="<?= h($mailtoUrl) ?>" class="btn btn-ov-secondary btn-sm w-100">
+        <?php if ($a['email']): ?>
+        <?php $mailtoUrl = 'mailto:'.rawurlencode($a['email']).'?subject='.rawurlencode($emailSubject).'&body='.rawurlencode($emailBody); ?>
+        <a href="<?= h($mailtoUrl) ?>" class="btn btn-ov-secondary btn-sm w-100 mb-2">
           <i class="fa fa-envelope me-1"></i>Envoyer par email à <?= h($a['email']) ?>
         </a>
-        <!-- Prévisualisation du message -->
-        <div class="mt-3 p-3 rounded" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.78rem;white-space:pre-wrap;font-family:monospace;color:#374151;max-height:260px;overflow-y:auto">
-<?= h($emailBody) ?>
+        <?php else: ?>
+        <div class="alert py-2 px-3 mb-2" style="background:rgba(245,158,11,0.08);border:1px solid #f59e0b;border-radius:8px;font-size:0.82rem;color:#92400e">
+          <i class="fa fa-triangle-exclamation me-1"></i>Aucun email renseigné pour cet agent —
+          <a href="edit.php?id=<?= $id ?>" style="color:#92400e;font-weight:600">ajouter un email</a>
+          ou copier le message ci-dessous pour l'envoyer manuellement.
         </div>
+        <?php endif; ?>
+        <!-- Message complet -->
+        <div style="font-size:0.75rem;font-weight:600;color:#6b7280;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">
+          Message à envoyer
+          <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('emailBodyTxt').innerText);this.innerHTML='<i class=\'fa fa-check\'></i> Copié!';setTimeout(()=>this.innerHTML='<i class=\'fa fa-copy\'></i> Copier',2000)"
+                  class="btn btn-sm ms-2" style="font-size:0.7rem;padding:1px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;color:#6b7280">
+            <i class="fa fa-copy"></i> Copier
+          </button>
+        </div>
+        <div id="emailBodyTxt" class="p-3 rounded" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.78rem;white-space:pre-wrap;font-family:monospace;color:#374151;max-height:280px;overflow-y:auto"><?= h($emailBody) ?></div>
       </div>
       <?php endif; ?>
 
