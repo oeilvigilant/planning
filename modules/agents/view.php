@@ -20,15 +20,15 @@ if (($_POST['action'] ?? '') === 'upload_dpae') {
     $contratId = (int)($_POST['contrat_id'] ?? 0);
     if ($contratId && !empty($_FILES['dpae_file']['tmp_name'])) {
         $res = uploadFichier($_FILES['dpae_file'], 'documents', ['pdf','jpg','jpeg','png']);
-        if ($res['ok']) {
+        if ($res !== false) {
             // Supprimer l'ancien
             $oldRow = getDB()->prepare("SELECT dpae_chemin FROM contrats WHERE id=? AND agent_id=?");
             $oldRow->execute([$contratId, $id]);
             $old = $oldRow->fetchColumn();
             if ($old) @unlink(UPLOAD_PATH.'/'.$old);
-            getDB()->prepare("UPDATE contrats SET dpae_chemin=? WHERE id=? AND agent_id=?")->execute([$res['chemin'], $contratId, $id]);
+            getDB()->prepare("UPDATE contrats SET dpae_chemin=? WHERE id=? AND agent_id=?")->execute([$res, $contratId, $id]);
             flash('success','DPAE uploadée.');
-        } else { flash('danger','Erreur upload : '.$res['error']); }
+        } else { flash('danger','Fichier invalide ou trop lourd (max 10 Mo, formats : pdf, jpg, png).'); }
     }
     header('Location: view.php?id='.$id); exit;
 }
