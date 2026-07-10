@@ -34,7 +34,9 @@ if ($filtre === 'inactif') { $where[] = 'a.actif = 0'; }
 
 $sql = "SELECT a.*,
         (SELECT COUNT(*) FROM agent_documents d WHERE d.agent_id = a.id) as nb_docs,
-        (SELECT GROUP_CONCAT(d2.type_document) FROM agent_documents d2 WHERE d2.agent_id = a.id) as doc_types
+        (SELECT GROUP_CONCAT(d2.type_document) FROM agent_documents d2 WHERE d2.agent_id = a.id) as doc_types,
+        (SELECT GROUP_CONCAT(CONCAT(d3.type_document,'|',IFNULL(d3.date_expiration,'')) SEPARATOR ';;')
+         FROM agent_documents d3 WHERE d3.agent_id = a.id) as doc_expiries
         FROM agents a
         WHERE " . implode(' AND ', $where) . "
         ORDER BY a.nom, a.prenom";
@@ -46,9 +48,17 @@ $agents = $stmt->fetchAll();
 
 // Pré-calculer la complétude pour chaque agent
 foreach ($agents as &$ag) {
-    $types       = $ag['doc_types'] ? explode(',', $ag['doc_types']) : [];
-    $ignored     = json_decode($ag['alertes_ignorees'] ?? '[]', true) ?: [];
-    $ag['_completion'] = agentCompletion($ag, $types, [], $ignored);
+    $types   = $ag['doc_types'] ? explode(',', $ag['doc_types']) : [];
+    $ignored = json_decode($ag['alertes_ignorees'] ?? '[]', true) ?: [];
+    // Reconstruire les lignes documents (type + date_expiration) depuis la chaîne concaténée
+    $docs = [];
+    if (!empty($ag['doc_expiries'])) {
+        foreach (explode(';;', $ag['doc_expiries']) as $pair) {
+            $parts = explode('|', $pair, 2);
+            $docs[] = ['type_document' => $parts[0], 'date_expiration' => $parts[1] !== '' ? $parts[1] : null];
+        }
+    }
+    $ag['_completion'] = agentCompletion($ag, $types, $docs, $ignored);
 }
 unset($ag);
 
