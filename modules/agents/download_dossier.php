@@ -230,6 +230,15 @@ if ($zip->open($zipTmp, ZipArchive::OVERWRITE) !== true) {
 $zip->addFromString('Contrat_'         . $nomBase . '.pdf', $contratPdf);
 $zip->addFromString('Fiche_comptable_' . $nomBase . '.pdf', $fichePdf);
 
+// DPAE du contrat actif
+if (!empty($c['dpae_chemin'])) {
+    $dpaePath = str_replace(['\\','/'], DIRECTORY_SEPARATOR, UPLOAD_PATH.'/'.$c['dpae_chemin']);
+    if (file_exists($dpaePath)) {
+        $ext = strtolower(pathinfo($c['dpae_chemin'], PATHINFO_EXTENSION));
+        $zip->addFromString('DPAE_'.$nomBase.'.'.$ext, file_get_contents($dpaePath));
+    }
+}
+
 $docsLabels = [
     'piece_identite'       => 'Piece_identite',
     'titre_sejour'         => 'Titre_sejour',

@@ -25,13 +25,21 @@ if ($filtre === 'actif')   { $where[] = 'a.actif = 1'; }
 if ($filtre === 'inactif') { $where[] = 'a.actif = 0'; }
 
 $sql = "SELECT a.*,
-        (SELECT COUNT(*) FROM agent_documents d WHERE d.agent_id = a.id) as nb_docs
+        (SELECT COUNT(*) FROM agent_documents d WHERE d.agent_id = a.id) as nb_docs,
+        (SELECT GROUP_CONCAT(d2.type_document) FROM agent_documents d2 WHERE d2.agent_id = a.id) as doc_types
         FROM agents a
         WHERE " . implode(' AND ', $where) . "
         ORDER BY a.nom, a.prenom";
 $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $agents = $stmt->fetchAll();
+
+// Pré-calculer la complétude pour chaque agent
+foreach ($agents as &$ag) {
+    $types = $ag['doc_types'] ? explode(',', $ag['doc_types']) : [];
+    $ag['_completion'] = agentCompletion($ag, $types);
+}
+unset($ag);
 
 $total   = $db->query("SELECT COUNT(*) FROM agents")->fetchColumn();
 $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn();
@@ -92,6 +100,7 @@ $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn(
                     <th>N° CNAPS</th>
                     <th>Exp. CNAPS</th>
                     <th>Docs</th>
+                    <th>Dossier</th>
                     <th>Statut</th>
                     <th style="width:110px">Actions</th>
                 </tr>
@@ -135,6 +144,18 @@ $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn(
                     <span class="badge-ov" style="background:rgba(99,102,241,0.1);color:#4f46e5;padding:2px 8px;border-radius:20px;font-size:0.72rem">
                         <i class="fa fa-paperclip"></i> <?= $a['nb_docs'] ?>
                     </span>
+                </td>
+                <td>
+                    <?php $comp = $a['_completion']; ?>
+                    <?php if ($comp['ok']): ?>
+                    <span style="color:#16a34a;font-size:0.78rem;font-weight:600"><i class="fa fa-circle-check me-1"></i>Complet</span>
+                    <?php else: ?>
+                    <a href="view.php?id=<?= $a['id'] ?>#alerte-dossier"
+                       style="color:#f59e0b;font-size:0.78rem;font-weight:600;text-decoration:none"
+                       title="<?= h(implode(', ', array_merge($comp['champs'], $comp['docs']))) ?>">
+                        <i class="fa fa-triangle-exclamation me-1"></i><?= $comp['count'] ?> manquant<?= $comp['count']>1?'s':'' ?>
+                    </a>
+                    <?php endif; ?>
                 </td>
                 <td>
                     <span class="badge-ov badge-<?= $a['actif'] ? 'actif' : 'inactif' ?>">

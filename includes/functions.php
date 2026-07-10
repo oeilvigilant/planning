@@ -522,3 +522,42 @@ function getNomMois(int $mois): string {
              'Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
     return $noms[$mois] ?? '';
 }
+
+/**
+ * Vérifie la complétude du dossier d'un agent.
+ * @param array $a         Ligne agents (SELECT *)
+ * @param array $docTypes  Types de documents uploadés (ex: ['rib','carte_vitale'])
+ * @return array ['ok'=>bool, 'count'=>int, 'champs'=>[], 'docs'=>[]]
+ */
+function agentCompletion(array $a, array $docTypes): array {
+    $champsReq = [
+        'nom'                  => 'Nom',
+        'prenom'               => 'Prénom',
+        'date_naissance'       => 'Date de naissance',
+        'lieu_naissance'       => 'Lieu de naissance',
+        'num_secu'             => 'N° sécurité sociale',
+        'nationalite'          => 'Nationalité',
+        'adresse'              => 'Adresse',
+        'cp'                   => 'Code postal',
+        'ville'                => 'Ville',
+        'num_autorisation_cnaps' => 'N° autorisation CNAPS',
+        'date_expiration_cnaps'  => 'Date expiration CNAPS',
+        'remuneration'         => 'Rémunération',
+    ];
+    $docsReq = [
+        'piece_identite'   => "Pièce d'identité",
+        'carte_vitale'     => 'Carte vitale',
+        'attestation_cnaps'=> 'Attestation CNAPS',
+        'rib'              => 'RIB',
+    ];
+    $missingChamps = [];
+    foreach ($champsReq as $key => $label) {
+        if (empty($a[$key])) $missingChamps[] = $label;
+    }
+    $missingDocs = [];
+    foreach ($docsReq as $type => $label) {
+        if (!in_array($type, $docTypes)) $missingDocs[] = $label;
+    }
+    $count = count($missingChamps) + count($missingDocs);
+    return ['ok' => $count === 0, 'count' => $count, 'champs' => $missingChamps, 'docs' => $missingDocs];
+}

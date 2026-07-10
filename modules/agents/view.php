@@ -8,6 +8,39 @@ $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: index.php'); exit; }
 
+// ── Migration DPAE par contrat ────────────────────────────────────────────────
+try { getDB()->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS dpae_chemin VARCHAR(255) NULL"); } catch(Exception $e){}
+
+// ── Upload DPAE pour un contrat ───────────────────────────────────────────────
+if (($_POST['action'] ?? '') === 'upload_dpae') {
+    requirePerm('agents','edit');
+    $contratId = (int)($_POST['contrat_id'] ?? 0);
+    if ($contratId && !empty($_FILES['dpae_file']['tmp_name'])) {
+        $res = uploadFichier($_FILES['dpae_file'], 'documents', ['pdf','jpg','jpeg','png']);
+        if ($res['ok']) {
+            // Supprimer l'ancien
+            $oldRow = getDB()->prepare("SELECT dpae_chemin FROM contrats WHERE id=? AND agent_id=?");
+            $oldRow->execute([$contratId, $id]);
+            $old = $oldRow->fetchColumn();
+            if ($old) @unlink(UPLOAD_PATH.'/'.$old);
+            getDB()->prepare("UPDATE contrats SET dpae_chemin=? WHERE id=? AND agent_id=?")->execute([$res['chemin'], $contratId, $id]);
+            flash('success','DPAE uploadée.');
+        } else { flash('danger','Erreur upload : '.$res['error']); }
+    }
+    header('Location: view.php?id='.$id); exit;
+}
+
+// ── Supprimer DPAE d'un contrat ───────────────────────────────────────────────
+if (($_GET['del_dpae'] ?? false)) {
+    requirePerm('agents','edit');
+    $contratId = (int)$_GET['del_dpae'];
+    $row = getDB()->prepare("SELECT dpae_chemin FROM contrats WHERE id=? AND agent_id=?");
+    $row->execute([$contratId, $id]);
+    $chemin = $row->fetchColumn();
+    if ($chemin) { @unlink(UPLOAD_PATH.'/'.$chemin); getDB()->prepare("UPDATE contrats SET dpae_chemin=NULL WHERE id=?")->execute([$contratId]); flash('success','DPAE supprimée.'); }
+    header('Location: view.php?id='.$id); exit;
+}
+
 // Supprimer document — doit se faire avant header.php
 if ($_GET['del_doc'] ?? false) {
     requirePerm('agents','edit');
@@ -36,6 +69,9 @@ if (!$a) { flash('danger','Agent introuvable'); header('Location: index.php'); e
 $docs = $db->prepare("SELECT * FROM agent_documents WHERE agent_id = ? ORDER BY type_document");
 $docs->execute([$id]);
 $documents = $docs->fetchAll();
+
+$docTypes   = array_column($documents, 'type_document');
+$completion = agentCompletion($a, $docTypes);
 
 // Charger tous les contrats de l'agent
 $allContrats = [];
@@ -91,6 +127,40 @@ if (canDo('agents','delete')) {
     $s2 = $db->prepare("SELECT COUNT(*) FROM agent_documents WHERE agent_id=?"); $s2->execute([$id]); $nbDocs = (int)$s2->fetchColumn();
 }
 ?>
+
+<?php if (!$completion['ok']): ?>
+<div id="alerte-dossier" class="alert mb-3 p-3" style="background:rgba(245,158,11,0.08);border:1.5px solid #f59e0b;border-radius:12px;color:#92400e">
+    <div class="d-flex align-items-start gap-2">
+        <i class="fa fa-triangle-exclamation mt-1" style="color:#f59e0b;font-size:1.1rem;flex-shrink:0"></i>
+        <div>
+            <div style="font-weight:700;font-size:0.92rem;margin-bottom:4px">
+                Dossier incomplet — <?= $completion['count'] ?> élément<?= $completion['count']>1?'s':'' ?> manquant<?= $completion['count']>1?'s':'' ?>
+            </div>
+            <?php if ($completion['champs']): ?>
+            <div style="font-size:0.82rem;margin-bottom:2px">
+                <strong>Informations :</strong>
+                <?php foreach ($completion['champs'] as $c): ?>
+                <span style="display:inline-block;background:rgba(245,158,11,0.15);padding:1px 7px;border-radius:10px;margin:1px;font-size:0.78rem"><?= h($c) ?></span>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+            <?php if ($completion['docs']): ?>
+            <div style="font-size:0.82rem">
+                <strong>Documents :</strong>
+                <?php foreach ($completion['docs'] as $d): ?>
+                <span style="display:inline-block;background:rgba(245,158,11,0.15);padding:1px 7px;border-radius:10px;margin:1px;font-size:0.78rem"><?= h($d) ?></span>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php if (canDo('agents','edit')): ?>
+        <a href="edit.php?id=<?= $id ?>" class="btn btn-sm ms-auto" style="white-space:nowrap;background:rgba(245,158,11,0.15);color:#92400e;border:1px solid #f59e0b;border-radius:8px;font-size:0.8rem;padding:4px 12px">
+            <i class="fa fa-pen me-1"></i>Compléter
+        </a>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="d-flex gap-2 mb-3 flex-wrap">
     <a href="index.php" class="btn btn-ov-secondary"><i class="fa fa-arrow-left me-1"></i>Retour</a>
@@ -249,27 +319,54 @@ if (canDo('agents','delete')) {
           $archive = $ct['statut'] === 'archive';
           $signed  = !empty($ct['signature']);
         ?>
-        <div class="d-flex align-items-center gap-2 px-3 py-2" style="border-bottom:1px solid #f0f2f5;<?= $archive ? 'opacity:0.6' : '' ?>">
-          <i class="fa fa-file-contract fa-fw text-muted" style="font-size:0.85rem"></i>
-          <div class="flex-grow-1" style="min-width:0">
-            <div style="font-size:0.85rem;font-weight:600;color:#1a2332">
-              <?= h($ct['type_contrat'] ?? 'CDD') ?>
-              <span class="text-muted fw-normal"><?= h($debut) ?> → <?= h($fin) ?></span>
+        <div style="border-bottom:1px solid #f0f2f5;<?= $archive ? 'opacity:0.65' : '' ?>">
+          <div class="d-flex align-items-center gap-2 px-3 py-2">
+            <i class="fa fa-file-contract fa-fw text-muted" style="font-size:0.85rem"></i>
+            <div class="flex-grow-1" style="min-width:0">
+              <div style="font-size:0.85rem;font-weight:600;color:#1a2332">
+                <?= h($ct['type_contrat'] ?? 'CDD') ?>
+                <span class="text-muted fw-normal"><?= h($debut) ?> → <?= h($fin) ?></span>
+              </div>
+              <div style="font-size:0.72rem;color:#9ca3af">
+                <?= $ct['total_heures_contrat'] ? h(number_format($ct['total_heures_contrat'],2)).'h' : '' ?>
+                <?= !empty($ct['remuneration']) ? ' · '.number_format($ct['remuneration'],2).' €/h' : '' ?>
+              </div>
             </div>
-            <div style="font-size:0.72rem;color:#9ca3af">
-              <?= $ct['total_heures_contrat'] ? h(number_format($ct['total_heures_contrat'],2)).'h' : '' ?>
-              <?= !empty($ct['remuneration']) ? ' · '.number_format($ct['remuneration'],2).' €/h' : '' ?>
+            <div class="d-flex align-items-center gap-1 flex-shrink-0">
+              <?php if ($signed): ?>
+                <span title="Signé" style="font-size:0.7rem;background:rgba(34,197,94,0.1);color:#16a34a;padding:2px 7px;border-radius:10px"><i class="fa fa-check me-1"></i>Signé</span>
+              <?php endif; ?>
+              <?php if ($archive): ?>
+                <span style="font-size:0.7rem;background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:10px">Archivé</span>
+              <?php endif; ?>
+              <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $ct['id'] ?>&dl=1" class="btn-sm-icon" title="Télécharger PDF" style="color:#2563eb"><i class="fa fa-download"></i></a>
+              <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $ct['id'] ?>" class="btn-sm-icon" title="Éditer" style="color:#6b7280"><i class="fa fa-pen"></i></a>
             </div>
           </div>
-          <div class="d-flex align-items-center gap-1 flex-shrink-0">
-            <?php if ($signed): ?>
-              <span title="Signé" style="font-size:0.7rem;background:rgba(34,197,94,0.1);color:#16a34a;padding:2px 7px;border-radius:10px"><i class="fa fa-check me-1"></i>Signé</span>
+          <!-- DPAE par contrat -->
+          <div class="px-3 pb-2 d-flex align-items-center gap-2" style="flex-wrap:wrap">
+            <span style="font-size:0.72rem;font-weight:600;color:#6b7280;white-space:nowrap"><i class="fa fa-file-signature me-1"></i>DPAE :</span>
+            <?php if (!empty($ct['dpae_chemin'])): ?>
+              <a href="<?= UPLOAD_URL ?>/<?= h($ct['dpae_chemin']) ?>" target="_blank"
+                 style="font-size:0.72rem;color:#16a34a;font-weight:600"><i class="fa fa-check-circle me-1"></i>Voir DPAE</a>
+              <?php if (canDo('agents','edit')): ?>
+              <a href="view.php?id=<?= $id ?>&del_dpae=<?= $ct['id'] ?>"
+                 onclick="return confirm('Supprimer cette DPAE ?')"
+                 style="font-size:0.7rem;color:#dc2626"><i class="fa fa-trash"></i></a>
+              <?php endif; ?>
+            <?php else: ?>
+              <span style="font-size:0.72rem;color:#f59e0b"><i class="fa fa-triangle-exclamation me-1"></i>Non uploadée</span>
             <?php endif; ?>
-            <?php if ($archive): ?>
-              <span style="font-size:0.7rem;background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:10px">Archivé</span>
+            <?php if (canDo('agents','edit')): ?>
+            <form method="POST" enctype="multipart/form-data" class="d-flex align-items-center gap-1">
+              <input type="hidden" name="action" value="upload_dpae">
+              <input type="hidden" name="contrat_id" value="<?= $ct['id'] ?>">
+              <input type="file" name="dpae_file" accept=".pdf,.jpg,.jpeg,.png"
+                     class="form-control form-control-sm"
+                     style="font-size:0.7rem;max-width:200px;padding:2px 6px;height:auto"
+                     onchange="this.form.submit()">
+            </form>
             <?php endif; ?>
-            <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $ct['id'] ?>&dl=1" class="btn-sm-icon" title="Télécharger PDF" style="color:#2563eb"><i class="fa fa-download"></i></a>
-            <a href="contrat.php?id=<?= $id ?>&contrat_id=<?= $ct['id'] ?>" class="btn-sm-icon" title="Éditer" style="color:#6b7280"><i class="fa fa-pen"></i></a>
           </div>
         </div>
         <?php endforeach; ?>

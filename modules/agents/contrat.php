@@ -74,6 +74,7 @@ try {
     $db->exec("ALTER TABLE signatures_log  ADD COLUMN IF NOT EXISTS contrat_id INT NULL");
     $db->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS horaires_vacation VARCHAR(100) NULL AFTER total_heures_contrat");
     $db->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS nom_evenement VARCHAR(255) NULL AFTER horaires_vacation");
+    $db->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS dpae_chemin VARCHAR(255) NULL AFTER nom_evenement");
     // Table contrats
     $db->exec("CREATE TABLE IF NOT EXISTS contrats (
         id                   INT AUTO_INCREMENT PRIMARY KEY,
@@ -550,6 +551,55 @@ function contratLabel(array $ct): string {
     return ($ct['type_contrat'] ?? 'CDD') . ' — ' . $debut . ' → ' . $fin;
 }
 ?>
+
+<?php
+// ── Validation champs nécessaires au contrat ───────────────────────────────
+$controleContrat = [];
+$reqContrat = [
+    'prenom'               => 'Prénom',
+    'nom'                  => 'Nom',
+    'date_naissance'       => 'Date de naissance',
+    'lieu_naissance'       => 'Lieu de naissance',
+    'num_secu'             => 'N° sécurité sociale',
+    'nationalite'          => 'Nationalité',
+    'adresse'              => 'Adresse',
+    'cp'                   => 'Code postal',
+    'ville'                => 'Ville',
+    'num_autorisation_cnaps' => 'N° autorisation CNAPS',
+    'remuneration'         => 'Rémunération horaire',
+];
+foreach ($reqContrat as $key => $label) {
+    if (empty($a[$key])) $controleContrat[] = $label;
+}
+// Vérif CNAPS expirée ou absente
+if (!empty($a['date_expiration_cnaps']) && strtotime($a['date_expiration_cnaps']) < time()) {
+    $controleContrat[] = 'Autorisation CNAPS expirée ('.date('d/m/Y', strtotime($a['date_expiration_cnaps'])).')';
+}
+// Vérif dates contrat
+if (empty($defaults['date_debut'])) $controleContrat[] = 'Date de début du contrat';
+if ($defaults['type_contrat'] !== 'CDI' && empty($defaults['date_fin'])) $controleContrat[] = 'Date de fin du contrat';
+if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures contrat';
+?>
+<?php if ($controleContrat): ?>
+<div class="alert mb-3 p-3" style="background:rgba(239,68,68,0.06);border:1.5px solid #f87171;border-radius:12px;color:#7f1d1d">
+    <div class="d-flex align-items-start gap-2">
+        <i class="fa fa-circle-exclamation mt-1" style="color:#ef4444;font-size:1.1rem;flex-shrink:0"></i>
+        <div>
+            <div style="font-weight:700;font-size:0.92rem;margin-bottom:6px">
+                Le contrat risque d'être incomplet — <?= count($controleContrat) ?> information<?= count($controleContrat)>1?'s':'' ?> manquante<?= count($controleContrat)>1?'s':'' ?>
+            </div>
+            <div class="d-flex flex-wrap gap-1">
+            <?php foreach ($controleContrat as $item): ?>
+            <span style="display:inline-block;background:rgba(239,68,68,0.1);color:#7f1d1d;padding:2px 9px;border-radius:10px;font-size:0.78rem;border:1px solid rgba(239,68,68,0.2)"><?= h($item) ?></span>
+            <?php endforeach; ?>
+            </div>
+        </div>
+        <a href="edit.php?id=<?= $id ?>" class="btn btn-sm ms-auto" style="white-space:nowrap;background:rgba(239,68,68,0.1);color:#7f1d1d;border:1px solid #f87171;border-radius:8px;font-size:0.8rem;padding:4px 12px;flex-shrink:0">
+            <i class="fa fa-pen me-1"></i>Compléter la fiche
+        </a>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- Barre de navigation contrats -->
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
