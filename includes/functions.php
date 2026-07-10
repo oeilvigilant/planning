@@ -525,14 +525,27 @@ function getNomMois(int $mois): string {
 
 /**
  * Vérifie la complétude contractuelle et légale d'un agent.
- * @param array $a         Ligne agents (SELECT *)
- * @param array $docTypes  Types de documents uploadés (ex: ['rib','carte_vitale'])
- * @param array $documents Lignes complètes agent_documents (pour vérifier les dates d'expiration)
- * @return array ['ok','errors','warnings','count','champs','docs']
+ * @param array $a           Ligne agents (SELECT *)
+ * @param array $docTypes    Types de documents uploadés
+ * @param array $documents   Lignes complètes agent_documents (pour les dates d'expiration)
+ * @param array $ignoredKeys Clés d'alertes ignorées (agents.alertes_ignorees JSON)
+ * @return array ['ok','errors','warnings','ignored','count','champs','docs']
  */
-function agentCompletion(array $a, array $docTypes, array $documents = []): array {
+function agentCompletion(array $a, array $docTypes, array $documents = [], array $ignoredKeys = []): array {
     $errors   = [];
     $warnings = [];
+    $ignored  = [];
+
+    // Helper : ajoute l'alerte dans la bonne liste selon si elle est ignorée ou non
+    $add = function(array $entry, string $bucket) use (&$errors, &$warnings, &$ignored, $ignoredKeys) {
+        if (in_array($entry['key'], $ignoredKeys)) {
+            $ignored[] = $entry;
+        } elseif ($bucket === 'error') {
+            $errors[] = $entry;
+        } else {
+            $warnings[] = $entry;
+        }
+    };
 
     // Index date_expiration par type de document
     $expByType = [];
@@ -551,21 +564,21 @@ function agentCompletion(array $a, array $docTypes, array $documents = []): arra
         'cp'            => 'Code postal',
         'ville'         => 'Ville',
     ] as $k => $lbl) {
-        if (empty($a[$k])) $errors[] = ['label'=>$lbl, 'icon'=>'fa-user', 'cat'=>'Identité'];
+        if (empty($a[$k])) $add(['label'=>$lbl, 'icon'=>'fa-user', 'cat'=>'Identité', 'key'=>'champ_'.$k], 'error');
     }
 
-    // ── CNAPS (obligatoire pour exercer) ─────────────────────────────────────
+    // ── CNAPS ────────────────────────────────────────────────────────────────
     if (empty($a['num_autorisation_cnaps'])) {
-        $errors[] = ['label'=>'N° autorisation CNAPS', 'icon'=>'fa-shield-halved', 'cat'=>'CNAPS'];
+        $add(['label'=>'N° autorisation CNAPS manquant', 'icon'=>'fa-shield-halved', 'cat'=>'CNAPS', 'key'=>'cnaps_num'], 'error');
     }
     if (empty($a['date_expiration_cnaps'])) {
-        $errors[] = ['label'=>'Date d\'expiration CNAPS manquante', 'icon'=>'fa-calendar-xmark', 'cat'=>'CNAPS'];
+        $add(['label'=>'Date d\'expiration CNAPS manquante', 'icon'=>'fa-calendar-xmark', 'cat'=>'CNAPS', 'key'=>'cnaps_date'], 'error');
     } else {
         $expTs = strtotime($a['date_expiration_cnaps']);
         if ($expTs < time()) {
-            $errors[] = ['label'=>'Autorisation CNAPS expirée le '.date('d/m/Y', $expTs), 'icon'=>'fa-circle-xmark', 'cat'=>'CNAPS'];
+            $add(['label'=>'Autorisation CNAPS expirée le '.date('d/m/Y', $expTs), 'icon'=>'fa-circle-xmark', 'cat'=>'CNAPS', 'key'=>'cnaps_expire'], 'error');
         } elseif ($expTs < strtotime('+60 days')) {
-            $warnings[] = ['label'=>'CNAPS expire le '.date('d/m/Y', $expTs).' ('.ceil(($expTs-time())/86400).' j)', 'icon'=>'fa-hourglass-half', 'cat'=>'CNAPS'];
+            $add(['label'=>'CNAPS expire le '.date('d/m/Y', $expTs).' ('.ceil(($expTs-time())/86400).' j)', 'icon'=>'fa-hourglass-half', 'cat'=>'CNAPS', 'key'=>'cnaps_bientot'], 'warning');
         }
     }
 
@@ -573,48 +586,45 @@ function agentCompletion(array $a, array $docTypes, array $documents = []): arra
     $nat = strtolower(trim($a['nationalite'] ?? ''));
 
     if ($nat === '') {
-        // Nationalité non renseignée : impossible de savoir quel document demander
-        $errors[] = ['label' => 'Nationalité non renseignée (détermine la pièce d\'identité requise)', 'icon' => 'fa-flag', 'cat' => 'Identité'];
+        $add(['label'=>'Nationalité non renseignée (détermine la pièce d\'identité requise)', 'icon'=>'fa-flag', 'cat'=>'Identité', 'key'=>'nat_manquante'], 'error');
     } elseif (str_contains($nat, 'fran')) {
-        // Français → carte d'identité
         if (!in_array('piece_identite', $docTypes)) {
-            $errors[] = ['label' => "Carte d'identité manquante", 'icon' => 'fa-id-card', 'cat' => 'Documents'];
+            $add(['label'=>"Carte d'identité manquante", 'icon'=>'fa-id-card', 'cat'=>'Documents', 'key'=>'doc_cni'], 'error');
         } elseif (isset($expByType['piece_identite'])) {
             $exp = strtotime($expByType['piece_identite']);
             if ($exp < time()) {
-                $errors[]   = ['label' => "Carte d'identité expirée le ".date('d/m/Y', $exp), 'icon' => 'fa-id-card', 'cat' => 'Documents'];
+                $add(['label'=>"Carte d'identité expirée le ".date('d/m/Y',$exp), 'icon'=>'fa-id-card', 'cat'=>'Documents', 'key'=>'doc_cni_exp'], 'error');
             } elseif ($exp < strtotime('+60 days')) {
-                $warnings[] = ['label' => "Carte d'identité expire le ".date('d/m/Y', $exp).' ('.ceil(($exp-time())/86400).' j)', 'icon' => 'fa-id-card', 'cat' => 'Documents'];
+                $add(['label'=>"Carte d'identité expire le ".date('d/m/Y',$exp).' ('.ceil(($exp-time())/86400).' j)', 'icon'=>'fa-id-card', 'cat'=>'Documents', 'key'=>'doc_cni_soon'], 'warning');
             }
         }
     } else {
-        // Étranger → carte de séjour
         if (!in_array('titre_sejour', $docTypes)) {
-            $errors[] = ['label' => 'Carte de séjour manquante', 'icon' => 'fa-passport', 'cat' => 'Documents'];
+            $add(['label'=>'Carte de séjour manquante', 'icon'=>'fa-passport', 'cat'=>'Documents', 'key'=>'doc_sejour'], 'error');
         } elseif (isset($expByType['titre_sejour'])) {
             $exp = strtotime($expByType['titre_sejour']);
             if ($exp < time()) {
-                $errors[]   = ['label' => 'Carte de séjour expirée le '.date('d/m/Y', $exp), 'icon' => 'fa-passport', 'cat' => 'Documents'];
+                $add(['label'=>'Carte de séjour expirée le '.date('d/m/Y',$exp), 'icon'=>'fa-passport', 'cat'=>'Documents', 'key'=>'doc_sejour_exp'], 'error');
             } elseif ($exp < strtotime('+60 days')) {
-                $warnings[] = ['label' => 'Carte de séjour expire le '.date('d/m/Y', $exp).' ('.ceil(($exp-time())/86400).' j)', 'icon' => 'fa-passport', 'cat' => 'Documents'];
+                $add(['label'=>'Carte de séjour expire le '.date('d/m/Y',$exp).' ('.ceil(($exp-time())/86400).' j)', 'icon'=>'fa-passport', 'cat'=>'Documents', 'key'=>'doc_sejour_soon'], 'warning');
             }
         }
     }
 
     // ── Autres documents contractuels ─────────────────────────────────────────
     if (!in_array('attestation_cnaps', $docTypes)) {
-        $errors[] = ['label'=>'Attestation CNAPS', 'icon'=>'fa-shield-halved', 'cat'=>'Documents'];
+        $add(['label'=>'Attestation CNAPS manquante', 'icon'=>'fa-shield-halved', 'cat'=>'Documents', 'key'=>'doc_cnaps'], 'error');
     }
     if (!in_array('carte_vitale', $docTypes)) {
-        $warnings[] = ['label'=>'Carte vitale', 'icon'=>'fa-heart-pulse', 'cat'=>'Documents'];
+        $add(['label'=>'Carte vitale manquante', 'icon'=>'fa-heart-pulse', 'cat'=>'Documents', 'key'=>'doc_vitale'], 'warning');
     }
     if (!in_array('rib', $docTypes)) {
-        $warnings[] = ['label'=>'RIB', 'icon'=>'fa-building-columns', 'cat'=>'Documents'];
+        $add(['label'=>'RIB manquant', 'icon'=>'fa-building-columns', 'cat'=>'Documents', 'key'=>'doc_rib'], 'warning');
     }
 
     // ── Rémunération ─────────────────────────────────────────────────────────
     if (empty($a['remuneration'])) {
-        $warnings[] = ['label'=>'Rémunération horaire non renseignée', 'icon'=>'fa-euro-sign', 'cat'=>'Contrat'];
+        $add(['label'=>'Rémunération horaire non renseignée', 'icon'=>'fa-euro-sign', 'cat'=>'Contrat', 'key'=>'remuneration'], 'warning');
     }
 
     $count = count($errors) + count($warnings);
@@ -622,6 +632,7 @@ function agentCompletion(array $a, array $docTypes, array $documents = []): arra
         'ok'       => $count === 0,
         'errors'   => $errors,
         'warnings' => $warnings,
+        'ignored'  => $ignored,
         'count'    => $count,
         'champs'   => array_column(array_filter($errors, fn($e) => $e['cat'] === 'Identité'), 'label'),
         'docs'     => array_column(array_filter($errors, fn($e) => $e['cat'] === 'Documents'), 'label'),

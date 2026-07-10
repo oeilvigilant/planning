@@ -30,14 +30,17 @@ $sql = "SELECT a.*,
         FROM agents a
         WHERE " . implode(' AND ', $where) . "
         ORDER BY a.nom, a.prenom";
+// Migration si colonne absente
+try { getDB()->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS alertes_ignorees TEXT NULL"); } catch(Exception $e){}
 $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $agents = $stmt->fetchAll();
 
 // Pré-calculer la complétude pour chaque agent
 foreach ($agents as &$ag) {
-    $types = $ag['doc_types'] ? explode(',', $ag['doc_types']) : [];
-    $ag['_completion'] = agentCompletion($ag, $types);
+    $types       = $ag['doc_types'] ? explode(',', $ag['doc_types']) : [];
+    $ignored     = json_decode($ag['alertes_ignorees'] ?? '[]', true) ?: [];
+    $ag['_completion'] = agentCompletion($ag, $types, [], $ignored);
 }
 unset($ag);
 

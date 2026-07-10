@@ -11,6 +11,7 @@ if (!$id) { header('Location: index.php'); exit; }
 // ── Migrations ───────────────────────────────────────────────────────────────
 try { getDB()->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS dpae_chemin VARCHAR(255) NULL"); } catch(Exception $e){}
 try { getDB()->exec("ALTER TABLE agent_documents ADD COLUMN IF NOT EXISTS date_expiration DATE NULL"); } catch(Exception $e){}
+try { getDB()->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS alertes_ignorees TEXT NULL"); } catch(Exception $e){}
 
 // ── Upload DPAE pour un contrat ───────────────────────────────────────────────
 if (($_POST['action'] ?? '') === 'upload_dpae') {
@@ -40,6 +41,33 @@ if (($_GET['del_dpae'] ?? false)) {
     $chemin = $row->fetchColumn();
     if ($chemin) { @unlink(UPLOAD_PATH.'/'.$chemin); getDB()->prepare("UPDATE contrats SET dpae_chemin=NULL WHERE id=?")->execute([$contratId]); flash('success','DPAE supprimée.'); }
     header('Location: view.php?id='.$id); exit;
+}
+
+// ── Ignorer / restaurer une alerte ───────────────────────────────────────────
+if (($_POST['action'] ?? '') === 'ignore_alerte') {
+    requirePerm('agents','edit');
+    $key  = trim($_POST['alerte_key'] ?? '');
+    if ($key) {
+        $row  = $db->prepare("SELECT alertes_ignorees FROM agents WHERE id=?")->execute([$id]) ? $db->prepare("SELECT alertes_ignorees FROM agents WHERE id=?") : null;
+        $stmt = $db->prepare("SELECT alertes_ignorees FROM agents WHERE id=?");
+        $stmt->execute([$id]);
+        $current = json_decode($stmt->fetchColumn() ?? '[]', true) ?: [];
+        if (!in_array($key, $current)) $current[] = $key;
+        $db->prepare("UPDATE agents SET alertes_ignorees=? WHERE id=?")->execute([json_encode($current), $id]);
+    }
+    header('Location: view.php?id='.$id.'#alerte-dossier'); exit;
+}
+if (($_POST['action'] ?? '') === 'restore_alerte') {
+    requirePerm('agents','edit');
+    $key = trim($_POST['alerte_key'] ?? '');
+    if ($key) {
+        $stmt = $db->prepare("SELECT alertes_ignorees FROM agents WHERE id=?");
+        $stmt->execute([$id]);
+        $current = json_decode($stmt->fetchColumn() ?? '[]', true) ?: [];
+        $current = array_values(array_filter($current, function($k) use ($key) { return $k !== $key; }));
+        $db->prepare("UPDATE agents SET alertes_ignorees=? WHERE id=?")->execute([json_encode($current), $id]);
+    }
+    header('Location: view.php?id='.$id.'#alerte-dossier'); exit;
 }
 
 // ── Upload / remplacement de document ────────────────────────────────────────
@@ -125,8 +153,9 @@ $docs = $db->prepare("SELECT * FROM agent_documents WHERE agent_id = ? ORDER BY 
 $docs->execute([$id]);
 $documents = $docs->fetchAll();
 
-$docTypes   = array_column($documents, 'type_document');
-$completion = agentCompletion($a, $docTypes, $documents);
+$docTypes    = array_column($documents, 'type_document');
+$ignoredKeys = json_decode($a['alertes_ignorees'] ?? '[]', true) ?: [];
+$completion  = agentCompletion($a, $docTypes, $documents, $ignoredKeys);
 
 // Charger tous les contrats de l'agent
 $allContrats = [];
@@ -185,28 +214,36 @@ if (canDo('agents','delete')) {
 }
 ?>
 
-<?php if (!$completion['ok']): ?>
+<?php if (!$completion['ok'] || $completion['ignored']): ?>
 <div id="alerte-dossier" class="mb-3">
+    <?php
+    // Macro pour afficher une ligne d'alerte avec bouton Ignorer/Restaurer
+    function alertItem(array $item, string $bgColor, string $action, string $btnLabel, string $btnStyle, int $agentId): void {
+        echo '<div style="display:inline-flex;align-items:center;gap:4px;background:'.$bgColor.';padding:2px 6px 2px 8px;border-radius:10px;margin:2px;font-size:0.78rem">';
+        echo '<i class="fa '.h($item['icon']).'" style="font-size:0.7rem"></i> '.h($item['label']);
+        if (canDo('agents','edit')) {
+            echo '<form method="POST" style="display:inline;margin:0">';
+            echo '<input type="hidden" name="action" value="'.$action.'">';
+            echo '<input type="hidden" name="alerte_key" value="'.h($item['key']).'">';
+            echo '<button type="submit" title="'.$btnLabel.'" style="'.$btnStyle.'border:none;background:none;padding:0 2px;cursor:pointer;line-height:1;font-size:0.75rem;opacity:0.7">'.$btnLabel.'</button>';
+            echo '</form>';
+        }
+        echo '</div>';
+    }
+    ?>
     <?php if ($completion['errors']): ?>
     <div class="alert p-3 mb-2" style="background:rgba(239,68,68,0.07);border:1.5px solid #ef4444;border-radius:12px;color:#7f1d1d">
         <div class="d-flex align-items-start gap-2">
             <i class="fa fa-circle-xmark mt-1" style="color:#ef4444;font-size:1.1rem;flex-shrink:0"></i>
             <div class="flex-grow-1">
                 <div style="font-weight:700;font-size:0.92rem;margin-bottom:6px">
-                    <?= count($completion['errors']) ?> élément<?= count($completion['errors'])>1?'s':'' ?> bloquant<?= count($completion['errors'])>1?'s':'' ?> manquant<?= count($completion['errors'])>1?'s':'' ?>
+                    <?= count($completion['errors']) ?> élément<?= count($completion['errors'])>1?'s':'' ?> bloquant<?= count($completion['errors'])>1?'s':'' ?>
                 </div>
-                <?php
-                $bycat = [];
-                foreach ($completion['errors'] as $e) { $bycat[$e['cat']][] = $e; }
-                foreach ($bycat as $cat => $items):
-                ?>
+                <?php $bycat = []; foreach ($completion['errors'] as $e) $bycat[$e['cat']][] = $e; ?>
+                <?php foreach ($bycat as $cat => $items): ?>
                 <div style="font-size:0.82rem;margin-bottom:4px">
                     <strong><?= h($cat) ?> :</strong>
-                    <?php foreach ($items as $e): ?>
-                    <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:10px;margin:2px;font-size:0.78rem">
-                        <i class="fa <?= h($e['icon']) ?>" style="font-size:0.7rem"></i><?= h($e['label']) ?>
-                    </span>
-                    <?php endforeach; ?>
+                    <?php foreach ($items as $e) alertItem($e, 'rgba(239,68,68,0.1)', 'ignore_alerte', '✕', 'color:#7f1d1d;', $id); ?>
                 </div>
                 <?php endforeach; ?>
             </div>
@@ -219,29 +256,28 @@ if (canDo('agents','delete')) {
     </div>
     <?php endif; ?>
     <?php if ($completion['warnings']): ?>
-    <div class="alert p-3" style="background:rgba(245,158,11,0.07);border:1.5px solid #f59e0b;border-radius:12px;color:#92400e">
+    <div class="alert p-3 mb-2" style="background:rgba(245,158,11,0.07);border:1.5px solid #f59e0b;border-radius:12px;color:#92400e">
         <div class="d-flex align-items-start gap-2">
             <i class="fa fa-triangle-exclamation mt-1" style="color:#f59e0b;font-size:1.1rem;flex-shrink:0"></i>
             <div class="flex-grow-1">
                 <div style="font-weight:700;font-size:0.92rem;margin-bottom:6px">
                     <?= count($completion['warnings']) ?> point<?= count($completion['warnings'])>1?'s':'' ?> à surveiller
                 </div>
-                <?php
-                $bycatW = [];
-                foreach ($completion['warnings'] as $w) { $bycatW[$w['cat']][] = $w; }
-                foreach ($bycatW as $cat => $items):
-                ?>
+                <?php $bycatW = []; foreach ($completion['warnings'] as $w) $bycatW[$w['cat']][] = $w; ?>
+                <?php foreach ($bycatW as $cat => $items): ?>
                 <div style="font-size:0.82rem;margin-bottom:4px">
                     <strong><?= h($cat) ?> :</strong>
-                    <?php foreach ($items as $w): ?>
-                    <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,158,11,0.13);padding:2px 8px;border-radius:10px;margin:2px;font-size:0.78rem">
-                        <i class="fa <?= h($w['icon']) ?>" style="font-size:0.7rem"></i><?= h($w['label']) ?>
-                    </span>
-                    <?php endforeach; ?>
+                    <?php foreach ($items as $w) alertItem($w, 'rgba(245,158,11,0.13)', 'ignore_alerte', '✕', 'color:#92400e;', $id); ?>
                 </div>
                 <?php endforeach; ?>
             </div>
         </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($completion['ignored']): ?>
+    <div style="font-size:0.78rem;color:#9ca3af;padding:4px 8px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0">
+        <span style="font-weight:600">Alertes ignorées :</span>
+        <?php foreach ($completion['ignored'] as $ig) alertItem($ig, 'rgba(107,114,128,0.08)', 'restore_alerte', '↩', 'color:#6b7280;', $id); ?>
     </div>
     <?php endif; ?>
 </div>
