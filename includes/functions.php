@@ -587,9 +587,9 @@ function agentCompletion(array $a, array $docTypes, array $documents = []): arra
     };
 
     if ($isFrancais) {
-        $checkDocExpiry('piece_identite', "Pièce d'identité (CNI/passeport)", 'fa-id-card');
+        $checkDocExpiry('piece_identite', "Carte d'identité", 'fa-id-card');
     } else {
-        $checkDocExpiry('titre_sejour', 'Titre de séjour / autorisation de travail', 'fa-passport');
+        $checkDocExpiry('titre_sejour', 'Carte de séjour', 'fa-passport');
     }
 
     // ── Autres documents contractuels ─────────────────────────────────────────

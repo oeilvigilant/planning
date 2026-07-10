@@ -355,17 +355,20 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-folder-open me-2" style="color:var(--ov-gold)"></i>Documents</h2></div>
     <div class="ov-card-body">
       <?php
+      <?php
       $docsLabels = [
-        'piece_identite'      => 'Pièce d\'identité',
+        'piece_identite'      => 'Carte d\'identité',
+        'titre_sejour'        => 'Carte de séjour',
         'carte_vitale'        => 'Carte vitale',
         'attestation_domicile'=> 'Attestation domicile',
-        'titre_sejour'        => 'Titre de séjour',
         'attestation_cnaps'   => 'Attestation CNAPS',
         'rib'                 => 'RIB',
         'contrat'             => 'Contrat de travail',
       ];
-      foreach ($docsLabels as $k => $label): ?>
-      <div class="mb-3">
+      foreach ($docsLabels as $k => $label):
+        $isIdentite = in_array($k, ['piece_identite','titre_sejour']);
+      ?>
+      <div class="mb-3" <?= $isIdentite ? 'id="doc-'.$k.'"' : '' ?>>
         <label class="form-label"><?= h($label) ?></label>
         <input type="file" name="<?= $k ?>" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png">
       </div>
@@ -429,6 +432,21 @@ require_once __DIR__ . '/../../includes/header.php';
 </form>
 
 <script>
+// Toggle carte d'identité / carte de séjour selon nationalité
+function toggleIdentiteDoc() {
+    var nat = (document.querySelector('[name="nationalite"]') || {value:''}).value.toLowerCase();
+    var isFr = nat === '' || nat.includes('fran');
+    var cni = document.getElementById('doc-piece_identite');
+    var cs  = document.getElementById('doc-titre_sejour');
+    if (cni) cni.style.display = isFr ? '' : 'none';
+    if (cs)  cs.style.display  = isFr ? 'none' : '';
+}
+document.addEventListener('DOMContentLoaded', function() {
+    toggleIdentiteDoc();
+    var natInput = document.querySelector('[name="nationalite"]');
+    if (natInput) natInput.addEventListener('input', toggleIdentiteDoc);
+});
+
 (function() {
     var sel = document.getElementById('sexeSelect');
     var inp = document.getElementById('matriculeInput');

@@ -368,9 +368,20 @@ $documents = $docs->fetchAll();
     <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-folder-open me-2" style="color:var(--ov-gold)"></i>Documents</h2></div>
     <div class="ov-card-body">
       <?php
-      $docsLabels = ['piece_identite'=>'Pièce d\'identité','carte_vitale'=>'Carte vitale','attestation_domicile'=>'Attestation domicile','titre_sejour'=>'Titre de séjour','attestation_cnaps'=>'Attestation CNAPS','rib'=>'RIB','contrat'=>'Contrat de travail'];
-      foreach ($docsLabels as $k => $label): ?>
-      <div class="mb-2">
+      <?php
+      $docsLabels = [
+        'piece_identite'      => 'Carte d\'identité',
+        'titre_sejour'        => 'Carte de séjour',
+        'carte_vitale'        => 'Carte vitale',
+        'attestation_domicile'=> 'Attestation domicile',
+        'attestation_cnaps'   => 'Attestation CNAPS',
+        'rib'                 => 'RIB',
+        'contrat'             => 'Contrat de travail',
+      ];
+      foreach ($docsLabels as $k => $label):
+        $isIdentite = in_array($k, ['piece_identite','titre_sejour']);
+      ?>
+      <div class="mb-2 doc-field" data-doc-type="<?= $k ?>" <?= $isIdentite ? 'id="doc-'.$k.'"' : '' ?>>
         <label class="form-label"><?= h($label) ?></label>
         <?php $doc = array_filter($documents, fn($d) => $d['type_document'] === $k); $doc = reset($doc); ?>
         <?php if ($doc): ?>
@@ -435,4 +446,19 @@ $documents = $docs->fetchAll();
 </div>
 </form>
 
+<script>
+function toggleIdentiteDoc() {
+    var nat = (document.querySelector('[name="nationalite"]') || {value:''}).value.toLowerCase();
+    var isFr = nat === '' || nat.includes('fran');
+    var cni  = document.getElementById('doc-piece_identite');
+    var cs   = document.getElementById('doc-titre_sejour');
+    if (cni) cni.style.display = isFr ? '' : 'none';
+    if (cs)  cs.style.display  = isFr ? 'none' : '';
+}
+document.addEventListener('DOMContentLoaded', function() {
+    toggleIdentiteDoc();
+    var natInput = document.querySelector('[name="nationalite"]');
+    if (natInput) natInput.addEventListener('input', toggleIdentiteDoc);
+});
+</script>
 <?php include __DIR__ . '/../../includes/footer.php'; ?>

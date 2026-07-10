@@ -135,8 +135,8 @@ try {
 }
 
 $docsLabels = [
-    'piece_identite'      => ['Pièce d\'identité','fa-id-card'],
-    'titre_sejour'        => ['Titre de séjour','fa-passport'],
+    'piece_identite'      => ['Carte d\'identité','fa-id-card'],
+    'titre_sejour'        => ['Carte de séjour','fa-passport'],
     'carte_vitale'        => ['Carte vitale','fa-heart-pulse'],
     'attestation_domicile'=> ['Attestation domicile','fa-house'],
     'attestation_cnaps'   => ['Attestation CNAPS','fa-shield-halved'],
@@ -305,7 +305,14 @@ if (canDo('agents','delete')) {
           <div class="col-12 col-sm-5">
             <label class="form-label mb-1" style="font-size:0.78rem;font-weight:600">Type de document</label>
             <select name="type_document" class="form-select form-select-sm" id="selAddType" onchange="toggleAddDocFields()">
-              <?php foreach ($docsLabels as $val => [$lbl, $ico]): ?>
+              <?php
+              $nat2 = strtolower(trim($a['nationalite'] ?? ''));
+              $agentFr = ($nat2 === '' || str_contains($nat2, 'fran'));
+              foreach ($docsLabels as $val => [$lbl, $ico]):
+                  // Masquer le type d'identité non applicable
+                  if ($val === 'piece_identite' && !$agentFr) continue;
+                  if ($val === 'titre_sejour'   &&  $agentFr) continue;
+              ?>
               <option value="<?= $val ?>"><?= h($lbl) ?></option>
               <?php endforeach; ?>
             </select>
