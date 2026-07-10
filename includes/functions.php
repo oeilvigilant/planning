@@ -527,16 +527,18 @@ function getNomMois(int $mois): string {
  * Vérifie la complétude contractuelle et légale d'un agent.
  * @param array $a         Ligne agents (SELECT *)
  * @param array $docTypes  Types de documents uploadés (ex: ['rib','carte_vitale'])
- * @return array [
- *   'ok'       => bool,   // aucune erreur ni alerte
- *   'errors'   => [],     // bloquants : ['label'=>'...','icon'=>'...','cat'=>'...']
- *   'warnings' => [],     // non-bloquants : même structure
- *   'count'    => int,    // total errors + warnings
- * ]
+ * @param array $documents Lignes complètes agent_documents (pour vérifier les dates d'expiration)
+ * @return array ['ok','errors','warnings','count','champs','docs']
  */
-function agentCompletion(array $a, array $docTypes): array {
+function agentCompletion(array $a, array $docTypes, array $documents = []): array {
     $errors   = [];
     $warnings = [];
+
+    // Index date_expiration par type de document
+    $expByType = [];
+    foreach ($documents as $doc) {
+        if (!empty($doc['date_expiration'])) $expByType[$doc['type_document']] = $doc['date_expiration'];
+    }
 
     // ── Identité contractuelle ────────────────────────────────────────────────
     foreach ([
@@ -570,15 +572,24 @@ function agentCompletion(array $a, array $docTypes): array {
     // ── Document d'identité (selon nationalité) ───────────────────────────────
     $nat = strtolower(trim($a['nationalite'] ?? ''));
     $isFrancais = ($nat === '' || str_contains($nat, 'fran'));
+
+    $checkDocExpiry = function(string $type, string $label, string $icon) use (&$errors, &$warnings, $docTypes, $expByType): void {
+        if (!in_array($type, $docTypes)) {
+            $errors[] = ['label'=>$label.' manquant(e)', 'icon'=>$icon, 'cat'=>'Documents'];
+        } elseif (isset($expByType[$type])) {
+            $exp = strtotime($expByType[$type]);
+            if ($exp < time()) {
+                $errors[] = ['label'=>$label.' expiré(e) le '.date('d/m/Y',$exp), 'icon'=>$icon, 'cat'=>'Documents'];
+            } elseif ($exp < strtotime('+60 days')) {
+                $warnings[] = ['label'=>$label.' expire le '.date('d/m/Y',$exp).' ('.ceil(($exp-time())/86400).' j)', 'icon'=>$icon, 'cat'=>'Documents'];
+            }
+        }
+    };
+
     if ($isFrancais) {
-        if (!in_array('piece_identite', $docTypes)) {
-            $errors[] = ['label'=>"Pièce d'identité (CNI ou passeport)", 'icon'=>'fa-id-card', 'cat'=>'Documents'];
-        }
+        $checkDocExpiry('piece_identite', "Pièce d'identité (CNI/passeport)", 'fa-id-card');
     } else {
-        // Étranger : titre de séjour obligatoire
-        if (!in_array('titre_sejour', $docTypes)) {
-            $errors[] = ['label'=>"Titre de séjour / autorisation de travail", 'icon'=>'fa-passport', 'cat'=>'Documents'];
-        }
+        $checkDocExpiry('titre_sejour', 'Titre de séjour / autorisation de travail', 'fa-passport');
     }
 
     // ── Autres documents contractuels ─────────────────────────────────────────
@@ -603,8 +614,7 @@ function agentCompletion(array $a, array $docTypes): array {
         'errors'   => $errors,
         'warnings' => $warnings,
         'count'    => $count,
-        // Compat backward
-        'champs'   => array_column(array_filter($errors,   fn($e) => $e['cat'] === 'Identité'), 'label'),
-        'docs'     => array_column(array_filter($errors,   fn($e) => $e['cat'] === 'Documents'), 'label'),
+        'champs'   => array_column(array_filter($errors, fn($e) => $e['cat'] === 'Identité'), 'label'),
+        'docs'     => array_column(array_filter($errors, fn($e) => $e['cat'] === 'Documents'), 'label'),
     ];
 }

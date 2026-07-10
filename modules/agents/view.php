@@ -8,8 +8,9 @@ $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: index.php'); exit; }
 
-// ── Migration DPAE par contrat ────────────────────────────────────────────────
+// ── Migrations ───────────────────────────────────────────────────────────────
 try { getDB()->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS dpae_chemin VARCHAR(255) NULL"); } catch(Exception $e){}
+try { getDB()->exec("ALTER TABLE agent_documents ADD COLUMN IF NOT EXISTS date_expiration DATE NULL"); } catch(Exception $e){}
 
 // ── Upload DPAE pour un contrat ───────────────────────────────────────────────
 if (($_POST['action'] ?? '') === 'upload_dpae') {
@@ -39,6 +40,32 @@ if (($_GET['del_dpae'] ?? false)) {
     $chemin = $row->fetchColumn();
     if ($chemin) { @unlink(UPLOAD_PATH.'/'.$chemin); getDB()->prepare("UPDATE contrats SET dpae_chemin=NULL WHERE id=?")->execute([$contratId]); flash('success','DPAE supprimée.'); }
     header('Location: view.php?id='.$id); exit;
+}
+
+// ── Upload / remplacement de document ────────────────────────────────────────
+if (($_POST['action'] ?? '') === 'upload_doc') {
+    requirePerm('agents','edit');
+    $typeDoc = $_POST['type_document'] ?? '';
+    $dateExp = trim($_POST['date_expiration'] ?? '');
+    $label   = trim($_POST['doc_label'] ?? '');
+    $validTypes = ['piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','rib','contrat','autre'];
+    if (in_array($typeDoc, $validTypes) && !empty($_FILES['doc_file']['tmp_name'])) {
+        $chemin = uploadFichier($_FILES['doc_file'], 'documents', ['pdf','jpg','jpeg','png','gif','webp']);
+        if ($chemin) {
+            // Remplace le(s) document(s) existant(s) du même type (sauf 'autre')
+            if ($typeDoc !== 'autre') {
+                $oldRows = $db->prepare("SELECT chemin FROM agent_documents WHERE agent_id=? AND type_document=?");
+                $oldRows->execute([$id, $typeDoc]);
+                foreach ($oldRows->fetchAll() as $o) @unlink(UPLOAD_PATH.'/'.$o['chemin']);
+                $db->prepare("DELETE FROM agent_documents WHERE agent_id=? AND type_document=?")->execute([$id, $typeDoc]);
+            }
+            $nomFic = ($typeDoc === 'autre' && $label !== '') ? $label.' — '.$_FILES['doc_file']['name'] : $_FILES['doc_file']['name'];
+            $db->prepare("INSERT INTO agent_documents (agent_id,type_document,nom_fichier,chemin,taille,date_expiration) VALUES (?,?,?,?,?,?)")
+               ->execute([$id, $typeDoc, $nomFic, $chemin, $_FILES['doc_file']['size'], $dateExp ?: null]);
+            flash('success','Document mis à jour.');
+        } else { flash('danger','Erreur lors de l\'upload (format ou taille).'); }
+    }
+    header('Location: view.php?id='.$id.'#documents'); exit;
 }
 
 // Supprimer document — doit se faire avant header.php
@@ -71,7 +98,7 @@ $docs->execute([$id]);
 $documents = $docs->fetchAll();
 
 $docTypes   = array_column($documents, 'type_document');
-$completion = agentCompletion($a, $docTypes);
+$completion = agentCompletion($a, $docTypes, $documents);
 
 // Charger tous les contrats de l'agent
 $allContrats = [];
@@ -117,6 +144,8 @@ $docsLabels = [
     'contrat'             => ['Contrat','fa-file-contract'],
     'autre'               => ['Document','fa-file'],
 ];
+// Types pour lesquels on propose la saisie d'une date d'expiration
+$docsWithExpiry = ['piece_identite','titre_sejour','attestation_cnaps','attestation_domicile'];
 ?>
 
 <?php
@@ -258,32 +287,122 @@ if (canDo('agents','delete')) {
   </div>
 
   <!-- Documents -->
-  <div class="ov-card">
-    <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-folder-open me-2" style="color:var(--ov-gold)"></i>Documents</h2></div>
+  <div class="ov-card" id="documents">
+    <div class="ov-card-header">
+      <h2 class="ov-card-title"><i class="fa fa-folder-open me-2" style="color:var(--ov-gold)"></i>Documents</h2>
+      <?php if (canDo('agents','edit')): ?>
+      <button class="btn btn-sm" style="background:rgba(201,168,76,0.1);color:#92400e;border:1px solid rgba(201,168,76,0.3);border-radius:8px;font-size:0.78rem"
+              type="button" data-bs-toggle="collapse" data-bs-target="#formAjoutDoc">
+        <i class="fa fa-plus me-1"></i>Ajouter
+      </button>
+      <?php endif; ?>
+    </div>
+    <?php if (canDo('agents','edit')): ?>
+    <div class="collapse" id="formAjoutDoc">
+      <form method="POST" enctype="multipart/form-data" class="p-3" style="background:#fafafa;border-bottom:1px solid #f0f2f5">
+        <input type="hidden" name="action" value="upload_doc">
+        <div class="row g-2 align-items-end">
+          <div class="col-12 col-sm-5">
+            <label class="form-label mb-1" style="font-size:0.78rem;font-weight:600">Type de document</label>
+            <select name="type_document" class="form-select form-select-sm" id="selAddType" onchange="toggleAddDocFields()">
+              <?php foreach ($docsLabels as $val => [$lbl, $ico]): ?>
+              <option value="<?= $val ?>"><?= h($lbl) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-12 col-sm-4" id="expiryAdd">
+            <label class="form-label mb-1" style="font-size:0.78rem;font-weight:600">Date d'expiration</label>
+            <input type="date" name="date_expiration" class="form-control form-control-sm">
+          </div>
+          <div class="col-12 col-sm-3 d-none" id="labelAdd">
+            <label class="form-label mb-1" style="font-size:0.78rem;font-weight:600">Libellé</label>
+            <input type="text" name="doc_label" class="form-control form-control-sm" placeholder="ex: Diplôme">
+          </div>
+          <div class="col-12">
+            <label class="form-label mb-1" style="font-size:0.78rem;font-weight:600">Fichier <span style="color:#9ca3af">(PDF, image)</span></label>
+            <input type="file" name="doc_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp" required>
+          </div>
+          <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-sm btn-ov-primary"><i class="fa fa-upload me-1"></i>Enregistrer</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#formAjoutDoc">Annuler</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    <?php endif; ?>
     <div class="ov-card-body p-0">
       <?php if (empty($documents)): ?>
         <p class="text-center text-muted py-3 mb-0" style="font-size:0.85rem">Aucun document</p>
       <?php else: ?>
         <?php foreach ($documents as $doc): ?>
-        <div class="d-flex align-items-center gap-2 px-3 py-2" style="border-bottom:1px solid #f0f2f5;font-size:0.82rem">
-          <i class="fa <?= $docsLabels[$doc['type_document']][1] ?? 'fa-file' ?> text-muted"></i>
-          <div class="flex-grow-1">
-            <?php
-            if ($doc['type_document'] === 'autre') {
-                $parts = explode(' — ', $doc['nom_fichier'], 2);
-                $docLabel = $parts[0];
-                $docSub   = $parts[1] ?? '';
-            } else {
-                $docLabel = $docsLabels[$doc['type_document']][0] ?? $doc['type_document'];
-                $docSub   = $doc['nom_fichier'];
-            }
-            ?>
-            <div><?= h($docLabel) ?></div>
-            <div style="font-size:0.72rem;color:#9ca3af"><?= h($docSub) ?></div>
+        <?php
+        $dtype = $doc['type_document'];
+        [$dlabel, $dicon] = $docsLabels[$dtype] ?? ['Document','fa-file'];
+        if ($dtype === 'autre') {
+            $parts  = explode(' — ', $doc['nom_fichier'], 2);
+            $dlabel = $parts[0];
+            $dsub   = $parts[1] ?? '';
+        } else {
+            $dsub = $doc['nom_fichier'];
+        }
+        $exp    = $doc['date_expiration'] ?? null;
+        $expTs  = $exp ? strtotime($exp) : null;
+        $expCls = '';
+        $expTxt = '';
+        if ($expTs) {
+            $expTxt = date('d/m/Y', $expTs);
+            if ($expTs < time())                       { $expCls = 'text-danger fw-bold'; $expTxt .= ' — EXPIRÉ'; }
+            elseif ($expTs < strtotime('+60 days'))    { $expCls = 'text-warning fw-bold'; $expTxt .= ' ('.ceil(($expTs-time())/86400).' j)'; }
+        }
+        $hasExpiry = in_array($dtype, $docsWithExpiry);
+        $colId     = 'replace-'.$doc['id'];
+        ?>
+        <div>
+          <div class="d-flex align-items-center gap-2 px-3 py-2" style="border-bottom:1px solid #f0f2f5;font-size:0.82rem">
+            <i class="fa <?= h($dicon) ?> text-muted" style="width:16px;text-align:center"></i>
+            <div class="flex-grow-1">
+              <div class="fw-500"><?= h($dlabel) ?></div>
+              <div style="font-size:0.72rem;color:#9ca3af"><?= h($dsub) ?></div>
+              <?php if ($expTxt): ?>
+              <div style="font-size:0.72rem" class="<?= $expCls ?>"><i class="fa fa-calendar-days me-1"></i>Exp : <?= h($expTxt) ?></div>
+              <?php endif; ?>
+            </div>
+            <a href="<?= UPLOAD_URL ?>/<?= h($doc['chemin']) ?>" target="_blank" class="btn-sm-icon view" title="Voir/télécharger"><i class="fa fa-eye"></i></a>
+            <?php if (canDo('agents','edit')): ?>
+            <button type="button" class="btn-sm-icon" style="background:rgba(245,158,11,0.1);color:#92400e;border:none;width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer"
+                    data-bs-toggle="collapse" data-bs-target="#<?= $colId ?>" title="Remplacer ce document">
+              <i class="fa fa-arrow-up-from-bracket" style="font-size:0.7rem"></i>
+            </button>
+            <a href="view.php?id=<?= $id ?>&del_doc=<?= $doc['id'] ?>" class="btn-sm-icon delete" title="Supprimer" data-confirm="Supprimer ce document ?"><i class="fa fa-trash"></i></a>
+            <?php endif; ?>
           </div>
-          <a href="<?= UPLOAD_URL ?>/<?= h($doc['chemin']) ?>" target="_blank" class="btn-sm-icon view" title="Voir"><i class="fa fa-eye"></i></a>
           <?php if (canDo('agents','edit')): ?>
-          <a href="view.php?id=<?= $id ?>&del_doc=<?= $doc['id'] ?>" class="btn-sm-icon delete" title="Supprimer" data-confirm="Supprimer ce document ?"><i class="fa fa-trash"></i></a>
+          <div class="collapse" id="<?= $colId ?>">
+            <form method="POST" enctype="multipart/form-data" class="px-3 py-2 d-flex align-items-end gap-2 flex-wrap" style="background:#fff8ec;border-bottom:1px solid #fde68a">
+              <input type="hidden" name="action" value="upload_doc">
+              <input type="hidden" name="type_document" value="<?= h($dtype) ?>">
+              <?php if ($dtype === 'autre'): ?>
+              <div>
+                <label class="form-label mb-1" style="font-size:0.72rem">Libellé</label>
+                <input type="text" name="doc_label" class="form-control form-control-sm" value="<?= h($dlabel) ?>" style="width:130px">
+              </div>
+              <?php endif; ?>
+              <?php if ($hasExpiry): ?>
+              <div>
+                <label class="form-label mb-1" style="font-size:0.72rem">Date d'expiration</label>
+                <input type="date" name="date_expiration" class="form-control form-control-sm" value="<?= h($exp ?? '') ?>" style="width:140px">
+              </div>
+              <?php endif; ?>
+              <div>
+                <label class="form-label mb-1" style="font-size:0.72rem">Nouveau fichier</label>
+                <input type="file" name="doc_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp" required style="width:180px">
+              </div>
+              <button type="submit" class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:0.78rem">
+                <i class="fa fa-upload me-1"></i>Remplacer
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#<?= $colId ?>" style="font-size:0.78rem">Annuler</button>
+            </form>
+          </div>
           <?php endif; ?>
         </div>
         <?php endforeach; ?>
@@ -520,4 +639,15 @@ if (canDo('agents','delete')) {
 </div>
 <?php endif; ?>
 
+<script>
+var docsWithExpiry = <?= json_encode($docsWithExpiry) ?>;
+function toggleAddDocFields() {
+    var sel = document.getElementById('selAddType');
+    if (!sel) return;
+    var v = sel.value;
+    document.getElementById('expiryAdd').style.display = docsWithExpiry.includes(v) ? '' : 'none';
+    document.getElementById('labelAdd').style.display  = v === 'autre' ? '' : 'none';
+}
+document.addEventListener('DOMContentLoaded', toggleAddDocFields);
+</script>
 <?php include __DIR__ . '/../../includes/footer.php'; ?>
