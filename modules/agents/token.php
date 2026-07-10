@@ -29,6 +29,44 @@ $currentModule = 'agents';
 require_once __DIR__ . '/../../includes/header.php';
 
 $tokenUrl = $a['token_acces'] ? APP_URL . '/token/formulaire.php?t=' . $a['token_acces'] : null;
+
+// Calcul des éléments manquants pour le corps de l'email
+$docsStmt = $db->prepare("SELECT type_document, date_expiration FROM agent_documents WHERE agent_id=?");
+$docsStmt->execute([$id]);
+$docRows     = $docsStmt->fetchAll();
+$docTypes    = array_column($docRows, 'type_document');
+$ignoredKeys = json_decode($a['alertes_ignorees'] ?? '[]', true) ?: [];
+$completion  = agentCompletion($a, $docTypes, $docRows, $ignoredKeys);
+
+// Construire le corps de l'email en texte brut
+function buildEmailBody(array $a, string $tokenUrl, array $completion): string {
+    $prenom = $a['prenom'] ?? '';
+    $lines  = [];
+    $lines[] = "Bonjour " . $prenom . ",";
+    $lines[] = "";
+    $lines[] = "Afin de compléter votre dossier, nous vous invitons à mettre à jour vos informations en cliquant sur le lien ci-dessous :";
+    $lines[] = $tokenUrl;
+    $lines[] = "";
+
+    $allAlerts = array_merge($completion['errors'], $completion['warnings']);
+    if ($allAlerts) {
+        $lines[] = "Voici les éléments manquants ou à mettre à jour dans votre dossier :";
+        $lines[] = "";
+        $bycat = [];
+        foreach ($allAlerts as $alert) { $bycat[$alert['cat']][] = $alert['label']; }
+        foreach ($bycat as $cat => $items) {
+            $lines[] = "▸ " . $cat . " :";
+            foreach ($items as $item) { $lines[] = "   - " . $item; }
+        }
+        $lines[] = "";
+    }
+
+    $lines[] = "Ce lien est à usage unique et expire dans " . getParam('token_expiration_jours','7') . " jours.";
+    $lines[] = "";
+    $lines[] = "Merci de votre collaboration.";
+    $lines[] = "L'équipe Oeil Vigilant";
+    return implode("\r\n", $lines);
+}
 ?>
 
 <div class="row justify-content-center">
@@ -76,13 +114,20 @@ $tokenUrl = $a['token_acces'] ? APP_URL . '/token/formulaire.php?t=' . $a['token
         </button>
       </form>
 
-      <?php if ($a['email']): ?>
-      <div class="mt-3 text-center">
-        <?php if ($tokenUrl): ?>
-        <a href="mailto:<?= h($a['email']) ?>?subject=Votre lien de dossier Oeil Vigilant&body=Bonjour <?= urlencode($a['prenom']) ?>,%0D%0A%0D%0AVeuillez remplir votre dossier en cliquant sur le lien suivant :%0D%0A<?= urlencode($tokenUrl) ?>" class="btn btn-ov-secondary btn-sm">
+      <?php if ($a['email'] && $tokenUrl): ?>
+      <?php
+        $emailSubject = 'Mise à jour de votre dossier — Oeil Vigilant';
+        $emailBody    = buildEmailBody($a, $tokenUrl, $completion);
+        $mailtoUrl    = 'mailto:'.rawurlencode($a['email']).'?subject='.rawurlencode($emailSubject).'&body='.rawurlencode($emailBody);
+      ?>
+      <div class="mt-3">
+        <a href="<?= h($mailtoUrl) ?>" class="btn btn-ov-secondary btn-sm w-100">
           <i class="fa fa-envelope me-1"></i>Envoyer par email à <?= h($a['email']) ?>
         </a>
-        <?php endif; ?>
+        <!-- Prévisualisation du message -->
+        <div class="mt-3 p-3 rounded" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.78rem;white-space:pre-wrap;font-family:monospace;color:#374151;max-height:260px;overflow-y:auto">
+<?= h($emailBody) ?>
+        </div>
       </div>
       <?php endif; ?>
 

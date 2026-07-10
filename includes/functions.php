@@ -615,6 +615,9 @@ function agentCompletion(array $a, array $docTypes, array $documents = [], array
     if (!in_array('attestation_cnaps', $docTypes)) {
         $add(['label'=>'Attestation CNAPS manquante', 'icon'=>'fa-shield-halved', 'cat'=>'Documents', 'key'=>'doc_cnaps'], 'error');
     }
+    if (!in_array('attestation_domicile', $docTypes)) {
+        $add(['label'=>'Justificatif de domicile manquant', 'icon'=>'fa-house', 'cat'=>'Documents', 'key'=>'doc_domicile'], 'warning');
+    }
     if (!in_array('carte_vitale', $docTypes)) {
         $add(['label'=>'Carte vitale manquante', 'icon'=>'fa-heart-pulse', 'cat'=>'Documents', 'key'=>'doc_vitale'], 'warning');
     }

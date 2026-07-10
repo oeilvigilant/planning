@@ -4,11 +4,19 @@ require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('agents', 'view');
 
+$db = getDB();
+
+// Réinitialiser toutes les alertes ignorées (tous les agents)
+if (($_POST['action'] ?? '') === 'reset_all_alertes') {
+    requirePerm('agents','edit');
+    $db->exec("UPDATE agents SET alertes_ignorees=NULL WHERE alertes_ignorees IS NOT NULL");
+    flash('success','Alertes réinitialisées pour tous les agents.');
+    header('Location: index.php'); exit;
+}
+
 $pageTitle    = 'Liste des agents';
 $currentModule = 'agents';
 require_once __DIR__ . '/../../includes/header.php';
-
-$db = getDB();
 
 $search = trim($_GET['q'] ?? '');
 $filtre = $_GET['filtre'] ?? 'actif';
@@ -59,11 +67,21 @@ $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn(
             <div><div class="stat-value" style="font-size:1.25rem"><?= $actifs ?></div><div class="stat-label">Actifs</div></div>
         </div>
     </div>
-    <?php if (canDo('agents','create')): ?>
-    <a href="add.php" class="btn-ov-primary btn">
-        <i class="fa fa-user-plus me-1"></i> Nouvel agent
-    </a>
-    <?php endif; ?>
+    <div class="d-flex gap-2">
+        <?php if (canDo('agents','edit')): ?>
+        <form method="POST" onsubmit="return confirm('Réinitialiser toutes les alertes ignorées pour tous les agents ?')">
+            <input type="hidden" name="action" value="reset_all_alertes">
+            <button type="submit" class="btn" style="background:rgba(107,114,128,0.08);border:1px solid #cbd5e1;border-radius:8px;font-size:0.85rem;color:#6b7280">
+                <i class="fa fa-rotate me-1"></i>Réinitialiser les alertes
+            </button>
+        </form>
+        <?php endif; ?>
+        <?php if (canDo('agents','create')): ?>
+        <a href="add.php" class="btn-ov-primary btn">
+            <i class="fa fa-user-plus me-1"></i> Nouvel agent
+        </a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <div class="ov-card">

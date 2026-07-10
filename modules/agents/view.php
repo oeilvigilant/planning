@@ -69,6 +69,12 @@ if (($_POST['action'] ?? '') === 'restore_alerte') {
     }
     header('Location: view.php?id='.$id.'#alerte-dossier'); exit;
 }
+if (($_POST['action'] ?? '') === 'reset_alertes') {
+    requirePerm('agents','edit');
+    $db->prepare("UPDATE agents SET alertes_ignorees=NULL WHERE id=?")->execute([$id]);
+    flash('success','Alertes réinitialisées.');
+    header('Location: view.php?id='.$id.'#alerte-dossier'); exit;
+}
 
 // ── Upload / remplacement de document ────────────────────────────────────────
 if (($_POST['action'] ?? '') === 'upload_doc') {
@@ -275,9 +281,19 @@ if (canDo('agents','delete')) {
     </div>
     <?php endif; ?>
     <?php if ($completion['ignored']): ?>
-    <div style="font-size:0.78rem;color:#9ca3af;padding:4px 8px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0">
-        <span style="font-weight:600">Alertes ignorées :</span>
-        <?php foreach ($completion['ignored'] as $ig) alertItem($ig, 'rgba(107,114,128,0.08)', 'restore_alerte', '↩', 'color:#6b7280;', $id); ?>
+    <div class="d-flex align-items-center gap-2 flex-wrap" style="font-size:0.78rem;color:#9ca3af;padding:6px 10px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0">
+        <span style="font-weight:600;white-space:nowrap">Alertes ignorées :</span>
+        <div class="flex-grow-1">
+            <?php foreach ($completion['ignored'] as $ig) alertItem($ig, 'rgba(107,114,128,0.08)', 'restore_alerte', '↩', 'color:#6b7280;', $id); ?>
+        </div>
+        <?php if (canDo('agents','edit')): ?>
+        <form method="POST" style="margin:0;flex-shrink:0">
+            <input type="hidden" name="action" value="reset_alertes">
+            <button type="submit" class="btn btn-sm" style="font-size:0.72rem;padding:3px 10px;background:rgba(107,114,128,0.1);border:1px solid #cbd5e1;border-radius:6px;color:#6b7280" title="Réinitialiser toutes les alertes ignorées">
+                <i class="fa fa-rotate me-1"></i>Tout réinitialiser
+            </button>
+        </form>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 </div>
