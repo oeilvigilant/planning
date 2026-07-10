@@ -355,7 +355,6 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-folder-open me-2" style="color:var(--ov-gold)"></i>Documents</h2></div>
     <div class="ov-card-body">
       <?php
-      <?php
       $docsLabels = [
         'piece_identite'      => 'Carte d\'identité',
         'titre_sejour'        => 'Carte de séjour',
