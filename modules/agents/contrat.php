@@ -501,7 +501,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
 }
 
 // ── Construire $data pour le rendu ─────────────────────────────────────────────
-$data      = $_SERVER['REQUEST_METHOD'] === 'POST' ? array_merge($defaults, $_POST) : $defaults;
+$data         = $_SERVER['REQUEST_METHOD'] === 'POST' ? array_merge($defaults, $_POST) : $defaults;
+$postesGrille = $db->query("SELECT * FROM postes WHERE actif=1 ORDER BY ordre, label")->fetchAll();
 $exportPdf = $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['export_pdf']) && $_POST['export_pdf'] === '1';
 
 // Passer la signature du contrat courant à buildContratHtml
@@ -742,7 +743,19 @@ if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures
           </div>
           <div class="col-6">
             <label class="form-label">Poste</label>
-            <input type="text" name="poste" class="form-control form-control-sm" value="<?= h($data['poste']) ?>" oninput="updatePreview()">
+            <?php if ($postesGrille): ?>
+            <select id="posteGrilleSelect" class="form-select form-select-sm mb-1" style="border-color:var(--ov-gold);background:rgba(201,168,76,0.04)">
+              <option value="">— Sélectionner depuis la grille —</option>
+              <?php foreach ($postesGrille as $pg): ?>
+              <option value="<?= h($pg['id']) ?>"
+                      data-label="<?= h($pg['label']) ?>"
+                      data-taux="<?= h($pg['taux_horaire']) ?>"
+                      <?= ($data['poste'] ?? '') === $pg['label'] ? 'selected' : '' ?>
+              ><?= h($pg['label']) ?><?= $pg['coefficient'] ? ' (coef.'.$pg['coefficient'].')' : '' ?> — <?= number_format($pg['taux_horaire'],4) ?> €/h</option>
+              <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
+            <input type="text" name="poste" id="posteTexte" class="form-control form-control-sm" value="<?= h($data['poste']) ?>" oninput="updatePreview()" placeholder="Ou saisir librement">
           </div>
           <div class="col-12">
             <label class="form-label">Catégorie / Niveau / Coefficient</label>
@@ -1153,6 +1166,24 @@ document.addEventListener('DOMContentLoaded', function() {
     updatePreview();
     check24hCoherence();
     initSigPad();
+
+    // Poste depuis la grille → auto-remplit libellé + salaire horaire
+    var selPoste = document.getElementById('posteGrilleSelect');
+    if (selPoste) {
+        selPoste.addEventListener('change', function() {
+            var opt = this.options[this.selectedIndex];
+            if (!opt.value) return;
+            var posteField = document.getElementById('posteTexte');
+            var tauxField  = document.querySelector('[name="salaire_horaire"]');
+            if (posteField) { posteField.value = opt.dataset.label || ''; updatePreview(); }
+            if (tauxField && opt.dataset.taux) {
+                tauxField.value = parseFloat(opt.dataset.taux).toFixed(2);
+                tauxField.style.borderColor = 'var(--ov-gold)';
+                tauxField.style.background  = 'rgba(201,168,76,0.06)';
+                updatePreview();
+            }
+        });
+    }
 
     var regenForm = document.getElementById('regenForm');
     var sendForm  = document.getElementById('sendForm');
