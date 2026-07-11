@@ -79,12 +79,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['sign_submit'])) {
                ->execute([$sigData, $ip, $row['contrat_id'], $agentId]);
         }
         // Notifier l'admin par email
-        $adminEmail = $params['smtp_from'] ?? $params['entreprise_email'] ?? '';
-        if ($adminEmail) {
-            $nom = trim(($row['prenom'] ?? '') . ' ' . strtoupper($row['nom'] ?? ''));
-            sendMail($adminEmail, $params['entreprise_nom'] ?? 'Admin',
-                'Contrat signé — ' . $nom,
-                '<p>Le contrat de <strong>' . htmlspecialchars($nom) . '</strong> a été signé électroniquement le ' . date('d/m/Y à H:i') . '.</p><p>IP : ' . htmlspecialchars($ip) . '</p>'
+        $notifEmail = $params['notification_signature_email'] ?? $params['smtp_from'] ?? $params['entreprise_email'] ?? '';
+        if ($notifEmail) {
+            $nom        = trim(($row['prenom'] ?? '') . ' ' . strtoupper($row['nom'] ?? ''));
+            $matricule  = $row['matricule'] ?? '—';
+            $agentUrl   = APP_URL . '/modules/agents/view.php?id=' . $agentId;
+            $typeContrat= '';
+            if (!empty($row['contrat_id'])) {
+                $ctRow = $db->prepare("SELECT type_contrat, date_debut, date_fin FROM contrats WHERE id=?");
+                $ctRow->execute([$row['contrat_id']]);
+                $ct = $ctRow->fetch();
+                if ($ct) {
+                    $typeContrat = $ct['type_contrat'] ?? '';
+                    $dateDebut   = $ct['date_debut'] ? date('d/m/Y', strtotime($ct['date_debut'])) : '—';
+                    $dateFin     = $ct['date_fin']   ? date('d/m/Y', strtotime($ct['date_fin']))   : '—';
+                }
+            }
+            $html = '
+<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
+  <div style="background:#1a2332;padding:18px 24px;display:flex;align-items:center;gap:12px">
+    <span style="color:#c9a84c;font-size:1.4rem">✍</span>
+    <span style="color:#fff;font-weight:700;font-size:1rem">Contrat signé électroniquement</span>
+  </div>
+  <div style="padding:24px">
+    <p style="margin:0 0 16px;font-size:0.95rem;color:#374151">
+      <strong>' . htmlspecialchars($nom) . '</strong> (matricule <code>' . htmlspecialchars($matricule) . '</code>)
+      a signé son contrat électroniquement.
+    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;color:#6b7280;margin-bottom:20px">
+      <tr><td style="padding:5px 0;border-bottom:1px solid #f3f4f6;width:40%">Date de signature</td><td style="padding:5px 0;border-bottom:1px solid #f3f4f6;font-weight:600;color:#1a2332">' . date('d/m/Y à H:i') . '</td></tr>
+      ' . ($typeContrat ? '<tr><td style="padding:5px 0;border-bottom:1px solid #f3f4f6">Type de contrat</td><td style="padding:5px 0;border-bottom:1px solid #f3f4f6;font-weight:600;color:#1a2332">' . htmlspecialchars($typeContrat) . '</td></tr>' : '') . '
+      ' . (!empty($dateDebut) ? '<tr><td style="padding:5px 0;border-bottom:1px solid #f3f4f6">Période</td><td style="padding:5px 0;border-bottom:1px solid #f3f4f6;font-weight:600;color:#1a2332">' . htmlspecialchars($dateDebut) . ' → ' . htmlspecialchars($dateFin) . '</td></tr>' : '') . '
+      <tr><td style="padding:5px 0">IP de signature</td><td style="padding:5px 0;color:#9ca3af">' . htmlspecialchars($ip) . '</td></tr>
+    </table>
+    <a href="' . $agentUrl . '" style="display:inline-block;background:#c9a84c;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;font-size:0.875rem">
+      Voir la fiche agent →
+    </a>
+  </div>
+  <div style="background:#f9fafb;padding:12px 24px;font-size:0.75rem;color:#9ca3af;border-top:1px solid #e5e7eb">
+    ' . htmlspecialchars($params['entreprise_nom'] ?? 'OV-Gestion') . ' — notification automatique
+  </div>
+</div>';
+            sendMail($notifEmail, $params['entreprise_nom'] ?? 'OV-Gestion',
+                '✍ Contrat signé — ' . $nom . ' (' . date('d/m/Y') . ')',
+                $html
             );
         }
         $signed = true;

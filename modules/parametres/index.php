@@ -191,7 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
     }
 
     if ($action === 'save_smtp') {
-        $champs = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from'];
+        $champs = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','notification_signature_email'];
         foreach ($champs as $c) setParam($c, trim($_POST[$c] ?? ''));
         flash('success', 'Configuration email sauvegardée.');
         header('Location: index.php?tab=email'); exit;
@@ -700,6 +700,11 @@ document.addEventListener('DOMContentLoaded', function() {
         <label class="form-label">Mot de passe SMTP</label>
         <input type="password" name="smtp_pass" class="form-control font-monospace" placeholder="••••••••" value="<?= h($params['smtp_pass']??'') ?>" autocomplete="new-password">
         <div class="form-text">Pour Gmail : utilisez un <a href="https://myaccount.google.com/apppasswords" target="_blank">mot de passe d'application</a> (compte avec 2FA activé).</div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label"><i class="fa fa-bell me-1" style="color:var(--ov-gold)"></i>Email de notification signature <small class="text-muted">(optionnel)</small></label>
+        <input type="email" name="notification_signature_email" class="form-control" placeholder="rh@votreentreprise.fr" value="<?= h($params['notification_signature_email']??'') ?>">
+        <div class="form-text">Reçoit un email dès qu'un agent signe son contrat. Si vide, utilise l'adresse expéditeur.</div>
       </div>
     </div>
     <?php if (!empty($params['smtp_host'])): ?>
