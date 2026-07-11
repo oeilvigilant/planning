@@ -371,6 +371,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['send_for_signature']
             } else {
                 flash('danger', '<i class="fa fa-times-circle me-1"></i>Envoi impossible : ' . htmlspecialchars($result['error'] ?? 'erreur inconnue') . $linkHtml);
             }
+            // Notification interne : avertir l'admin qu'un lien a été envoyé
+            $notifEmail = $params['notification_signature_email'] ?? '';
+            if ($notifEmail && $notifEmail !== $emailDest) {
+                $nom = trim($a['prenom'] . ' ' . strtoupper($a['nom']));
+                sendMail($notifEmail, $params['entreprise_nom'] ?? 'OV-Gestion',
+                    '📨 Lien de signature envoyé — ' . $nom,
+                    '<div style="font-family:Arial,sans-serif;max-width:500px">
+                      <div style="background:#1a2332;padding:16px 24px;border-radius:8px 8px 0 0">
+                        <span style="color:#c9a84c;font-weight:700;font-size:1rem">📨 Lien de signature envoyé</span>
+                      </div>
+                      <div style="border:1px solid #e5e7eb;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px">
+                        <p style="margin:0 0 12px;color:#374151">Un lien de signature a été envoyé à <strong>' . htmlspecialchars($emailDest) . '</strong> pour le contrat de :</p>
+                        <p style="margin:0 0 16px;font-size:1.1rem;font-weight:700;color:#1a2332">' . htmlspecialchars($nom) . '</p>
+                        <p style="margin:0 0 16px;color:#6b7280;font-size:0.85rem">Lien valide jusqu\'au <strong>' . $expiryFmt . '</strong>.</p>
+                        <a href="' . APP_URL . '/modules/agents/view.php?id=' . $id . '" style="display:inline-block;background:#c9a84c;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;font-size:0.875rem">Voir la fiche agent →</a>
+                      </div>
+                    </div>');
+            }
         }
     }
     header('Location: contrat.php?id=' . $id . '&contrat_id=' . $contratId); exit;

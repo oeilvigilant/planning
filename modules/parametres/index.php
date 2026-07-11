@@ -199,6 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
 
     if ($action === 'test_smtp') {
         require_once __DIR__ . '/../../includes/mailer.php';
+        $params = getAllParams(); // charger ici car $params global n'est pas encore défini
         $dest = trim($_POST['test_email'] ?? '');
         if (!filter_var($dest, FILTER_VALIDATE_EMAIL)) {
             flash('danger', 'Adresse email invalide pour le test.');
