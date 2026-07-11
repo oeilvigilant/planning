@@ -383,7 +383,10 @@ foreach ($agents as $ag) {
                         if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
                     }
                     if ($showHours) $row .= ($showPlage ? '<br>' : '').'<span class="shift-dur">'.$dur.'</span>';
-                    if (!$showPlage && !$showHours) $row .= '<span style="color:'.$color.'">■</span>';
+                    if (!$showPlage && !$showHours) {
+                        $label = $code ? $code : ($isNuitCell ? 'N' : 'J');
+                        $row .= '<span class="shift-code" style="color:'.$color.';font-weight:700">'.$label.'</span>';
+                    }
                     $row .= '</td>';
                 }
             } else {
@@ -425,7 +428,10 @@ foreach ($agents as $ag) {
                         if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
                     }
                     if ($showHours) $row .= ($showPlage ? '<br>' : '').'<span class="shift-dur">'.$dur.'</span>';
-                    if (!$showPlage && !$showHours) $row .= '<span style="color:'.$color.'">■</span>';
+                    if (!$showPlage && !$showHours) {
+                        $label = $code ? $code : ($isNuitCell ? 'N' : 'J');
+                        $row .= '<span class="shift-code" style="color:'.$color.';font-weight:700">'.$label.'</span>';
+                    }
                     $row .= '</td>';
                 }
             } else {
