@@ -29,10 +29,31 @@ $nomsJs = ['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
 $params = getAllParams();
 
 // Options d'affichage des heures
-$hoursDisplay = $_GET['hours_display'] ?? 'full'; // full | none | factor
-$hoursPct     = max(1, min(200, (int)($_GET['hours_pct'] ?? 100)));
-$hoursFactor  = $hoursDisplay === 'factor' ? ($hoursPct / 100) : ($hoursDisplay === 'none' ? 0.0 : 1.0);
-$showHours    = ($hoursDisplay !== 'none');
+$hoursDisplay      = $_GET['hours_display'] ?? 'full'; // full | none | factor
+$hoursPct          = max(1, min(200, (int)($_GET['hours_pct'] ?? 100)));
+$hoursFactor       = $hoursDisplay === 'factor' ? ($hoursPct / 100) : ($hoursDisplay === 'none' ? 0.0 : 1.0);
+$showHours         = ($hoursDisplay !== 'none');
+// Plage horaire (07h-19h) : masquée par défaut en mode "none", sinon affichée sauf opt-out explicite
+$showPlage         = $hoursDisplay === 'none'
+    ? (($_GET['show_plage'] ?? '0') === '1')
+    : (($_GET['show_plage'] ?? '1') !== '0');
+$showHeuresContrat = !empty($_GET['heures_contrat']);
+
+// Charger les heures contrat par agent si demandé
+$heuresContratMap = [];
+if ($showHeuresContrat) {
+    $agentIdsList = array_column($agents, 'id');
+    if ($agentIdsList) {
+        $ph = implode(',', array_fill(0, count($agentIdsList), '?'));
+        $stC = $db->prepare("SELECT agent_id, total_heures_contrat FROM contrats WHERE agent_id IN ($ph) AND statut='actif' ORDER BY created_at DESC");
+        $stC->execute($agentIdsList);
+        foreach ($stC->fetchAll() as $cr) {
+            if (!isset($heuresContratMap[$cr['agent_id']])) {
+                $heuresContratMap[$cr['agent_id']] = (float)$cr['total_heures_contrat'];
+            }
+        }
+    }
+}
 
 $shifts = [
     'J'  => ['label'=>'Journée', 'debut'=>'07:00', 'fin'=>'19:00', 'color'=>'#16a34a'],
@@ -314,7 +335,9 @@ if ($type === 'week') {
         $covJour[$date]    = ['hj'=>0,'hn'=>0,'fj'=>0,'fn'=>0];
     }
 }
-$html .= '<th class="total-col">Total</th></tr></thead><tbody>';
+$html .= '<th class="total-col">Total planifié</th>';
+if ($showHeuresContrat) $html .= '<th class="total-col" style="background:#fef9ec;color:#92400e">Contrat</th>';
+$html .= '</tr></thead><tbody>';
 
 $prevSexeExp = null;
 $summaryStats = [];
@@ -345,21 +368,22 @@ foreach ($agents as $ag) {
                 $color    = $code ? $shifts[$code]['color'] : '#374151';
                 $minDisp  = (int)round($minT * $hoursFactor);
                 $dur      = $showHours ? round($minDisp/60).'h' : '';
-                $hDebFmt = formatHeureCourte($hDeb);
+                $hDebFmt  = formatHeureCourte($hDeb);
                 if ($hoursDisplay === 'factor' && $showHours) {
                     list($hh, $mm) = explode(':', $hDeb);
                     $endTotal   = (int)$hh * 60 + (int)$mm + $minDisp;
                     $hFinAdjFmt = formatHeureCourte(sprintf('%02d:%02d', (int)floor($endTotal/60) % 24, $endTotal % 60));
-                    $row .= '<td class="'.$cls.'">'
-                        .'<span class="shift-code" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinAdjFmt.'</span>'
-                        .'<br><span class="shift-dur">'.$dur.'</span></td>';
+                    $plageStr = $showPlage ? '<span class="shift-code" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinAdjFmt.'</span><br>' : '';
+                    $row .= '<td class="'.$cls.'">'.$plageStr.'<span class="shift-dur">'.$dur.'</span></td>';
                 } else {
                     $hFinFmt = formatHeureCourte($hFin);
-                    $row .= '<td class="'.$cls.'">'
-                        .'<span class="shift-code" style="color:'.$color.'">'
-                        .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
-                    if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
-                    if ($showHours) $row .= '<br><span class="shift-dur">'.$dur.'</span>';
+                    $row .= '<td class="'.$cls.'">';
+                    if ($showPlage) {
+                        $row .= '<span class="shift-code" style="color:'.$color.'">'.($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
+                        if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
+                    }
+                    if ($showHours) $row .= ($showPlage ? '<br>' : '').'<span class="shift-dur">'.$dur.'</span>';
+                    if (!$showPlage && !$showHours) $row .= '<span style="color:'.$color.'">■</span>';
                     $row .= '</td>';
                 }
             } else {
@@ -386,21 +410,22 @@ foreach ($agents as $ag) {
                 $color    = $code ? $shifts[$code]['color'] : '#374151';
                 $minDisp  = (int)round($minT * $hoursFactor);
                 $dur      = $showHours ? round($minDisp/60).'h' : '';
-                $hDebFmt = formatHeureCourte($hDeb);
+                $hDebFmt  = formatHeureCourte($hDeb);
                 if ($hoursDisplay === 'factor' && $showHours) {
                     list($hh, $mm) = explode(':', $hDeb);
                     $endTotal   = (int)$hh * 60 + (int)$mm + $minDisp;
                     $hFinAdjFmt = formatHeureCourte(sprintf('%02d:%02d', (int)floor($endTotal/60) % 24, $endTotal % 60));
-                    $row .= '<td class="'.$cls.'">'
-                        .'<span class="shift-code" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinAdjFmt.'</span>'
-                        .'<br><span class="shift-dur">'.$dur.'</span></td>';
+                    $plageStr = $showPlage ? '<span class="shift-code" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinAdjFmt.'</span><br>' : '';
+                    $row .= '<td class="'.$cls.'">'.$plageStr.'<span class="shift-dur">'.$dur.'</span></td>';
                 } else {
                     $hFinFmt = formatHeureCourte($hFin);
-                    $row .= '<td class="'.$cls.'">'
-                        .'<span class="shift-code" style="color:'.$color.'">'
-                        .($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
-                    if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
-                    if ($showHours) $row .= '<br><span class="shift-dur">'.$dur.'</span>';
+                    $row .= '<td class="'.$cls.'">';
+                    if ($showPlage) {
+                        $row .= '<span class="shift-code" style="color:'.$color.'">'.($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
+                        if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
+                    }
+                    if ($showHours) $row .= ($showPlage ? '<br>' : '').'<span class="shift-dur">'.$dur.'</span>';
+                    if (!$showPlage && !$showHours) $row .= '<span style="color:'.$color.'">■</span>';
                     $row .= '</td>';
                 }
             } else {
@@ -423,6 +448,10 @@ foreach ($agents as $ag) {
         $html .= '<td class="total-col">'.$totalDisp.'h</td>';
     } else {
         $html .= '<td class="total-col">—</td>';
+    }
+    if ($showHeuresContrat) {
+        $hCt = $heuresContratMap[$ag['id']] ?? null;
+        $html .= '<td class="total-col" style="background:#fef9ec;color:#92400e">'.($hCt !== null ? number_format($hCt, 1).'h' : '—').'</td>';
     }
     $html .= '</tr>';
 }
@@ -448,7 +477,9 @@ foreach ($covJour as $dateStr => $cov) {
     }
     $html .= '<td style="text-align:center;font-size:5.5pt;line-height:1.5;padding:2px 1px">'.($cell ?: '—').'</td>';
 }
-$html .= '<td class="total-col"></td></tr>';
+$html .= '<td class="total-col"></td>';
+if ($showHeuresContrat) $html .= '<td class="total-col" style="background:#fef9ec"></td>';
+$html .= '</tr>';
 
 // Ligne total h/jour
 $grandTotal = array_sum($totauxJour);
@@ -465,6 +496,10 @@ if ($showHours) {
     $html .= '<td class="total-col">' . number_format($grandTotal * $hoursFactor / 60, 1) . 'h</td>';
 } else {
     $html .= '<td class="total-col">—</td>';
+}
+if ($showHeuresContrat) {
+    $totalContrat = array_sum($heuresContratMap);
+    $html .= '<td class="total-col" style="background:#fef9ec;color:#92400e">'.($totalContrat > 0 ? number_format($totalContrat,1).'h' : '—').'</td>';
 }
 $html .= '</tr></tfoot>';
 $html .= '</table>';

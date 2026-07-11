@@ -1148,7 +1148,16 @@ if ($vue === 'semaine') {
             <span style="font-size:0.82rem;color:#6b7280">% des heures affichées</span>
           </div>
         </div>
-        <div class="mb-0">
+        <div class="mb-3">
+          <label class="form-label" style="font-size:0.82rem;font-weight:600">Options d'affichage</label>
+          <div class="form-check mb-1">
+            <input class="form-check-input" type="checkbox" id="exportShowPlage" checked>
+            <label class="form-check-label" style="font-size:0.82rem" for="exportShowPlage">Afficher la plage horaire <span style="color:#6b7280">(ex : 07h–19h)</span></label>
+          </div>
+          <div class="form-check mb-1">
+            <input class="form-check-input" type="checkbox" id="exportHeuresContrat">
+            <label class="form-check-label" style="font-size:0.82rem" for="exportHeuresContrat">Afficher les heures totales du contrat <span style="color:#92400e">(colonne dorée)</span></label>
+          </div>
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="exportShowFooter" checked>
             <label class="form-check-label" style="font-size:0.82rem" for="exportShowFooter">Inclure les mentions légales</label>
@@ -1574,6 +1583,12 @@ if (exportCustomDatesCb) {
 document.querySelectorAll('input[name="exportHours"]').forEach(function(r) {
     r.addEventListener('change', function() {
         document.getElementById('exportHoursFactorRow').style.display = this.value === 'factor' ? '' : 'none';
+        // En mode "sans heures", décocher la plage par défaut
+        if (this.value === 'none') {
+            document.getElementById('exportShowPlage').checked = false;
+        } else {
+            document.getElementById('exportShowPlage').checked = true;
+        }
     });
 });
 
@@ -1614,6 +1629,8 @@ window.doExport = function() {
         var pct = parseInt(document.getElementById('exportHoursPct').value, 10) || 50;
         url += '&hours_pct=' + pct;
     }
+    if (!document.getElementById('exportShowPlage').checked) url += '&show_plage=0';
+    if (document.getElementById('exportHeuresContrat').checked) url += '&heures_contrat=1';
     exportModal.hide();
     window.location.href = url;
 };
