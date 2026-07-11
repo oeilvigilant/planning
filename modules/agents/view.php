@@ -601,7 +601,9 @@ if (canDo('agents','delete')) {
             </div>
             <div class="d-flex align-items-center gap-1 flex-shrink-0">
               <?php if ($signed): ?>
-                <span title="Signé" style="font-size:0.7rem;background:rgba(34,197,94,0.1);color:#16a34a;padding:2px 7px;border-radius:10px"><i class="fa fa-check me-1"></i>Signé</span>
+                <span style="font-size:0.7rem;background:rgba(34,197,94,0.1);color:#16a34a;padding:2px 7px;border-radius:10px"><i class="fa fa-check me-1"></i>Signé</span>
+              <?php else: ?>
+                <span style="font-size:0.7rem;background:rgba(245,158,11,0.1);color:#b45309;padding:2px 7px;border-radius:10px"><i class="fa fa-clock me-1"></i>Non signé</span>
               <?php endif; ?>
               <?php if ($archive): ?>
                 <span style="font-size:0.7rem;background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:10px">Archivé</span>
