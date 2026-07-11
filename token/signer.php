@@ -17,6 +17,7 @@ $db   = getDB();
 $stmt = $db->prepare("
     SELECT st.id          AS token_id,
            st.agent_id,
+           st.contrat_id,
            st.contrat_data,
            st.expires_at,
            st.signed_at,
@@ -72,6 +73,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['sign_submit'])) {
         // Marquer le token comme utilisé
         $db->prepare("UPDATE signature_tokens SET signed_at=NOW(), ip_signed=?, ua_signed=? WHERE id=?")
            ->execute([$ip, $ua, $tokenId]);
+        // Propager la signature sur le contrat lié (si contrat_id présent dans le token)
+        if (!empty($row['contrat_id'])) {
+            $db->prepare("UPDATE contrats SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=? AND agent_id=?")
+               ->execute([$sigData, $ip, $row['contrat_id'], $agentId]);
+        }
         // Notifier l'admin par email
         $adminEmail = $params['smtp_from'] ?? $params['entreprise_email'] ?? '';
         if ($adminEmail) {

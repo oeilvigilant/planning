@@ -172,6 +172,18 @@ try {
     $allContrats = $stAllC->fetchAll();
 } catch (Exception $e) { $allContrats = []; }
 
+// Charger les tokens signés par contrat_id pour les contrats signés via lien (avant le fix signer.php)
+$signedByContrat = [];
+try {
+    $stSigned = $db->prepare("SELECT contrat_id, signed_at, email FROM signature_tokens WHERE agent_id=? AND signed_at IS NOT NULL ORDER BY signed_at DESC");
+    $stSigned->execute([$id]);
+    foreach ($stSigned->fetchAll() as $tok) {
+        if ($tok['contrat_id'] && !isset($signedByContrat[$tok['contrat_id']])) {
+            $signedByContrat[$tok['contrat_id']] = $tok;
+        }
+    }
+} catch (Exception $e) {}
+
 // Statut du dernier contrat actif
 $contratSigStatus = 'aucun';
 $sigTokenRow      = null;
@@ -581,10 +593,14 @@ if (canDo('agents','delete')) {
         <p class="text-center text-muted py-3 mb-0" style="font-size:0.85rem">Aucun contrat</p>
       <?php else: ?>
         <?php foreach ($allContrats as $ct):
-          $debut   = $ct['date_debut'] ? date('d/m/Y', strtotime($ct['date_debut'])) : '?';
-          $fin     = $ct['date_fin']   ? date('d/m/Y', strtotime($ct['date_fin']))   : '—';
-          $archive = $ct['statut'] === 'archive';
-          $signed  = !empty($ct['signature']);
+          $debut      = $ct['date_debut'] ? date('d/m/Y', strtotime($ct['date_debut'])) : '?';
+          $fin        = $ct['date_fin']   ? date('d/m/Y', strtotime($ct['date_fin']))   : '—';
+          $archive    = $ct['statut'] === 'archive';
+          $signedDat  = $ct['signature_date'] ?? null;
+          // Signé si contrats.signature rempli OU si un token a été signé pour ce contrat
+          $tokenSig   = $signedByContrat[$ct['id']] ?? null;
+          $signed     = !empty($ct['signature']) || $tokenSig !== null;
+          if (!$signedDat && $tokenSig) $signedDat = $tokenSig['signed_at'];
         ?>
         <div style="border-bottom:1px solid #f0f2f5;<?= $archive ? 'opacity:0.65' : '' ?>">
           <div class="d-flex align-items-center gap-2 px-3 py-2">
@@ -601,7 +617,10 @@ if (canDo('agents','delete')) {
             </div>
             <div class="d-flex align-items-center gap-1 flex-shrink-0">
               <?php if ($signed): ?>
-                <span style="font-size:0.7rem;background:rgba(34,197,94,0.1);color:#16a34a;padding:2px 7px;border-radius:10px"><i class="fa fa-check me-1"></i>Signé</span>
+                <span style="font-size:0.7rem;background:rgba(34,197,94,0.1);color:#16a34a;padding:2px 7px;border-radius:10px"
+                      title="<?= $signedDat ? 'Signé le '.date('d/m/Y à H:i', strtotime($signedDat)) : '' ?>">
+                  <i class="fa fa-check me-1"></i>Signé<?= $signedDat ? ' le '.date('d/m/Y', strtotime($signedDat)) : '' ?>
+                </span>
               <?php else: ?>
                 <span style="font-size:0.7rem;background:rgba(245,158,11,0.1);color:#b45309;padding:2px 7px;border-radius:10px"><i class="fa fa-clock me-1"></i>Non signé</span>
               <?php endif; ?>
