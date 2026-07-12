@@ -33,8 +33,9 @@ try { $db->exec("CREATE TABLE IF NOT EXISTS devis_profils_types (
 )"); } catch(Exception $e){}
 // Migration taux_jdf / taux_ndf sur devis_profils_types
 try {
-    $db->exec("ALTER TABLE devis_profils_types ADD COLUMN IF NOT EXISTS taux_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_nf");
-    $db->exec("ALTER TABLE devis_profils_types ADD COLUMN IF NOT EXISTS taux_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_jdf");
+    $colsPt = $db->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='devis_profils_types'")->fetchAll(PDO::FETCH_COLUMN);
+    if (!in_array('taux_jdf', $colsPt)) $db->exec("ALTER TABLE devis_profils_types ADD COLUMN taux_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_nf");
+    if (!in_array('taux_ndf', $colsPt)) $db->exec("ALTER TABLE devis_profils_types ADD COLUMN taux_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_jdf");
 } catch(Exception $e){}
 // Seed profils par défaut si table vide
 try {

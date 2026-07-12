@@ -77,10 +77,12 @@ function ensureDevisSchema(): void {
 
     // Migration taux_jdf / taux_ndf sur devis_profils et devis_lignes
     try {
-        $db->exec("ALTER TABLE devis_profils ADD COLUMN IF NOT EXISTS taux_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_nf");
-        $db->exec("ALTER TABLE devis_profils ADD COLUMN IF NOT EXISTS taux_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_jdf");
-        $db->exec("ALTER TABLE devis_lignes  ADD COLUMN IF NOT EXISTS h_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER h_nf");
-        $db->exec("ALTER TABLE devis_lignes  ADD COLUMN IF NOT EXISTS h_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER h_jdf");
+        $cols = $db->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='devis_profils'")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('taux_jdf', $cols)) $db->exec("ALTER TABLE devis_profils ADD COLUMN taux_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_nf");
+        if (!in_array('taux_ndf', $cols)) $db->exec("ALTER TABLE devis_profils ADD COLUMN taux_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_jdf");
+        $cols2 = $db->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='devis_lignes'")->fetchAll(PDO::FETCH_COLUMN);
+        if (!in_array('h_jdf', $cols2)) $db->exec("ALTER TABLE devis_lignes ADD COLUMN h_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER h_nf");
+        if (!in_array('h_ndf', $cols2)) $db->exec("ALTER TABLE devis_lignes ADD COLUMN h_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER h_jdf");
     } catch (Exception $e) {}
 
     // Colonnes remise (migration auto)
