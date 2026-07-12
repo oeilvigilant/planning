@@ -523,10 +523,16 @@ $postesGrille = $db->query("SELECT * FROM postes WHERE actif=1 ORDER BY ordre, l
 $exportPdf = $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['export_pdf']) && $_POST['export_pdf'] === '1';
 
 // Passer la signature du contrat courant à buildContratHtml
+// On utilise UNIQUEMENT la signature du contrat (pas celle de la table agents qui est un résidu legacy)
 $aForPdf = $a;
 if (!empty($c['signature'])) {
     $aForPdf['signature']      = $c['signature'];
-    $aForPdf['signature_date'] = $c['signature_date'] ?? $a['signature_date'];
+    $aForPdf['signature_date'] = $c['signature_date'] ?? null;
+    $aForPdf['signature_ip']   = $c['signature_ip']   ?? null;
+} else {
+    $aForPdf['signature']      = null;
+    $aForPdf['signature_date'] = null;
+    $aForPdf['signature_ip']   = null;
 }
 
 if ($exportPdf) {
