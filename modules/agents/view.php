@@ -195,8 +195,8 @@ try {
     if ($dernierContrat && !empty($dernierContrat['signature'])) {
         $contratSigStatus = 'signe';
     } else {
-        $stTok = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? ORDER BY sent_at DESC LIMIT 1");
-        $stTok->execute([$id]);
+        $stTok = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? AND contrat_id=? ORDER BY sent_at DESC LIMIT 1");
+        $stTok->execute([$id, $dernierContrat['id'] ?? 0]);
         $sigTokenRow = $stTok->fetch();
         if ($sigTokenRow) {
             if (!empty($sigTokenRow['signed_at']))                          $contratSigStatus = 'signe';

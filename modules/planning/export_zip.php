@@ -143,6 +143,28 @@ $showFooter   = !empty($_GET['footer']);
 $marginBottom = $showFooter ? '22mm' : '5mm';
 $entreprise   = htmlspecialchars($params['entreprise_nom'] ?? 'Oeil Vigilant');
 
+$hoursDisplay      = $_GET['hours_display'] ?? 'real';
+$showHours         = ($hoursDisplay !== 'none');
+$showPlage         = $hoursDisplay === 'none'
+    ? (($_GET['show_plage'] ?? '0') === '1')
+    : (($_GET['show_plage'] ?? '1') !== '0');
+$showHeuresContrat = !empty($_GET['heures_contrat']);
+
+$heuresContratMap = [];
+if ($showHeuresContrat) {
+    $allIds = array_column($agents, 'id');
+    if ($allIds) {
+        $ph  = implode(',', array_fill(0, count($allIds), '?'));
+        $stC = $db->prepare("SELECT agent_id, total_heures_contrat FROM contrats WHERE agent_id IN ($ph) AND statut='actif' ORDER BY created_at DESC");
+        $stC->execute($allIds);
+        foreach ($stC->fetchAll() as $cr) {
+            if (!isset($heuresContratMap[$cr['agent_id']])) {
+                $heuresContratMap[$cr['agent_id']] = (float)$cr['total_heures_contrat'];
+            }
+        }
+    }
+}
+
 // ── CSS partagé ───────────────────────────────────────────────────────────────
 function buildPdfCss(string $marginBottom): string {
     return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
@@ -170,7 +192,7 @@ tfoot td { background: #f4f6fa; font-weight: 700; border-top: 2px solid #c9a84c;
 </style></head><body>';
 }
 
-function buildAgentPdf(array $ag, array $planningData, array $dates, array $feries, array $shifts, string $nomsJs, string $type, int $jourDebut, int $jourFin, int $mois, int $annee, string $periodeLabel, string $entreprise, bool $showFooter, string $marginBottom): string {
+function buildAgentPdf(array $ag, array $planningData, array $dates, array $feries, array $shifts, string $nomsJs, string $type, int $jourDebut, int $jourFin, int $mois, int $annee, string $periodeLabel, string $entreprise, bool $showFooter, string $marginBottom, bool $showHours = true, bool $showPlage = true, bool $showHeuresContrat = false, float $heuresContrat = 0): string {
     $nomsJsArr = explode(',', $nomsJs);
     $html = buildPdfCss($marginBottom);
 
@@ -209,7 +231,9 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
             $totauxJour[$date] = 0;
         }
     }
-    $html .= '<th class="total-col">Total</th></tr></thead><tbody>';
+    $html .= '<th class="total-col">Total planifié</th>';
+    if ($showHeuresContrat) $html .= '<th class="total-col" style="background:#fef9ec;color:#92400e">Contrat</th>';
+    $html .= '</tr></thead><tbody>';
 
     $totalMin = 0;
     $row      = '';
@@ -227,14 +251,23 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
                 $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$dateStr] += $minT;
+                $isNuitCell = $ligne['min_nuit']>0 || $ligne['min_ferie_nuit']>0;
                 $code    = detectShift($hDeb, $hFin, $shifts);
                 $color   = $code ? $shifts[$code]['color'] : '#374151';
-                $dur     = round($minT/60).'h';
+                $dur     = $showHours ? round($minT/60).'h' : '';
                 $hDebFmt = formatHeureCourte($hDeb);
                 $hFinFmt = formatHeureCourte($hFin);
-                $row .= '<td class="'.$cls.'"><span class="shift-code" style="color:'.$color.'">'.($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
-                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
-                $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
+                $row .= '<td class="'.$cls.'">';
+                if ($showPlage) {
+                    $row .= '<span class="shift-code" style="color:'.$color.'">'.($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
+                    if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
+                }
+                if ($showHours) $row .= ($showPlage ? '<br>' : '').'<span class="shift-dur">'.$dur.'</span>';
+                if (!$showPlage && !$showHours) {
+                    $label = $code ? $code : ($isNuitCell ? 'N' : 'J');
+                    $row .= '<span class="shift-code" style="color:'.$color.';font-weight:700">'.$label.'</span>';
+                }
+                $row .= '</td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
@@ -252,14 +285,23 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
                 $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$date] += $minT;
+                $isNuitCell = $ligne['min_nuit']>0 || $ligne['min_ferie_nuit']>0;
                 $code    = detectShift($hDeb, $hFin, $shifts);
                 $color   = $code ? $shifts[$code]['color'] : '#374151';
-                $dur     = round($minT/60).'h';
+                $dur     = $showHours ? round($minT/60).'h' : '';
                 $hDebFmt = formatHeureCourte($hDeb);
                 $hFinFmt = formatHeureCourte($hFin);
-                $row .= '<td class="'.$cls.'"><span class="shift-code" style="color:'.$color.'">'.($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
-                if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
-                $row .= '<br><span class="shift-dur">'.$dur.'</span></td>';
+                $row .= '<td class="'.$cls.'">';
+                if ($showPlage) {
+                    $row .= '<span class="shift-code" style="color:'.$color.'">'.($code ? $code : $hDebFmt.' - '.$hFinFmt).'</span>';
+                    if ($code) $row .= '<br><span class="shift-times" style="color:'.$color.'">'.$hDebFmt.' - '.$hFinFmt.'</span>';
+                }
+                if ($showHours) $row .= ($showPlage ? '<br>' : '').'<span class="shift-dur">'.$dur.'</span>';
+                if (!$showPlage && !$showHours) {
+                    $label = $code ? $code : ($isNuitCell ? 'N' : 'J');
+                    $row .= '<span class="shift-code" style="color:'.$color.';font-weight:700">'.$label.'</span>';
+                }
+                $row .= '</td>';
             } else {
                 $row .= '<td class="'.$cls.'">—</td>';
             }
@@ -268,7 +310,12 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
 
     $html .= '<tr><td class="agent-name">'.htmlspecialchars($ag['poste'] ?? '').'</td>';
     $html .= $row;
-    $html .= '<td class="total-col">'.number_format($totalMin/60,1).'h</td></tr>';
+    $html .= '<td class="total-col">'.number_format($totalMin/60,1).'h</td>';
+    if ($showHeuresContrat) {
+        $hc = $heuresContrat > 0 ? number_format($heuresContrat,1).'h' : '—';
+        $html .= '<td class="total-col" style="background:#fef9ec;color:#92400e">'.$hc.'</td>';
+    }
+    $html .= '</tr>';
 
     // Ligne récapitulatif heures par type
     $lignesAg = $planningData[$ag['id']] ?? [];
@@ -295,7 +342,12 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
     $colCount = $type === 'week' ? count($dates) : ($jourFin - $jourDebut + 1);
     $recapStr = implode(' &nbsp;·&nbsp; ', $recapParts);
     $html .= '<td colspan="'.$colCount.'" style="text-align:left;padding-left:6px;font-size:6pt;color:#666">'.$recapStr.'</td>';
-    $html .= '<td class="total-col">'.number_format($totalMin/60,1).'h</td></tr></tfoot>';
+    $html .= '<td class="total-col">'.number_format($totalMin/60,1).'h</td>';
+    if ($showHeuresContrat) {
+        $hc = $heuresContrat > 0 ? number_format($heuresContrat,1).'h' : '—';
+        $html .= '<td class="total-col" style="background:#fef9ec;color:#92400e">'.$hc.'</td>';
+    }
+    $html .= '</tr></tfoot>';
     $html .= '</table>';
 
     if ($showFooter) {
@@ -331,7 +383,9 @@ foreach ($agents as $ag) {
         $dates ?? [], $feries, $shifts,
         '', $type, $jourDebut, $jourFin,
         $mois ?? 0, $annee,
-        $periodeLabel, $entreprise, $showFooter, $marginBottom
+        $periodeLabel, $entreprise, $showFooter, $marginBottom,
+        $showHours, $showPlage, $showHeuresContrat,
+        $heuresContratMap[$ag['id']] ?? 0
     );
 
     $dompdf = new \Dompdf\Dompdf($options);

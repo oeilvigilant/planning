@@ -134,8 +134,8 @@ if (!$hasContrats && (
         date_debut, date_fin, motif_embauche,
         periode_essai, lieu_travail, remuneration, type_remuneration,
         total_heures_contrat, inclure_annexe_24h, mutuelle_choix,
-        lieu_signature, date_signature, signature, signature_date, signature_ip
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        lieu_signature, date_signature
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
     ->execute([
         $id,
         $a['type_contrat']         ?? 'CDD',
@@ -153,16 +153,15 @@ if (!$hasContrats && (
         $a['mutuelle_choix']       ?? 'dispense',
         $a['lieu_signature']       ?? null,
         $a['date_signature']       ?? null,
-        $a['signature']            ?? null,
-        $a['signature_date']       ?: null,
-        $a['signature_ip']         ?? null,
     ]);
     $hasContrats = true;
 }
 
-// Nettoyer les contrats vides créés par erreur (sans date ni heures ni signature)
+// Nettoyer les contrats vides créés par erreur (sans date ni heures, avec ou sans signature)
+// Seulement si l'agent a au moins un autre contrat (évite de supprimer l'unique contrat)
 try {
-    $db->exec("DELETE FROM contrats WHERE date_debut IS NULL AND date_fin IS NULL AND total_heures_contrat IS NULL AND signature IS NULL AND agent_id NOT IN (SELECT id FROM agents WHERE date_debut_contrat IS NOT NULL OR date_fin_contrat IS NOT NULL OR total_heures_contrat IS NOT NULL OR signature IS NOT NULL)");
+    $db->exec("DELETE FROM contrats WHERE date_debut IS NULL AND date_fin IS NULL AND total_heures_contrat IS NULL
+        AND agent_id IN (SELECT agent_id FROM (SELECT agent_id FROM contrats GROUP BY agent_id HAVING COUNT(*) > 1) t)");
 } catch (Exception $e) {}
 
 // Recompter après nettoyage
@@ -297,8 +296,8 @@ $defaults = [
 
 $defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
 
-// Auto-détecter dates depuis le planning si absentes
-if (!$defaults['date_debut'] || !$defaults['date_fin']) {
+// Auto-détecter dates depuis le planning si absentes (seulement pour contrats existants)
+if (!$isNew && (!$defaults['date_debut'] || !$defaults['date_fin'])) {
     $stP = $db->prepare("SELECT MIN(pl.date_travail) AS min_date, MAX(pl.date_travail) AS max_date
         FROM planning_lignes pl JOIN planning_versions pv ON pv.id=pl.version_id AND pv.is_current=1
         WHERE pl.agent_id=?");
@@ -547,8 +546,8 @@ try {
     $sigFromContrat = !empty($c['signature']);
     if ($sigFromContrat) {
         $sigStatus = 'signe';
-    } else {
-        $stTok = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? AND (contrat_id=? OR contrat_id IS NULL) ORDER BY sent_at DESC LIMIT 1");
+    } elseif ($contratId > 0) {
+        $stTok = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? AND contrat_id=? ORDER BY sent_at DESC LIMIT 1");
         $stTok->execute([$id, $contratId]);
         $sigTokenRow = $stTok->fetch();
         if ($sigTokenRow) {
@@ -982,9 +981,12 @@ if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures
 
       <h6 class="mb-2"><i class="fa fa-envelope me-2 text-warning"></i>Envoyer pour signature par email</h6>
       <?php
-        $lastToken = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? AND (contrat_id=? OR contrat_id IS NULL) ORDER BY sent_at DESC LIMIT 1");
-        $lastToken->execute([$id, $contratId]);
-        $lastTok = $lastToken->fetch();
+        $lastTok = false;
+        if ($contratId > 0) {
+            $lastToken = $db->prepare("SELECT * FROM signature_tokens WHERE agent_id=? AND contrat_id=? ORDER BY sent_at DESC LIMIT 1");
+            $lastToken->execute([$id, $contratId]);
+            $lastTok = $lastToken->fetch();
+        }
       ?>
       <?php if ($lastTok): ?>
       <div class="mb-2 p-2 rounded small <?= $lastTok['signed_at'] ? 'bg-success bg-opacity-10 border border-success border-opacity-25' : (strtotime($lastTok['expires_at']) < time() ? 'bg-secondary bg-opacity-10' : 'bg-warning bg-opacity-10 border border-warning border-opacity-25') ?>">
