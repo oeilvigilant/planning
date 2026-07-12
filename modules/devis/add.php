@@ -437,13 +437,14 @@ require_once __DIR__ . '/../../includes/header.php';
         groupesContainer.appendChild(block);
     }
 
-    // Règles de majoration depuis le tarif journée normal
+    // Règles de majoration depuis le tarif journée normal (pourcentages cumulatifs)
+    // Nuit +10%, Dimanche +10%, Férié +100% — les pourcentages s'additionnent
     var MAJORATION_RULES = {
-        nn: { label: 'Nuit Normal',    fn: function(jn) { return jn + 2; } },
-        jd: { label: 'Jour Dim.',      fn: function(jn) { return jn + 2; } },
-        nd: { label: 'Nuit Dim.',      fn: function(jn) { return jn + 5; } },
-        jf: { label: 'Jour Férié',     fn: function(jn) { return jn * 2; } },
-        nf: { label: 'Nuit Férié',     fn: function(jn) { return jn * 2 + 4; } },
+        nn: { label: 'Nuit Normal',    fn: function(jn) { return jn * 1.10; } },   // +10%
+        jd: { label: 'Jour Dim.',      fn: function(jn) { return jn * 1.10; } },   // +10%
+        nd: { label: 'Nuit Dim.',      fn: function(jn) { return jn * 1.20; } },   // +10%+10%
+        jf: { label: 'Jour Férié',     fn: function(jn) { return jn * 2.00; } },   // +100%
+        nf: { label: 'Nuit Férié',     fn: function(jn) { return jn * 2.10; } },   // +100%+10%
     };
 
     function makeTauxField(gIdx, key, sub, grp, val) {

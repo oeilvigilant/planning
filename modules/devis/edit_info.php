@@ -553,12 +553,13 @@ document.getElementById('newTplSelect').addEventListener('change', function() {
 });
 
 // Règles de majoration
+// Pourcentages cumulatifs : Nuit +10%, Dimanche +10%, Férié +100%
 var MAJ_RULES = {
-    nn: function(jn) { return jn + 2; },
-    jd: function(jn) { return jn + 2; },
-    nd: function(jn) { return jn + 5; },
-    jf: function(jn) { return jn * 2; },
-    nf: function(jn) { return jn * 2 + 4; },
+    nn: function(jn) { return jn * 1.10; },   // +10%
+    jd: function(jn) { return jn * 1.10; },   // +10%
+    nd: function(jn) { return jn * 1.20; },   // +10%+10%
+    jf: function(jn) { return jn * 2.00; },   // +100%
+    nf: function(jn) { return jn * 2.10; },   // +100%+10%
 };
 
 // Auto-calcul pour "Ajouter un profil"
