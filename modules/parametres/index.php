@@ -36,8 +36,8 @@ try {
     if ((int)$db->query("SELECT COUNT(*) FROM devis_profils_types")->fetchColumn() === 0) {
         $seedStmt = $db->prepare("INSERT INTO devis_profils_types (label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf,ordre) VALUES (?,?,?,?,?,?,?,?,?,?)");
         $seeds = [
-            ['Agent De Jour',        'Agent de Sécurité', 'De 07h00 à 19h00', 25.90, 28.49, 28.49, 31.08, 51.80, 54.39, 1],
-            ['Agent De Nuit',        'Agent de Sécurité', 'De 19h00 à 07h00', 25.90, 28.49, 28.49, 31.08, 51.80, 54.39, 2],
+            ['Agent De Jour',        'Agent de Sécurité', 'De 07h00 à 19h00', 26.70, 29.37, 29.37, 32.04, 53.40, 56.07, 1],
+            ['Agent De Nuit',        'Agent de Sécurité', 'De 19h00 à 07h00', 26.70, 29.37, 29.37, 32.04, 53.40, 56.07, 2],
             ['Maître Chien',         'Agent Cynophile',   'De 20h00 à 06h00', 28.00, 30.80, 30.80, 33.60, 56.00, 58.80, 3],
             ['Agent SSIAP 1',        'Agent SSIAP',       'De 07h00 à 19h00', 26.50, 29.15, 29.15, 31.80, 53.00, 55.65, 4],
             ["Chef d'équipe SSIAP 2",'Agent SSIAP',       'De 07h00 à 19h00', 28.00, 30.80, 30.80, 33.60, 56.00, 58.80, 5],
@@ -45,6 +45,11 @@ try {
         ];
         foreach ($seeds as $s) $seedStmt->execute($s);
     }
+} catch(Exception $e){}
+// Migration taux agents jour/nuit : base 25.90 → 26.70 (mise à jour si ancienne valeur détectée)
+try {
+    $db->prepare("UPDATE devis_profils_types SET taux_jn=26.70,taux_nn=29.37,taux_jd=29.37,taux_nd=32.04,taux_jf=53.40,taux_nf=56.07
+        WHERE taux_jn=25.90 AND label IN ('Agent De Jour','Agent De Nuit')")->execute();
 } catch(Exception $e){}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
