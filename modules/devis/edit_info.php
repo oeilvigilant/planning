@@ -240,20 +240,13 @@ $stmtPer->execute([$id]);
 $periodes = $stmtPer->fetchAll();
 
 $clientsList = $db->query("SELECT id, nom, adresse, contact FROM clients ORDER BY nom")->fetchAll();
+$PROFILS_TYPES = [];
+try { $PROFILS_TYPES = $db->query("SELECT * FROM devis_profils_types WHERE actif=1 ORDER BY ordre, id")->fetchAll(); } catch(Exception $e){}
 
 $pageTitle     = 'Modifier — ' . $devis['numero'];
 $currentModule = 'devis';
 $topbarActions = '<a href="view.php?id=' . $id . '" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i> Retour au devis</a>';
 require_once __DIR__ . '/../../includes/header.php';
-
-$PROFILS_TYPES = [
-    'agent-jour'  => ['label'=>'Profil : Agent De Jour',         'activite'=>'Agent de Sécurité','plage'=>'De 07h00 à 19h00','jn'=>25.90,'nn'=>27.90,'jd'=>27.90,'nd'=>30.90,'jf'=>51.80,'nf'=>55.80],
-    'agent-nuit'  => ['label'=>'Profil : Agent De Nuit',         'activite'=>'Agent de Sécurité','plage'=>'De 19h00 à 07h00','jn'=>25.90,'nn'=>27.90,'jd'=>27.90,'nd'=>30.90,'jf'=>51.80,'nf'=>55.80],
-    'cynophile'   => ['label'=>'Profil : Maître Chien',          'activite'=>'Agent Cynophile',  'plage'=>'De 20h00 à 06h00','jn'=>28.00,'nn'=>30.00,'jd'=>30.00,'nd'=>33.00,'jf'=>56.00,'nf'=>60.00],
-    'ssiap1'      => ['label'=>'Profil : Agent SSIAP 1',         'activite'=>'Agent SSIAP',      'plage'=>'De 07h00 à 19h00','jn'=>26.50,'nn'=>28.50,'jd'=>28.50,'nd'=>31.50,'jf'=>53.00,'nf'=>57.00],
-    'ssiap2'      => ['label'=>"Profil : Chef d'équipe SSIAP 2", 'activite'=>'Agent SSIAP',      'plage'=>'De 07h00 à 19h00','jn'=>28.00,'nn'=>30.00,'jd'=>30.00,'nd'=>33.00,'jf'=>56.00,'nf'=>60.00],
-    'chef-equipe' => ['label'=>"Profil : Chef D'Équipe",         'activite'=>"Chef d'Équipe",    'plage'=>'De 07h00 à 19h00','jn'=>27.50,'nn'=>29.50,'jd'=>29.50,'nd'=>32.50,'jf'=>55.00,'nf'=>59.00],
-];
 ?>
 
 <?php if ($errors): ?>
@@ -492,9 +485,9 @@ $PROFILS_TYPES = [
                 <label class="form-label">Charger un profil type</label>
                 <select class="form-select form-select-sm" id="newTplSelect" style="max-width:280px">
                     <option value="">— Sélectionner —</option>
-                    <option value="agent-jour">Agent de Jour</option><option value="agent-nuit">Agent de Nuit</option>
-                    <option value="cynophile">Maître Chien</option><option value="ssiap1">Agent SSIAP 1</option>
-                    <option value="ssiap2">Chef d'équipe SSIAP 2</option><option value="chef-equipe">Chef d'Équipe</option>
+                    <?php foreach ($PROFILS_TYPES as $pt): ?>
+                    <option value="<?= $pt['id'] ?>"><?= h($pt['label']) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="row g-2">
@@ -539,7 +532,12 @@ function toggleEditProfil(pid) {
     });
 })();
 
-var PROFILS_TYPES = <?= json_encode(array_map(fn($t) => ['label'=>$t['label'],'activite'=>$t['activite'],'plage'=>$t['plage'],'jn'=>$t['jn'],'nn'=>$t['nn'],'jd'=>$t['jd'],'nd'=>$t['nd'],'jf'=>$t['jf'],'nf'=>$t['nf']], $PROFILS_TYPES)) ?>;
+var PROFILS_TYPES = <?= json_encode(array_column(array_map(fn($t) => [
+    'id'   => (string)$t['id'],
+    'data' => ['label'=>$t['label'],'activite'=>$t['activite'],'plage'=>$t['plage'],
+               'jn'=>(float)$t['taux_jn'],'nn'=>(float)$t['taux_nn'],'jd'=>(float)$t['taux_jd'],
+               'nd'=>(float)$t['taux_nd'],'jf'=>(float)$t['taux_jf'],'nf'=>(float)$t['taux_nf']],
+], $PROFILS_TYPES), 'data', 'id'), JSON_UNESCAPED_UNICODE) ?>;
 
 document.getElementById('newTplSelect').addEventListener('change', function() {
     var t = PROFILS_TYPES[this.value]; if (!t) return;

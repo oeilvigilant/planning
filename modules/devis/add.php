@@ -9,7 +9,9 @@ $db = getDB();
 ensureDevisSchema();
 ensureClientsSchema();
 
-$clientsList = $db->query("SELECT id, nom, adresse, contact, telephone FROM clients ORDER BY nom")->fetchAll();
+$clientsList       = $db->query("SELECT id, nom, adresse, contact, telephone FROM clients ORDER BY nom")->fetchAll();
+$devisProfilsTypes = [];
+try { $devisProfilsTypes = $db->query("SELECT * FROM devis_profils_types WHERE actif=1 ORDER BY ordre, id")->fetchAll(); } catch(Exception $e){}
 
 function generateNumeroDevis() {
     $db     = getDB();
@@ -270,14 +272,12 @@ require_once __DIR__ . '/../../includes/header.php';
     var btnAddGroupe     = document.getElementById('btnAddGroupe');
     var gCounter = 0;
 
-    var PROFILS_TYPES = {
-        'agent-jour':  {label:'Agent de Jour',          activite:'Agent de Sécurité', plage:'De 07h00 à 19h00',jn:25.90,nn:27.90,jd:27.90,nd:30.90,jf:51.80,nf:55.80},
-        'agent-nuit':  {label:'Agent de Nuit',          activite:'Agent de Sécurité', plage:'De 19h00 à 07h00',jn:25.90,nn:27.90,jd:27.90,nd:30.90,jf:51.80,nf:55.80},
-        'cynophile':   {label:'Maître Chien',            activite:'Agent Cynophile',   plage:'De 20h00 à 06h00',jn:28.00,nn:30.00,jd:30.00,nd:33.00,jf:56.00,nf:60.00},
-        'ssiap1':      {label:'Agent SSIAP 1',           activite:'Agent SSIAP',       plage:'De 07h00 à 19h00',jn:26.50,nn:28.50,jd:28.50,nd:31.50,jf:53.00,nf:57.00},
-        'ssiap2':      {label:"Chef d'équipe SSIAP 2",  activite:'Agent SSIAP',       plage:'De 07h00 à 19h00',jn:28.00,nn:30.00,jd:30.00,nd:33.00,jf:56.00,nf:60.00},
-        'chef-equipe': {label:"Chef d'Équipe",           activite:"Chef d'Équipe",     plage:'De 07h00 à 19h00',jn:27.50,nn:29.50,jd:29.50,nd:32.50,jf:55.00,nf:59.00},
-    };
+    var PROFILS_TYPES = <?= json_encode(array_column(array_map(fn($p) => [
+        'id'      => (string)$p['id'],
+        'data'    => ['label'=>$p['label'],'activite'=>$p['activite'],'plage'=>$p['plage'],
+                      'jn'=>(float)$p['taux_jn'],'nn'=>(float)$p['taux_nn'],'jd'=>(float)$p['taux_jd'],
+                      'nd'=>(float)$p['taux_nd'],'jf'=>(float)$p['taux_jf'],'nf'=>(float)$p['taux_nf']],
+    ], $devisProfilsTypes), 'data', 'id'), JSON_UNESCAPED_UNICODE) ?>;
 
     // ── Créer une ligne de plage de dates ─────────────────────────────────────
     function makePeriodeLine(gIdx, pIdx, debut, fin) {
@@ -366,14 +366,11 @@ require_once __DIR__ . '/../../includes/header.php';
             '            <div style="font-size:0.72rem;color:var(--ov-gold);text-transform:uppercase;letter-spacing:1px">Taux horaires HT (€)</div>',
             '            <div style="font-size:0.62rem;color:#9ca3af;margin-top:1px"><i class="fa fa-wand-magic-sparkles me-1" style="color:var(--ov-gold)"></i>Modifier <strong>JOUR Normal</strong> → suggestions automatiques</div>',
             '        </div>',
-            '        <select class="form-select form-select-sm g-type-select" style="width:200px">',
-            '            <option value="">— Appliquer un profil type —</option>',
-            '            <option value="agent-jour">Agent de Jour (07h-19h)</option>',
-            '            <option value="agent-nuit">Agent de Nuit (19h-07h)</option>',
-            '            <option value="cynophile">Maître Chien</option>',
-            '            <option value="ssiap1">Agent SSIAP 1</option>',
-            '            <option value="ssiap2">Chef d\'équipe SSIAP 2</option>',
-            '            <option value="chef-equipe">Chef d\'Équipe</option>',
+            '        <select class="form-select form-select-sm g-type-select" style="width:220px">',
+            '            <option value="">— Appliquer un profil —</option>',
+            <?php foreach ($devisProfilsTypes as $dp): ?>
+            '            <option value="<?= $dp['id'] ?>"><?= addslashes(h($dp['label'])) ?></option>',
+            <?php endforeach; ?>
             '        </select>',
             '    </div>',
             '    <div class="row g-2">',

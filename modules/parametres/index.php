@@ -16,6 +16,37 @@ try { $db->exec("CREATE TABLE IF NOT EXISTS postes (
     ordre INT NOT NULL DEFAULT 0
 )"); } catch(Exception $e){}
 
+// Migration table profils types devis
+try { $db->exec("CREATE TABLE IF NOT EXISTS devis_profils_types (
+    id       INT AUTO_INCREMENT PRIMARY KEY,
+    label    VARCHAR(100) NOT NULL,
+    activite VARCHAR(100) DEFAULT '',
+    plage    VARCHAR(50)  DEFAULT '',
+    taux_jn  DECIMAL(8,2) NOT NULL DEFAULT 25.90,
+    taux_nn  DECIMAL(8,2) NOT NULL DEFAULT 28.49,
+    taux_jd  DECIMAL(8,2) NOT NULL DEFAULT 28.49,
+    taux_nd  DECIMAL(8,2) NOT NULL DEFAULT 31.08,
+    taux_jf  DECIMAL(8,2) NOT NULL DEFAULT 51.80,
+    taux_nf  DECIMAL(8,2) NOT NULL DEFAULT 54.39,
+    actif    TINYINT(1)   NOT NULL DEFAULT 1,
+    ordre    INT          NOT NULL DEFAULT 0
+)"); } catch(Exception $e){}
+// Seed profils par défaut si table vide
+try {
+    if ((int)$db->query("SELECT COUNT(*) FROM devis_profils_types")->fetchColumn() === 0) {
+        $seedStmt = $db->prepare("INSERT INTO devis_profils_types (label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf,ordre) VALUES (?,?,?,?,?,?,?,?,?,?)");
+        $seeds = [
+            ['Agent De Jour',        'Agent de Sécurité', 'De 07h00 à 19h00', 25.90, 28.49, 28.49, 31.08, 51.80, 54.39, 1],
+            ['Agent De Nuit',        'Agent de Sécurité', 'De 19h00 à 07h00', 25.90, 28.49, 28.49, 31.08, 51.80, 54.39, 2],
+            ['Maître Chien',         'Agent Cynophile',   'De 20h00 à 06h00', 28.00, 30.80, 30.80, 33.60, 56.00, 58.80, 3],
+            ['Agent SSIAP 1',        'Agent SSIAP',       'De 07h00 à 19h00', 26.50, 29.15, 29.15, 31.80, 53.00, 55.65, 4],
+            ["Chef d'équipe SSIAP 2",'Agent SSIAP',       'De 07h00 à 19h00', 28.00, 30.80, 30.80, 33.60, 56.00, 58.80, 5],
+            ["Chef d'Équipe",        "Chef d'Équipe",     'De 07h00 à 19h00', 27.50, 30.25, 30.25, 33.00, 55.00, 57.75, 6],
+        ];
+        foreach ($seeds as $s) $seedStmt->execute($s);
+    }
+} catch(Exception $e){}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
     $action = $_POST['action'] ?? '';
 
@@ -85,6 +116,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         $db->prepare("DELETE FROM postes WHERE id=?")->execute([(int)($_POST['poste_id'] ?? 0)]);
         flash('success','Poste supprimé.');
         header('Location: index.php?tab=postes'); exit;
+    }
+    if ($action === 'add_devis_profil') {
+        $label    = trim($_POST['dp_label']    ?? '');
+        $activite = trim($_POST['dp_activite'] ?? '');
+        $plage    = trim($_POST['dp_plage']    ?? '');
+        $jn = (float)($_POST['dp_jn'] ?? 0);
+        if ($label && $jn > 0) {
+            $db->prepare("INSERT INTO devis_profils_types (label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf,ordre)
+                VALUES (?,?,?,?,?,?,?,?,?,(SELECT COALESCE(MAX(t.ordre),0)+1 FROM devis_profils_types t))")
+               ->execute([
+                   $label, $activite, $plage, $jn,
+                   (float)($_POST['dp_nn'] ?? round($jn * 1.10, 2)),
+                   (float)($_POST['dp_jd'] ?? round($jn * 1.10, 2)),
+                   (float)($_POST['dp_nd'] ?? round($jn * 1.20, 2)),
+                   (float)($_POST['dp_jf'] ?? round($jn * 2.00, 2)),
+                   (float)($_POST['dp_nf'] ?? round($jn * 2.10, 2)),
+               ]);
+            flash('success', 'Profil devis ajouté.');
+        }
+        header('Location: index.php?tab=devis-profils'); exit;
+    }
+    if ($action === 'save_devis_profils') {
+        foreach ($_POST['dp'] ?? [] as $pid => $d) {
+            $db->prepare("UPDATE devis_profils_types SET label=?,activite=?,plage=?,taux_jn=?,taux_nn=?,taux_jd=?,taux_nd=?,taux_jf=?,taux_nf=?,actif=? WHERE id=?")
+               ->execute([
+                   trim($d['label']    ?? ''),
+                   trim($d['activite'] ?? ''),
+                   trim($d['plage']    ?? ''),
+                   (float)($d['jn'] ?? 0),
+                   (float)($d['nn'] ?? 0),
+                   (float)($d['jd'] ?? 0),
+                   (float)($d['nd'] ?? 0),
+                   (float)($d['jf'] ?? 0),
+                   (float)($d['nf'] ?? 0),
+                   isset($d['actif']) ? 1 : 0,
+                   (int)$pid,
+               ]);
+        }
+        flash('success', 'Profils devis mis à jour.');
+        header('Location: index.php?tab=devis-profils'); exit;
+    }
+    if ($action === 'del_devis_profil') {
+        $db->prepare("DELETE FROM devis_profils_types WHERE id=?")->execute([(int)($_POST['dp_id'] ?? 0)]);
+        flash('success', 'Profil supprimé.');
+        header('Location: index.php?tab=devis-profils'); exit;
     }
 
     if ($action === 'save_planning') {
@@ -278,6 +354,7 @@ require_once __DIR__ . '/../../includes/header.php';
 $params = getAllParams();
 $taux   = $db->query("SELECT * FROM taux_horaires ORDER BY ordre")->fetchAll();
 $postes = $db->query("SELECT * FROM postes ORDER BY ordre, label")->fetchAll();
+$devisProfilsTypes = $db->query("SELECT * FROM devis_profils_types ORDER BY ordre, id")->fetchAll();
 $feries = $db->query("SELECT * FROM jours_feries ORDER BY date")->fetchAll();
 $carteChamps = $db->query("SELECT * FROM carte_champs ORDER BY face, ordre")->fetchAll();
 $pdfChamps   = $db->query("SELECT * FROM pdf_champs ORDER BY ordre")->fetchAll();
@@ -301,6 +378,7 @@ try {
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-api">API</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-cotisations"><i class="fa fa-percent me-1" style="color:var(--ov-gold)"></i>Cotisations</a></li>
   <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-postes"><i class="fa fa-briefcase me-1" style="color:var(--ov-gold)"></i>Postes</a></li>
+  <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-devis-profils"><i class="fa fa-file-invoice me-1" style="color:var(--ov-gold)"></i>Profils devis</a></li>
 </ul>
 
 <div class="tab-content">
@@ -1021,6 +1099,122 @@ document.addEventListener('DOMContentLoaded', function() {
 
 </div><!-- /tab-postes -->
 
+<!-- ── Tab Profils devis ───────────────────────────────────────────────── -->
+<div class="tab-pane fade" id="tab-devis-profils">
+
+<div class="ov-card mb-3">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-plus me-2" style="color:var(--ov-gold)"></i>Ajouter un profil</h2></div>
+  <div class="ov-card-body">
+    <p style="font-size:0.82rem;color:#6b7280" class="mb-3">
+      <i class="fa fa-lightbulb me-1" style="color:var(--ov-gold)"></i>
+      Ces profils apparaissent dans la liste déroulante « Charger un profil » lors de la création d'un devis.
+      Saisir la base (Jour Normal) — les autres taux sont calculés automatiquement.
+    </p>
+    <form method="POST" id="addDevisProfilForm">
+    <input type="hidden" name="action" value="add_devis_profil">
+    <div class="row g-2 align-items-end mb-3">
+      <div class="col-md-3">
+        <label class="form-label">Label du profil</label>
+        <input type="text" name="dp_label" class="form-control" required placeholder="Ex : Agent De Jour">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Activité</label>
+        <input type="text" name="dp_activite" class="form-control" placeholder="Agent de Sécurité">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Plage horaire</label>
+        <input type="text" name="dp_plage" class="form-control" placeholder="07h00 à 19h00">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" style="color:var(--ov-gold);font-weight:700">Jour Normal (base)</label>
+        <div class="input-group">
+          <input type="number" name="dp_jn" id="new_dp_jn" class="form-control" step="0.01" min="0" required placeholder="25.90">
+          <span class="input-group-text">€</span>
+        </div>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-ov-primary"><i class="fa fa-plus me-1"></i>Ajouter</button>
+      </div>
+    </div>
+    <div class="row g-2">
+      <?php foreach (['nn'=>'Nuit Normal (+10%)','jd'=>'Jour Dim. (+10%)','nd'=>'Nuit Dim. (+20%)','jf'=>'Jour Férié (+100%)','nf'=>'Nuit Férié (+110%)'] as $k => $lbl): ?>
+      <div class="col">
+        <label class="form-label" style="font-size:0.78rem"><?= $lbl ?></label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="dp_<?= $k ?>" id="new_dp_<?= $k ?>" class="form-control new-dp-auto" step="0.01" min="0" placeholder="auto">
+          <span class="input-group-text">€</span>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    </form>
+  </div>
+</div>
+
+<?php if ($devisProfilsTypes): ?>
+<div class="ov-card">
+  <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-file-invoice me-2" style="color:var(--ov-gold)"></i>Profils configurés <span class="badge bg-secondary ms-2"><?= count($devisProfilsTypes) ?></span></h2></div>
+  <div class="ov-card-body p-0">
+    <form method="POST" id="formSaveDevisProfils">
+    <input type="hidden" name="action" value="save_devis_profils">
+    <div class="table-responsive">
+    <table class="ov-table" style="font-size:0.82rem">
+      <thead>
+        <tr>
+          <th style="width:36px">Actif</th>
+          <th>Label</th>
+          <th>Activité</th>
+          <th>Plage</th>
+          <th style="width:90px;color:var(--ov-gold)">Jour N. (base)</th>
+          <th style="width:85px">Nuit N.</th>
+          <th style="width:85px">Jour Dim.</th>
+          <th style="width:85px">Nuit Dim.</th>
+          <th style="width:85px">Jour Fér.</th>
+          <th style="width:85px">Nuit Fér.</th>
+          <th style="width:36px"></th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach ($devisProfilsTypes as $dp): ?>
+      <tr <?= !$dp['actif'] ? 'style="opacity:0.5"' : '' ?>>
+        <td class="text-center"><input type="checkbox" name="dp[<?= $dp['id'] ?>][actif]" <?= $dp['actif']?'checked':'' ?> class="form-check-input"></td>
+        <td><input type="text" name="dp[<?= $dp['id'] ?>][label]" class="form-control form-control-sm" value="<?= h($dp['label']) ?>" style="min-width:160px" required></td>
+        <td><input type="text" name="dp[<?= $dp['id'] ?>][activite]" class="form-control form-control-sm" value="<?= h($dp['activite']) ?>" style="min-width:130px"></td>
+        <td><input type="text" name="dp[<?= $dp['id'] ?>][plage]" class="form-control form-control-sm" value="<?= h($dp['plage']) ?>" style="min-width:110px"></td>
+        <td><input type="number" name="dp[<?= $dp['id'] ?>][jn]" class="form-control form-control-sm dp-jn-field text-center" step="0.01" min="0" value="<?= h($dp['taux_jn']) ?>" style="border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700" data-id="<?= $dp['id'] ?>"></td>
+        <?php foreach (['nn','jd','nd','jf','nf'] as $k): ?>
+        <td><input type="number" name="dp[<?= $dp['id'] ?>][<?= $k ?>]" class="form-control form-control-sm text-center dp-auto-<?= $dp['id'] ?>-<?= $k ?>" step="0.01" min="0" value="<?= h($dp['taux_'.$k]) ?>"></td>
+        <?php endforeach; ?>
+        <td>
+          <button type="submit" form="delDpForm<?= $dp['id'] ?>" class="btn-sm-icon delete"
+                  data-confirm="Supprimer le profil «<?= addslashes($dp['label']) ?>» ?"><i class="fa fa-trash"></i></button>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    </div>
+    <div class="p-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+    <?php foreach ($devisProfilsTypes as $dp): ?>
+    <form id="delDpForm<?= $dp['id'] ?>" method="POST" style="display:none">
+      <input type="hidden" name="action" value="del_devis_profil">
+      <input type="hidden" name="dp_id" value="<?= $dp['id'] ?>">
+    </form>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php else: ?>
+<div class="ov-card">
+  <div class="ov-card-body text-center text-muted py-4">
+    <i class="fa fa-file-invoice fa-2x mb-2 d-block" style="opacity:0.3"></i>
+    Aucun profil configuré. Utilisez le formulaire ci-dessus pour en créer.
+  </div>
+</div>
+<?php endif; ?>
+
+</div><!-- /tab-devis-profils -->
+
 </div><!-- /tab-content -->
 
 <script>
@@ -1031,6 +1225,31 @@ document.addEventListener('DOMContentLoaded', function() {
         var el = document.querySelector('[href="#tab-' + urlTab + '"]');
         if (el) bootstrap.Tab.getOrCreateInstance(el).show();
     }
+
+    // Auto-calcul profils devis : base (jn) → autres taux par pourcentages cumulatifs
+    var DP_COEFFS = { nn: 1.10, jd: 1.10, nd: 1.20, jf: 2.00, nf: 2.10 };
+    // Formulaire "Ajouter un profil"
+    var newJnField = document.getElementById('new_dp_jn');
+    if (newJnField) {
+        newJnField.addEventListener('input', function() {
+            var jn = parseFloat(this.value) || 0;
+            Object.keys(DP_COEFFS).forEach(function(k) {
+                var f = document.getElementById('new_dp_' + k);
+                if (f) f.value = jn > 0 ? (jn * DP_COEFFS[k]).toFixed(2) : '';
+            });
+        });
+    }
+    // Tableau d'édition : chaque cellule jn auto-recalcule sa ligne
+    document.querySelectorAll('.dp-jn-field').forEach(function(jnInp) {
+        jnInp.addEventListener('input', function() {
+            var jn  = parseFloat(this.value) || 0;
+            var did = this.dataset.id;
+            Object.keys(DP_COEFFS).forEach(function(k) {
+                var f = document.querySelector('.dp-auto-' + did + '-' + k);
+                if (f && jn > 0) f.value = (jn * DP_COEFFS[k]).toFixed(2);
+            });
+        });
+    });
 
     // Auto-suggestion des taux : quand "heure normale" change, proposer les autres
     var baseField = document.getElementById('taux_normal');
