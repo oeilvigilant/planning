@@ -1167,7 +1167,7 @@ function getFormData() {
 
 function updatePreview() {
     const d = getFormData();
-    fetch('contrat_preview.php?id=<?= $id ?>', {
+    fetch('contrat_preview.php?id=<?= $id ?>&contrat_id=<?= $contratId ?>', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(d)
