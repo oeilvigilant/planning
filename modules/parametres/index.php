@@ -31,24 +31,34 @@ try { $db->exec("CREATE TABLE IF NOT EXISTS devis_profils_types (
     actif    TINYINT(1)   NOT NULL DEFAULT 1,
     ordre    INT          NOT NULL DEFAULT 0
 )"); } catch(Exception $e){}
+// Migration taux_jdf / taux_ndf sur devis_profils_types
+try {
+    $db->exec("ALTER TABLE devis_profils_types ADD COLUMN IF NOT EXISTS taux_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_nf");
+    $db->exec("ALTER TABLE devis_profils_types ADD COLUMN IF NOT EXISTS taux_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_jdf");
+} catch(Exception $e){}
 // Seed profils par défaut si table vide
 try {
     if ((int)$db->query("SELECT COUNT(*) FROM devis_profils_types")->fetchColumn() === 0) {
-        $seedStmt = $db->prepare("INSERT INTO devis_profils_types (label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf,ordre) VALUES (?,?,?,?,?,?,?,?,?,?)");
+        $seedStmt = $db->prepare("INSERT INTO devis_profils_types (label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf,taux_jdf,taux_ndf,ordre) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
         $seeds = [
-            ['Agent De Jour',        'Agent de Sécurité', 'De 07h00 à 19h00', 26.70, 29.37, 29.37, 32.04, 53.40, 56.07, 1],
-            ['Agent De Nuit',        'Agent de Sécurité', 'De 19h00 à 07h00', 26.70, 29.37, 29.37, 32.04, 53.40, 56.07, 2],
-            ['Maître Chien',         'Agent Cynophile',   'De 20h00 à 06h00', 28.00, 30.80, 30.80, 33.60, 56.00, 58.80, 3],
-            ['Agent SSIAP 1',        'Agent SSIAP',       'De 07h00 à 19h00', 26.50, 29.15, 29.15, 31.80, 53.00, 55.65, 4],
-            ["Chef d'équipe SSIAP 2",'Agent SSIAP',       'De 07h00 à 19h00', 28.00, 30.80, 30.80, 33.60, 56.00, 58.80, 5],
-            ["Chef d'Équipe",        "Chef d'Équipe",     'De 07h00 à 19h00', 27.50, 30.25, 30.25, 33.00, 55.00, 57.75, 6],
+            // base 26.70 : jdf=26.70*2.10=56.07, ndf=26.70*2.20=58.74
+            ['Agent De Jour',        'Agent de Sécurité', 'De 07h00 à 19h00', 26.70, 29.37, 29.37, 32.04, 53.40, 56.07, 56.07, 58.74, 1],
+            ['Agent De Nuit',        'Agent de Sécurité', 'De 19h00 à 07h00', 26.70, 29.37, 29.37, 32.04, 53.40, 56.07, 56.07, 58.74, 2],
+            // base 28.00 : jdf=58.80, ndf=61.60
+            ['Maître Chien',         'Agent Cynophile',   'De 20h00 à 06h00', 28.00, 30.80, 30.80, 33.60, 56.00, 58.80, 58.80, 61.60, 3],
+            // base 26.50 : jdf=55.65, ndf=58.30
+            ['Agent SSIAP 1',        'Agent SSIAP',       'De 07h00 à 19h00', 26.50, 29.15, 29.15, 31.80, 53.00, 55.65, 55.65, 58.30, 4],
+            // base 28.00 : jdf=58.80, ndf=61.60
+            ["Chef d'équipe SSIAP 2",'Agent SSIAP',       'De 07h00 à 19h00', 28.00, 30.80, 30.80, 33.60, 56.00, 58.80, 58.80, 61.60, 5],
+            // base 27.50 : jdf=57.75, ndf=60.50
+            ["Chef d'Équipe",        "Chef d'Équipe",     'De 07h00 à 19h00', 27.50, 30.25, 30.25, 33.00, 55.00, 57.75, 57.75, 60.50, 6],
         ];
         foreach ($seeds as $s) $seedStmt->execute($s);
     }
 } catch(Exception $e){}
 // Migration taux agents jour/nuit : base 25.90 → 26.70 (mise à jour si ancienne valeur détectée)
 try {
-    $db->prepare("UPDATE devis_profils_types SET taux_jn=26.70,taux_nn=29.37,taux_jd=29.37,taux_nd=32.04,taux_jf=53.40,taux_nf=56.07
+    $db->prepare("UPDATE devis_profils_types SET taux_jn=26.70,taux_nn=29.37,taux_jd=29.37,taux_nd=32.04,taux_jf=53.40,taux_nf=56.07,taux_jdf=56.07,taux_ndf=58.74
         WHERE taux_jn=25.90 AND label IN ('Agent De Jour','Agent De Nuit')")->execute();
 } catch(Exception $e){}
 
@@ -128,15 +138,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         $plage    = trim($_POST['dp_plage']    ?? '');
         $jn = (float)($_POST['dp_jn'] ?? 0);
         if ($label && $jn > 0) {
-            $db->prepare("INSERT INTO devis_profils_types (label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf,ordre)
-                VALUES (?,?,?,?,?,?,?,?,?,(SELECT COALESCE(MAX(t.ordre),0)+1 FROM devis_profils_types t))")
+            $db->prepare("INSERT INTO devis_profils_types (label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf,taux_jdf,taux_ndf,ordre)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,(SELECT COALESCE(MAX(t.ordre),0)+1 FROM devis_profils_types t))")
                ->execute([
                    $label, $activite, $plage, $jn,
-                   (float)($_POST['dp_nn'] ?? round($jn * 1.10, 2)),
-                   (float)($_POST['dp_jd'] ?? round($jn * 1.10, 2)),
-                   (float)($_POST['dp_nd'] ?? round($jn * 1.20, 2)),
-                   (float)($_POST['dp_jf'] ?? round($jn * 2.00, 2)),
-                   (float)($_POST['dp_nf'] ?? round($jn * 2.10, 2)),
+                   (float)($_POST['dp_nn']  ?? round($jn * 1.10, 2)),
+                   (float)($_POST['dp_jd']  ?? round($jn * 1.10, 2)),
+                   (float)($_POST['dp_nd']  ?? round($jn * 1.20, 2)),
+                   (float)($_POST['dp_jf']  ?? round($jn * 2.00, 2)),
+                   (float)($_POST['dp_nf']  ?? round($jn * 2.10, 2)),
+                   (float)($_POST['dp_jdf'] ?? round($jn * 2.10, 2)),
+                   (float)($_POST['dp_ndf'] ?? round($jn * 2.20, 2)),
                ]);
             flash('success', 'Profil devis ajouté.');
         }
@@ -144,17 +156,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
     }
     if ($action === 'save_devis_profils') {
         foreach ($_POST['dp'] ?? [] as $pid => $d) {
-            $db->prepare("UPDATE devis_profils_types SET label=?,activite=?,plage=?,taux_jn=?,taux_nn=?,taux_jd=?,taux_nd=?,taux_jf=?,taux_nf=?,actif=? WHERE id=?")
+            $db->prepare("UPDATE devis_profils_types SET label=?,activite=?,plage=?,taux_jn=?,taux_nn=?,taux_jd=?,taux_nd=?,taux_jf=?,taux_nf=?,taux_jdf=?,taux_ndf=?,actif=? WHERE id=?")
                ->execute([
                    trim($d['label']    ?? ''),
                    trim($d['activite'] ?? ''),
                    trim($d['plage']    ?? ''),
-                   (float)($d['jn'] ?? 0),
-                   (float)($d['nn'] ?? 0),
-                   (float)($d['jd'] ?? 0),
-                   (float)($d['nd'] ?? 0),
-                   (float)($d['jf'] ?? 0),
-                   (float)($d['nf'] ?? 0),
+                   (float)($d['jn']  ?? 0),
+                   (float)($d['nn']  ?? 0),
+                   (float)($d['jd']  ?? 0),
+                   (float)($d['nd']  ?? 0),
+                   (float)($d['jf']  ?? 0),
+                   (float)($d['nf']  ?? 0),
+                   (float)($d['jdf'] ?? 0),
+                   (float)($d['ndf'] ?? 0),
                    isset($d['actif']) ? 1 : 0,
                    (int)$pid,
                ]);
@@ -523,12 +537,22 @@ try {
 <div class="ov-card">
   <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-list me-2" style="color:var(--ov-gold)"></i>Liste des jours fériés</h2></div>
   <div class="ov-card-body p-0">
+    <?php $joursFr = ['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim']; ?>
     <table class="ov-table">
-      <thead><tr><th>Date</th><th>Nom</th><th>Année</th><th>Récurrent</th><th>Action</th></tr></thead>
+      <thead><tr><th>Date</th><th>Jour</th><th>Nom</th><th>Année</th><th>Récurrent</th><th>Action</th></tr></thead>
       <tbody>
-      <?php foreach ($feries as $f): ?>
+      <?php foreach ($feries as $f):
+          $n = (int)date('N', strtotime($f['date']));
+          $jourLabel = $joursFr[$n] ?? '';
+          $isDim = ($n === 7);
+      ?>
       <tr>
         <td><?= formatDate($f['date']) ?></td>
+        <td><?php if ($isDim): ?>
+            <span style="color:#dc2626;font-weight:600"><i class="fa fa-sun me-1"></i><?= h($jourLabel) ?></span>
+        <?php else: ?>
+            <?= h($jourLabel) ?>
+        <?php endif; ?></td>
         <td><?= h($f['nom']) ?></td>
         <td><?= $f['annee'] ?: '—' ?></td>
         <td><?= $f['recurrent'] ? '<span style="color:#16a34a"><i class="fa fa-check"></i></span>' : '<span style="color:#d1d5db"><i class="fa fa-minus"></i></span>' ?></td>
@@ -1142,7 +1166,7 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
     <div class="row g-2">
-      <?php foreach (['nn'=>'Nuit Normal (+10%)','jd'=>'Jour Dim. (+10%)','nd'=>'Nuit Dim. (+20%)','jf'=>'Jour Férié (+100%)','nf'=>'Nuit Férié (+110%)'] as $k => $lbl): ?>
+      <?php foreach (['nn'=>'Nuit Normal (+10%)','jd'=>'Jour Dim. (+10%)','nd'=>'Nuit Dim. (+20%)','jf'=>'Jour Férié (+100%)','nf'=>'Nuit Férié (+110%)','jdf'=>'Dim.+Fér. J. (+110%)','ndf'=>'Dim.+Fér. N. (+120%)'] as $k => $lbl): ?>
       <div class="col">
         <label class="form-label" style="font-size:0.78rem"><?= $lbl ?></label>
         <div class="input-group input-group-sm">
@@ -1176,6 +1200,8 @@ document.addEventListener('DOMContentLoaded', function() {
           <th style="width:85px">Nuit Dim.</th>
           <th style="width:85px">Jour Fér.</th>
           <th style="width:85px">Nuit Fér.</th>
+          <th style="width:85px">Dim.+Fér. J.</th>
+          <th style="width:85px">Dim.+Fér. N.</th>
           <th style="width:36px"></th>
         </tr>
       </thead>
@@ -1187,7 +1213,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <td><input type="text" name="dp[<?= $dp['id'] ?>][activite]" class="form-control form-control-sm" value="<?= h($dp['activite']) ?>" style="min-width:130px"></td>
         <td><input type="text" name="dp[<?= $dp['id'] ?>][plage]" class="form-control form-control-sm" value="<?= h($dp['plage']) ?>" style="min-width:110px"></td>
         <td><input type="number" name="dp[<?= $dp['id'] ?>][jn]" class="form-control form-control-sm dp-jn-field text-center" step="0.01" min="0" value="<?= h($dp['taux_jn']) ?>" style="border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700" data-id="<?= $dp['id'] ?>"></td>
-        <?php foreach (['nn','jd','nd','jf','nf'] as $k): ?>
+        <?php foreach (['nn','jd','nd','jf','nf','jdf','ndf'] as $k): ?>
         <td><input type="number" name="dp[<?= $dp['id'] ?>][<?= $k ?>]" class="form-control form-control-sm text-center dp-auto-<?= $dp['id'] ?>-<?= $k ?>" step="0.01" min="0" value="<?= h($dp['taux_'.$k]) ?>"></td>
         <?php endforeach; ?>
         <td>
@@ -1232,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Auto-calcul profils devis : base (jn) → autres taux par pourcentages cumulatifs
-    var DP_COEFFS = { nn: 1.10, jd: 1.10, nd: 1.20, jf: 2.00, nf: 2.10 };
+    var DP_COEFFS = { nn: 1.10, jd: 1.10, nd: 1.20, jf: 2.00, nf: 2.10, jdf: 2.10, ndf: 2.20 };
     // Formulaire "Ajouter un profil"
     var newJnField = document.getElementById('new_dp_jn');
     if (newJnField) {

@@ -66,25 +66,28 @@ $totauxProfils = [];
 foreach ($profils as $profil) {
     $pid    = $profil['id'];
     $lignes = $lignesParProfil[$pid] ?? [];
-    $tauxJn = (float)$profil['taux_jn'];
-    $tauxNn = (float)$profil['taux_nn'];
-    $tauxJd = (float)$profil['taux_jd'];
-    $tauxNd = (float)$profil['taux_nd'];
-    $tauxJf = (float)$profil['taux_jf'];
-    $tauxNf = (float)$profil['taux_nf'];
+    $tauxJn  = (float)$profil['taux_jn'];
+    $tauxNn  = (float)$profil['taux_nn'];
+    $tauxJd  = (float)$profil['taux_jd'];
+    $tauxNd  = (float)$profil['taux_nd'];
+    $tauxJf  = (float)$profil['taux_jf'];
+    $tauxNf  = (float)$profil['taux_nf'];
+    $tauxJdf = (float)$profil['taux_jdf'];
+    $tauxNdf = (float)$profil['taux_ndf'];
     $stH = $stHT = 0;
     $rows = [];
     foreach ($jours as $jour) {
-        $lg  = $lignes[$jour] ?? ['h_jn'=>0,'h_nn'=>0,'h_jd'=>0,'h_nd'=>0,'h_jf'=>0,'h_nf'=>0];
-        $hJn = (float)$lg['h_jn']; $hNn = (float)$lg['h_nn'];
-        $hJd = (float)$lg['h_jd']; $hNd = (float)$lg['h_nd'];
-        $hJf = (float)$lg['h_jf']; $hNf = (float)$lg['h_nf'];
-        $tH  = $hJn + $hNn + $hJd + $hNd + $hJf + $hNf;
+        $lg   = $lignes[$jour] ?? ['h_jn'=>0,'h_nn'=>0,'h_jd'=>0,'h_nd'=>0,'h_jf'=>0,'h_nf'=>0,'h_jdf'=>0,'h_ndf'=>0];
+        $hJn  = (float)$lg['h_jn'];  $hNn  = (float)$lg['h_nn'];
+        $hJd  = (float)$lg['h_jd'];  $hNd  = (float)$lg['h_nd'];
+        $hJf  = (float)$lg['h_jf'];  $hNf  = (float)$lg['h_nf'];
+        $hJdf = (float)$lg['h_jdf']; $hNdf = (float)$lg['h_ndf'];
+        $tH   = $hJn + $hNn + $hJd + $hNd + $hJf + $hNf + $hJdf + $hNdf;
         if ($tH == 0) continue; // ne pas exporter les dates sans heures
-        $tHT = $hJn*$tauxJn + $hNn*$tauxNn + $hJd*$tauxJd + $hNd*$tauxNd + $hJf*$tauxJf + $hNf*$tauxNf;
+        $tHT  = $hJn*$tauxJn + $hNn*$tauxNn + $hJd*$tauxJd + $hNd*$tauxNd + $hJf*$tauxJf + $hNf*$tauxNf + $hJdf*$tauxJdf + $hNdf*$tauxNdf;
         $stH  += $tH;
         $stHT += $tHT;
-        $rows[] = compact('jour','hJn','hNn','hJd','hNd','hJf','hNf','tH','tHT');
+        $rows[] = compact('jour','hJn','hNn','hJd','hNd','hJf','hNf','hJdf','hNdf','tH','tHT');
     }
     $totauxProfils[$pid] = ['h' => $stH, 'ht' => $stHT, 'rows' => $rows];
     $grandTotalH  += $stH;
@@ -147,9 +150,10 @@ ob_start();
     .tbl tfoot tr td:first-child { text-align: left; }
 
     /* Couleurs de type */
-    .col-jn { background: rgba(99,102,241,0.06); }
-    .col-jd { background: rgba(59,130,246,0.06); }
-    .col-jf { background: rgba(239,68,68,0.06); }
+    .col-jn  { background: rgba(99,102,241,0.06); }
+    .col-jd  { background: rgba(59,130,246,0.06); }
+    .col-jf  { background: rgba(239,68,68,0.06); }
+    .col-jdf { background: rgba(168,85,247,0.06); }
     .td-date-dim  { color: #2563eb; font-weight: bold; }
     .td-date-ferie { color: #dc2626; font-weight: bold; }
     .td-disabled  { color: #ccc; background: #f9f9f9; }
@@ -237,6 +241,8 @@ ob_start();
         $tauxNd   = (float)$profil['taux_nd'];
         $tauxJf   = (float)$profil['taux_jf'];
         $tauxNf   = (float)$profil['taux_nf'];
+        $tauxJdf  = (float)$profil['taux_jdf'];
+        $tauxNdf  = (float)$profil['taux_ndf'];
     ?>
     <div class="profil-title"><?= h($profil['label']) ?></div>
     <div class="profil-sub"><?= h($profil['activite']) ?> &nbsp;|&nbsp; <?= h($profil['plage']) ?></div>
@@ -248,6 +254,7 @@ ob_start();
                 <th colspan="2">Jour Normal</th>
                 <th colspan="2">Dimanche</th>
                 <th colspan="2">Jour Férié</th>
+                <th colspan="2">Dim.+Fér.</th>
                 <th rowspan="3" style="width:48px">Total H</th>
                 <th rowspan="3" style="width:60px">Total HT</th>
             </tr>
@@ -258,6 +265,8 @@ ob_start();
                 <th class="col-jd">NUIT</th>
                 <th class="col-jf">JOUR</th>
                 <th class="col-jf">NUIT</th>
+                <th class="col-jdf">JOUR</th>
+                <th class="col-jdf">NUIT</th>
             </tr>
             <tr>
                 <td class="col-jn"><?= number_format($tauxJn, 2) ?></td>
@@ -266,6 +275,8 @@ ob_start();
                 <td class="col-jd"><?= number_format($tauxNd, 2) ?></td>
                 <td class="col-jf"><?= number_format($tauxJf, 2) ?></td>
                 <td class="col-jf"><?= number_format($tauxNf, 2) ?></td>
+                <td class="col-jdf"><?= number_format($tauxJdf, 2) ?></td>
+                <td class="col-jdf"><?= number_format($tauxNdf, 2) ?></td>
             </tr>
         </thead>
         <tbody>
@@ -286,22 +297,26 @@ ob_start();
             }
 
             // Colonnes actives
-            $activeJn = !$ferie && !$dimanche;
-            $activeNn = !$ferie && !$dimanche;
-            $activeJd = $dimanche && !$ferie;
-            $activeNd = $dimanche && !$ferie;
-            $activeJf = $ferie;
-            $activeNf = $ferie;
+            $activeJn  = !$ferie && !$dimanche;
+            $activeNn  = !$ferie && !$dimanche;
+            $activeJd  = $dimanche && !$ferie;
+            $activeNd  = $dimanche && !$ferie;
+            $activeJf  = $ferie && !$dimanche;
+            $activeNf  = $ferie && !$dimanche;
+            $activeJdf = $dimanche && $ferie;
+            $activeNdf = $dimanche && $ferie;
 
         ?>
         <tr class="<?= $trCls ?>">
             <td class="<?= $dateCls ?>"><?= h($jourFmt) ?></td>
-            <?= showH($row['hJn'], $activeJn) ?>
-            <?= showH($row['hNn'], $activeNn) ?>
-            <?= showH($row['hJd'], $activeJd) ?>
-            <?= showH($row['hNd'], $activeNd) ?>
-            <?= showH($row['hJf'], $activeJf) ?>
-            <?= showH($row['hNf'], $activeNf) ?>
+            <?= showH($row['hJn'],  $activeJn) ?>
+            <?= showH($row['hNn'],  $activeNn) ?>
+            <?= showH($row['hJd'],  $activeJd) ?>
+            <?= showH($row['hNd'],  $activeNd) ?>
+            <?= showH($row['hJf'],  $activeJf) ?>
+            <?= showH($row['hNf'],  $activeNf) ?>
+            <?= showH($row['hJdf'], $activeJdf) ?>
+            <?= showH($row['hNdf'], $activeNdf) ?>
             <td><?= $row['tH'] > 0 ? number_format($row['tH'], 1) : '—' ?></td>
             <td class="text-right"><?= $row['tHT'] > 0 ? number_format($row['tHT'], 2, ',', ' ') : '—' ?></td>
         </tr>
@@ -316,6 +331,8 @@ ob_start();
                 <td><?= number_format(array_sum(array_column($donnees['rows'], 'hNd')), 1) ?: '—' ?></td>
                 <td><?= number_format(array_sum(array_column($donnees['rows'], 'hJf')), 1) ?: '—' ?></td>
                 <td><?= number_format(array_sum(array_column($donnees['rows'], 'hNf')), 1) ?: '—' ?></td>
+                <td><?= number_format(array_sum(array_column($donnees['rows'], 'hJdf')), 1) ?: '—' ?></td>
+                <td><?= number_format(array_sum(array_column($donnees['rows'], 'hNdf')), 1) ?: '—' ?></td>
                 <td><?= number_format($donnees['h'], 1) ?></td>
                 <td class="text-right"><?= number_format($donnees['ht'], 2, ',', ' ') ?> €</td>
             </tr>

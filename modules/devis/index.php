@@ -20,9 +20,11 @@ SELECT d.*,
         dl.h_jd * dp.taux_jd +
         dl.h_nd * dp.taux_nd +
         dl.h_jf * dp.taux_jf +
-        dl.h_nf * dp.taux_nf
+        dl.h_nf * dp.taux_nf +
+        dl.h_jdf * dp.taux_jdf +
+        dl.h_ndf * dp.taux_ndf
     ), 0) AS total_ht,
-    COALESCE(SUM(dl.h_jn + dl.h_nn + dl.h_jd + dl.h_nd + dl.h_jf + dl.h_nf), 0) AS total_h
+    COALESCE(SUM(dl.h_jn + dl.h_nn + dl.h_jd + dl.h_nd + dl.h_jf + dl.h_nf + dl.h_jdf + dl.h_ndf), 0) AS total_h
 FROM devis d
 LEFT JOIN devis_profils dp ON dp.devis_id = d.id
 LEFT JOIN devis_lignes dl ON dl.profil_id = dp.id

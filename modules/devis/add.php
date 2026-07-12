@@ -62,6 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'taux_nd'   => (float)($g['taux_nd'] ?? 30.90),
             'taux_jf'   => (float)($g['taux_jf'] ?? 51.80),
             'taux_nf'   => (float)($g['taux_nf'] ?? 55.80),
+            'taux_jdf'  => (float)($g['taux_jdf'] ?? 0),
+            'taux_ndf'  => (float)($g['taux_ndf'] ?? 0),
         ];
     }
 
@@ -98,8 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtPer = $db->prepare("INSERT INTO devis_periodes (devis_id, ordre, date_debut, date_fin) VALUES (?,?,?,?)");
             $stmtP   = $db->prepare("
                 INSERT INTO devis_profils (devis_id, ordre, label, activite, plage,
-                    taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf, taux_jdf, taux_ndf)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             $ordre = 0;
@@ -128,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $g['taux_jn'], $g['taux_nn'],
                         $g['taux_jd'], $g['taux_nd'],
                         $g['taux_jf'], $g['taux_nf'],
+                        $g['taux_jdf'], $g['taux_ndf'],
                     ]);
                     insertLignesProfil($db, (int)$db->lastInsertId(), $gJours);
                 }
@@ -276,7 +279,8 @@ require_once __DIR__ . '/../../includes/header.php';
         'id'      => (string)$p['id'],
         'data'    => ['label'=>$p['label'],'activite'=>$p['activite'],'plage'=>$p['plage'],
                       'jn'=>(float)$p['taux_jn'],'nn'=>(float)$p['taux_nn'],'jd'=>(float)$p['taux_jd'],
-                      'nd'=>(float)$p['taux_nd'],'jf'=>(float)$p['taux_jf'],'nf'=>(float)$p['taux_nf']],
+                      'nd'=>(float)$p['taux_nd'],'jf'=>(float)$p['taux_jf'],'nf'=>(float)$p['taux_nf'],
+                      'jdf'=>(float)$p['taux_jdf'],'ndf'=>(float)$p['taux_ndf']],
     ], $devisProfilsTypes), 'data', 'id'), JSON_UNESCAPED_UNICODE) ?>;
 
     // ── Créer une ligne de plage de dates ─────────────────────────────────────
@@ -319,6 +323,8 @@ require_once __DIR__ . '/../../includes/header.php';
             nd: prefill ? (prefill.taux_nd||30.90) : 30.90,
             jf: prefill ? (prefill.taux_jf||51.80) : 51.80,
             nf: prefill ? (prefill.taux_nf||55.80) : 55.80,
+            jdf: prefill ? (prefill.taux_jdf||0) : 0,
+            ndf: prefill ? (prefill.taux_ndf||0) : 0,
         };
 
         block.innerHTML = [
@@ -380,6 +386,8 @@ require_once __DIR__ . '/../../includes/header.php';
             makeTauxField(gIdx,'nd','NUIT','Dimanche',  taux.nd),
             makeTauxField(gIdx,'jf','JOUR','Férié',     taux.jf),
             makeTauxField(gIdx,'nf','NUIT','Férié',     taux.nf),
+            makeTauxField(gIdx,'jdf','JOUR','Dim.+Fér.',  taux.jdf),
+            makeTauxField(gIdx,'ndf','NUIT','Dim.+Fér.',  taux.ndf),
             '    </div>',
             '</div>',
         ].join('');
@@ -411,9 +419,9 @@ require_once __DIR__ . '/../../includes/header.php';
             var t = PROFILS_TYPES[this.value]; if (!t) return;
             block.querySelector('.g-label').value = t.label;
             block.querySelector('.g-plage').value = t.plage;
-            ['jn','nn','jd','nd','jf','nf'].forEach(function(k) {
+            ['jn','nn','jd','nd','jf','nf','jdf','ndf'].forEach(function(k) {
                 var inp = block.querySelector('.g-taux-' + k);
-                if (inp) inp.value = parseFloat(t[k]).toFixed(2);
+                if (inp) inp.value = parseFloat(t[k] || 0).toFixed(2);
             });
             this.value = '';
         });
@@ -437,11 +445,13 @@ require_once __DIR__ . '/../../includes/header.php';
     // Règles de majoration depuis le tarif journée normal (pourcentages cumulatifs)
     // Nuit +10%, Dimanche +10%, Férié +100% — les pourcentages s'additionnent
     var MAJORATION_RULES = {
-        nn: { label: 'Nuit Normal',    fn: function(jn) { return jn * 1.10; } },   // +10%
-        jd: { label: 'Jour Dim.',      fn: function(jn) { return jn * 1.10; } },   // +10%
-        nd: { label: 'Nuit Dim.',      fn: function(jn) { return jn * 1.20; } },   // +10%+10%
-        jf: { label: 'Jour Férié',     fn: function(jn) { return jn * 2.00; } },   // +100%
-        nf: { label: 'Nuit Férié',     fn: function(jn) { return jn * 2.10; } },   // +100%+10%
+        nn:  { label: 'Nuit Normal',    fn: function(jn) { return jn * 1.10; } },   // +10%
+        jd:  { label: 'Jour Dim.',      fn: function(jn) { return jn * 1.10; } },   // +10%
+        nd:  { label: 'Nuit Dim.',      fn: function(jn) { return jn * 1.20; } },   // +10%+10%
+        jf:  { label: 'Jour Férié',     fn: function(jn) { return jn * 2.00; } },   // +100%
+        nf:  { label: 'Nuit Férié',     fn: function(jn) { return jn * 2.10; } },   // +100%+10%
+        jdf: { label: 'Dim. Férié J.',  fn: function(jn) { return jn * 2.10; } },   // +100%+10%
+        ndf: { label: 'Nuit Dim. Fér.', fn: function(jn) { return jn * 2.20; } },   // +100%+10%+10%
     };
 
     function makeTauxField(gIdx, key, sub, grp, val) {

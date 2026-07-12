@@ -170,11 +170,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmtMax = $db->prepare("SELECT COALESCE(MAX(ordre),0) FROM devis_profils WHERE devis_id = ?");
         $stmtMax->execute([$id]);
-        $db->prepare("INSERT INTO devis_profils (devis_id, ordre, label, activite, plage, taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+        $db->prepare("INSERT INTO devis_profils (devis_id, ordre, label, activite, plage, taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf, taux_jdf, taux_ndf) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
            ->execute([$id, (int)$stmtMax->fetchColumn() + 1,
                $label, trim($_POST['activite'] ?? 'Agent de Sécurité'), trim($_POST['plage'] ?? ''),
                (float)($_POST['taux_jn']??25.90),(float)($_POST['taux_nn']??27.90),(float)($_POST['taux_jd']??27.90),
                (float)($_POST['taux_nd']??30.90),(float)($_POST['taux_jf']??51.80),(float)($_POST['taux_nf']??55.80),
+               (float)($_POST['taux_jdf']??0),(float)($_POST['taux_ndf']??0),
            ]);
         insertLignesProfil($db, (int)$db->lastInsertId(), buildJoursDevis($db, $id));
         flash('success', 'Profil ajouté.');
@@ -188,10 +189,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $chk = $db->prepare("SELECT id FROM devis_profils WHERE id = ? AND devis_id = ?");
         $chk->execute([$pid, $id]);
         if (!$chk->fetch()) { flash('danger', 'Profil introuvable.'); header('Location: edit_info.php?id='.$id); exit; }
-        $db->prepare("UPDATE devis_profils SET label=?,activite=?,plage=?,taux_jn=?,taux_nn=?,taux_jd=?,taux_nd=?,taux_jf=?,taux_nf=? WHERE id=?")
+        $db->prepare("UPDATE devis_profils SET label=?,activite=?,plage=?,taux_jn=?,taux_nn=?,taux_jd=?,taux_nd=?,taux_jf=?,taux_nf=?,taux_jdf=?,taux_ndf=? WHERE id=?")
            ->execute([trim($_POST['label']??''),trim($_POST['activite']??''),trim($_POST['plage']??''),
                (float)($_POST['taux_jn']??25.90),(float)($_POST['taux_nn']??27.90),(float)($_POST['taux_jd']??27.90),
-               (float)($_POST['taux_nd']??30.90),(float)($_POST['taux_jf']??51.80),(float)($_POST['taux_nf']??55.80),$pid]);
+               (float)($_POST['taux_nd']??30.90),(float)($_POST['taux_jf']??51.80),(float)($_POST['taux_nf']??55.80),
+               (float)($_POST['taux_jdf']??0),(float)($_POST['taux_ndf']??0),$pid]);
         flash('success', 'Profil mis à jour.');
         header('Location: edit_info.php?id='.$id);
         exit;
@@ -207,9 +209,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$src) { flash('danger', 'Profil introuvable.'); header('Location: edit_info.php?id='.$id); exit; }
         $stmtMax = $db->prepare("SELECT COALESCE(MAX(ordre),0) FROM devis_profils WHERE devis_id = ?");
         $stmtMax->execute([$id]);
-        $db->prepare("INSERT INTO devis_profils (devis_id,ordre,label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+        $db->prepare("INSERT INTO devis_profils (devis_id,ordre,label,activite,plage,taux_jn,taux_nn,taux_jd,taux_nd,taux_jf,taux_nf,taux_jdf,taux_ndf) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
            ->execute([$id,(int)$stmtMax->fetchColumn()+1,$src['label'].' (copie)',$src['activite'],$src['plage'],
-               $src['taux_jn'],$src['taux_nn'],$src['taux_jd'],$src['taux_nd'],$src['taux_jf'],$src['taux_nf']]);
+               $src['taux_jn'],$src['taux_nn'],$src['taux_jd'],$src['taux_nd'],$src['taux_jf'],$src['taux_nf'],
+               $src['taux_jdf'],$src['taux_ndf']]);
         insertLignesProfil($db, (int)$db->lastInsertId(), buildJoursDevis($db, $id));
         flash('success', 'Profil dupliqué.');
         header('Location: edit_info.php?id='.$id);
@@ -433,7 +436,7 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
         <div class="d-flex gap-3 text-muted" style="font-size:0.78rem">
-            <?php foreach (['jn','nn','jd','nd','jf','nf'] as $k): ?>
+            <?php foreach (['jn','nn','jd','nd','jf','nf','jdf','ndf'] as $k): ?>
             <span><?= strtoupper($k) ?> <strong><?= number_format($p['taux_'.$k],2) ?></strong></span>
             <?php endforeach; ?>
         </div>
@@ -448,7 +451,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <div class="col-md-4"><label class="form-label" style="font-size:0.8rem">Plage</label><input type="text" name="plage" class="form-control form-control-sm" value="<?= h($p['plage']) ?>"></div>
                 </div>
                 <div class="row g-2 mt-1">
-                    <?php foreach (['jn'=>'JN Normal','nn'=>'NN Normal','jd'=>'JD Dim.','nd'=>'ND Dim.','jf'=>'JF Férié','nf'=>'NF Férié'] as $k => $lbl): ?>
+                    <?php foreach (['jn'=>'JN Normal','nn'=>'NN Normal','jd'=>'JD Dim.','nd'=>'ND Dim.','jf'=>'JF Férié','nf'=>'NF Férié','jdf'=>'JDF Dim.+Fér.','ndf'=>'NDF Nuit+Dim.+Fér.'] as $k => $lbl): ?>
                     <div class="col">
                         <label class="form-label text-center d-block" style="font-size:0.72rem"><?= $lbl ?></label>
                         <input type="number" name="taux_<?= $k ?>"
@@ -496,7 +499,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="col-md-4"><label class="form-label">Plage</label><input type="text" name="plage" id="newPlage" class="form-control" value="De 07h00 à 19h00"></div>
             </div>
             <div class="row g-2 mt-1">
-                <?php foreach (['jn'=>[25.90,'JN'],'nn'=>[27.90,'NN'],'jd'=>[27.90,'JD'],'nd'=>[30.90,'ND'],'jf'=>[51.80,'JF'],'nf'=>[55.80,'NF']] as $k => [$def,$abr]): ?>
+                <?php foreach (['jn'=>[25.90,'JN'],'nn'=>[27.90,'NN'],'jd'=>[27.90,'JD'],'nd'=>[30.90,'ND'],'jf'=>[51.80,'JF'],'nf'=>[55.80,'NF'],'jdf'=>[0,'JDF'],'ndf'=>[0,'NDF']] as $k => [$def,$abr]): ?>
                 <div class="col">
                     <label class="form-label text-center d-block" style="font-size:0.75rem"><?= $abr ?></label>
                     <input type="number" name="taux_<?= $k ?>" id="new_<?= $k ?>"
@@ -536,7 +539,8 @@ var PROFILS_TYPES = <?= json_encode(array_column(array_map(fn($t) => [
     'id'   => (string)$t['id'],
     'data' => ['label'=>$t['label'],'activite'=>$t['activite'],'plage'=>$t['plage'],
                'jn'=>(float)$t['taux_jn'],'nn'=>(float)$t['taux_nn'],'jd'=>(float)$t['taux_jd'],
-               'nd'=>(float)$t['taux_nd'],'jf'=>(float)$t['taux_jf'],'nf'=>(float)$t['taux_nf']],
+               'nd'=>(float)$t['taux_nd'],'jf'=>(float)$t['taux_jf'],'nf'=>(float)$t['taux_nf'],
+               'jdf'=>(float)$t['taux_jdf'],'ndf'=>(float)$t['taux_ndf']],
 ], $PROFILS_TYPES), 'data', 'id'), JSON_UNESCAPED_UNICODE) ?>;
 
 document.getElementById('newTplSelect').addEventListener('change', function() {
@@ -544,8 +548,9 @@ document.getElementById('newTplSelect').addEventListener('change', function() {
     document.getElementById('newLabel').value   = t.label;
     document.getElementById('newActivite').value = t.activite;
     document.getElementById('newPlage').value   = t.plage;
-    ['jn','nn','jd','nd','jf','nf'].forEach(function(k) {
-        document.getElementById('new_' + k).value = t[k].toFixed(2);
+    ['jn','nn','jd','nd','jf','nf','jdf','ndf'].forEach(function(k) {
+        var el = document.getElementById('new_' + k);
+        if (el) el.value = (t[k] || 0).toFixed(2);
     });
     this.value = '';
 });
@@ -553,11 +558,13 @@ document.getElementById('newTplSelect').addEventListener('change', function() {
 // Règles de majoration
 // Pourcentages cumulatifs : Nuit +10%, Dimanche +10%, Férié +100%
 var MAJ_RULES = {
-    nn: function(jn) { return jn * 1.10; },   // +10%
-    jd: function(jn) { return jn * 1.10; },   // +10%
-    nd: function(jn) { return jn * 1.20; },   // +10%+10%
-    jf: function(jn) { return jn * 2.00; },   // +100%
-    nf: function(jn) { return jn * 2.10; },   // +100%+10%
+    nn:  function(jn) { return jn * 1.10; },   // +10%
+    jd:  function(jn) { return jn * 1.10; },   // +10%
+    nd:  function(jn) { return jn * 1.20; },   // +10%+10%
+    jf:  function(jn) { return jn * 2.00; },   // +100%
+    nf:  function(jn) { return jn * 2.10; },   // +100%+10%
+    jdf: function(jn) { return jn * 2.10; },   // +100%+10%
+    ndf: function(jn) { return jn * 2.20; },   // +100%+10%+10%
 };
 
 // Auto-calcul pour "Ajouter un profil"

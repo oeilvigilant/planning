@@ -75,6 +75,14 @@ function ensureDevisSchema(): void {
         }
     } catch (Exception $e) {}
 
+    // Migration taux_jdf / taux_ndf sur devis_profils et devis_lignes
+    try {
+        $db->exec("ALTER TABLE devis_profils ADD COLUMN IF NOT EXISTS taux_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_nf");
+        $db->exec("ALTER TABLE devis_profils ADD COLUMN IF NOT EXISTS taux_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER taux_jdf");
+        $db->exec("ALTER TABLE devis_lignes  ADD COLUMN IF NOT EXISTS h_jdf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER h_nf");
+        $db->exec("ALTER TABLE devis_lignes  ADD COLUMN IF NOT EXISTS h_ndf DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER h_jdf");
+    } catch (Exception $e) {}
+
     // Colonnes remise (migration auto)
     try {
         $devisExists = (int)$db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
@@ -159,7 +167,7 @@ function syncDevisBounds(PDO $db, int $devisId): void {
 }
 
 function insertLignesProfil(PDO $db, int $profilId, array $jours): void {
-    $stmt = $db->prepare("INSERT IGNORE INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf) VALUES (?,?,0,0,0,0,0,0)");
+    $stmt = $db->prepare("INSERT IGNORE INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf, h_jdf, h_ndf) VALUES (?,?,0,0,0,0,0,0,0,0)");
     foreach ($jours as $jour) $stmt->execute([$profilId, $jour]);
 }
 

@@ -77,8 +77,8 @@ try {
 
     $stmtP = $db->prepare("
         INSERT INTO devis_profils (devis_id, ordre, label, activite, plage,
-            taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            taux_jn, taux_nn, taux_jd, taux_nd, taux_jf, taux_nf, taux_jdf, taux_ndf)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     foreach ($srcProfils->fetchAll() as $sp) {
@@ -94,6 +94,8 @@ try {
             $sp['taux_nd'],
             $sp['taux_jf'],
             $sp['taux_nf'],
+            $sp['taux_jdf'],
+            $sp['taux_ndf'],
         ]);
         $newProfilId = (int)$db->lastInsertId();
         insertLignesProfil($db, $newProfilId, $jours);

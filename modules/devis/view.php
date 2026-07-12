@@ -68,12 +68,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lignes'])) {
 
     $lignesPost = $_POST['l'] ?? [];
     $stmtUps = $db->prepare("
-        INSERT INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO devis_lignes (profil_id, date, h_jn, h_nn, h_jd, h_nd, h_jf, h_nf, h_jdf, h_ndf)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             h_jn = VALUES(h_jn), h_nn = VALUES(h_nn),
             h_jd = VALUES(h_jd), h_nd = VALUES(h_nd),
-            h_jf = VALUES(h_jf), h_nf = VALUES(h_nf)
+            h_jf = VALUES(h_jf), h_nf = VALUES(h_nf),
+            h_jdf = VALUES(h_jdf), h_ndf = VALUES(h_ndf)
     ");
     foreach ($lignesPost as $profilId => $dates) {
         $profilId = (int)$profilId;
@@ -91,6 +92,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lignes'])) {
                 (float)($heures['h_nd'] ?? 0),
                 (float)($heures['h_jf'] ?? 0),
                 (float)($heures['h_nf'] ?? 0),
+                (float)($heures['h_jdf'] ?? 0),
+                (float)($heures['h_ndf'] ?? 0),
             ]);
         }
     }
@@ -170,16 +173,18 @@ foreach ($profils as $profil):
     $lignes = $lignesParProfil[$pid] ?? [];
 
     // Accumulateurs pour ce profil
-    $stJn = $stNn = $stJd = $stNd = $stJf = $stNf = 0;
+    $stJn = $stNn = $stJd = $stNd = $stJf = $stNf = $stJdf = $stNdf = 0;
     $stH  = 0;
     $stHT = 0;
 
-    $tauxJn = (float)$profil['taux_jn'];
-    $tauxNn = (float)$profil['taux_nn'];
-    $tauxJd = (float)$profil['taux_jd'];
-    $tauxNd = (float)$profil['taux_nd'];
-    $tauxJf = (float)$profil['taux_jf'];
-    $tauxNf = (float)$profil['taux_nf'];
+    $tauxJn  = (float)$profil['taux_jn'];
+    $tauxNn  = (float)$profil['taux_nn'];
+    $tauxJd  = (float)$profil['taux_jd'];
+    $tauxNd  = (float)$profil['taux_nd'];
+    $tauxJf  = (float)$profil['taux_jf'];
+    $tauxNf  = (float)$profil['taux_nf'];
+    $tauxJdf = (float)$profil['taux_jdf'];
+    $tauxNdf = (float)$profil['taux_ndf'];
 ?>
 <div class="ov-card mb-3 profil-card"
      data-profil-id="<?= $pid ?>"
@@ -188,7 +193,9 @@ foreach ($profils as $profil):
      data-taux-jd="<?= $tauxJd ?>"
      data-taux-nd="<?= $tauxNd ?>"
      data-taux-jf="<?= $tauxJf ?>"
-     data-taux-nf="<?= $tauxNf ?>">
+     data-taux-nf="<?= $tauxNf ?>"
+     data-taux-jdf="<?= $tauxJdf ?>"
+     data-taux-ndf="<?= $tauxNdf ?>">
     <div class="ov-card-header flex-wrap gap-2">
         <h2 class="ov-card-title" style="font-size:0.95rem">
             <i class="fa fa-user-shield me-2" style="color:var(--ov-gold)"></i>
@@ -224,6 +231,7 @@ foreach ($profils as $profil):
                     <th colspan="2" class="text-center" style="background:rgba(99,102,241,0.08)">Jour Normal</th>
                     <th colspan="2" class="text-center" style="background:rgba(59,130,246,0.08)">Dimanche</th>
                     <th colspan="2" class="text-center" style="background:rgba(239,68,68,0.08)">Jour Férié</th>
+                    <th colspan="2" class="text-center" style="background:rgba(168,85,247,0.08)">Dim.+Fér.</th>
                     <th rowspan="3" class="text-center" style="width:70px;vertical-align:middle">Total H</th>
                     <th rowspan="3" class="text-center" style="width:90px;vertical-align:middle">Total HT</th>
                     <th rowspan="3" style="width:28px;vertical-align:middle"></th>
@@ -235,6 +243,8 @@ foreach ($profils as $profil):
                     <th class="text-center" style="background:rgba(59,130,246,0.06)">NUIT</th>
                     <th class="text-center" style="background:rgba(239,68,68,0.06)">JOUR</th>
                     <th class="text-center" style="background:rgba(239,68,68,0.06)">NUIT</th>
+                    <th class="text-center" style="background:rgba(168,85,247,0.06)">JOUR</th>
+                    <th class="text-center" style="background:rgba(168,85,247,0.06)">NUIT</th>
                 </tr>
                 <tr style="font-size:0.7rem;color:var(--ov-gold)">
                     <td class="text-center" style="background:rgba(99,102,241,0.04)"><?= number_format($tauxJn, 2) ?></td>
@@ -243,6 +253,8 @@ foreach ($profils as $profil):
                     <td class="text-center" style="background:rgba(59,130,246,0.04)"><?= number_format($tauxNd, 2) ?></td>
                     <td class="text-center" style="background:rgba(239,68,68,0.04)"><?= number_format($tauxJf, 2) ?></td>
                     <td class="text-center" style="background:rgba(239,68,68,0.04)"><?= number_format($tauxNf, 2) ?></td>
+                    <td class="text-center" style="background:rgba(168,85,247,0.04)"><?= number_format($tauxJdf, 2) ?></td>
+                    <td class="text-center" style="background:rgba(168,85,247,0.04)"><?= number_format($tauxNdf, 2) ?></td>
                 </tr>
             </thead>
             <tbody>
@@ -252,21 +264,24 @@ foreach ($profils as $profil):
             foreach ($profileJours as $jour):
                 $ferie    = isFerie($jour);
                 $dimanche = isDimanche($jour);
-                $lg       = $lignes[$jour] ?? ['h_jn'=>0,'h_nn'=>0,'h_jd'=>0,'h_nd'=>0,'h_jf'=>0,'h_nf'=>0];
+                $lg       = $lignes[$jour] ?? ['h_jn'=>0,'h_nn'=>0,'h_jd'=>0,'h_nd'=>0,'h_jf'=>0,'h_nf'=>0,'h_jdf'=>0,'h_ndf'=>0];
 
-                $hJn = (float)$lg['h_jn'];
-                $hNn = (float)$lg['h_nn'];
-                $hJd = (float)$lg['h_jd'];
-                $hNd = (float)$lg['h_nd'];
-                $hJf = (float)$lg['h_jf'];
-                $hNf = (float)$lg['h_nf'];
+                $hJn  = (float)$lg['h_jn'];
+                $hNn  = (float)$lg['h_nn'];
+                $hJd  = (float)$lg['h_jd'];
+                $hNd  = (float)$lg['h_nd'];
+                $hJf  = (float)$lg['h_jf'];
+                $hNf  = (float)$lg['h_nf'];
+                $hJdf = (float)$lg['h_jdf'];
+                $hNdf = (float)$lg['h_ndf'];
 
-                $totalH  = $hJn + $hNn + $hJd + $hNd + $hJf + $hNf;
-                $totalHT = $hJn*$tauxJn + $hNn*$tauxNn + $hJd*$tauxJd + $hNd*$tauxNd + $hJf*$tauxJf + $hNf*$tauxNf;
+                $totalH  = $hJn + $hNn + $hJd + $hNd + $hJf + $hNf + $hJdf + $hNdf;
+                $totalHT = $hJn*$tauxJn + $hNn*$tauxNn + $hJd*$tauxJd + $hNd*$tauxNd + $hJf*$tauxJf + $hNf*$tauxNf + $hJdf*$tauxJdf + $hNdf*$tauxNdf;
 
-                $stJn += $hJn; $stNn += $hNn;
-                $stJd += $hJd; $stNd += $hNd;
-                $stJf += $hJf; $stNf += $hNf;
+                $stJn  += $hJn;  $stNn  += $hNn;
+                $stJd  += $hJd;  $stNd  += $hNd;
+                $stJf  += $hJf;  $stNf  += $hNf;
+                $stJdf += $hJdf; $stNdf += $hNdf;
                 $stH  += $totalH;
                 $stHT += $totalHT;
 
@@ -286,12 +301,14 @@ foreach ($profils as $profil):
                 // Jour normal : on peut écrire partout (mais logiquement h_jd, h_nd, h_jf, h_nf = 0)
                 // Dimanche : h_jn et h_nn désactivés
                 // Férié : h_jn, h_nn, h_jd, h_nd désactivés
-                $disJn = $ferie || $dimanche ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
-                $disNn = $ferie || $dimanche ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
-                $disJd = $ferie             ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : ($dimanche ? '' : 'disabled style="background:#f3f4f6;color:#9ca3af"');
-                $disNd = $ferie             ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : ($dimanche ? '' : 'disabled style="background:#f3f4f6;color:#9ca3af"');
-                $disJf = !$ferie            ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
-                $disNf = !$ferie            ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
+                $disJn  = ($ferie || $dimanche)     ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
+                $disNn  = ($ferie || $dimanche)     ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
+                $disJd  = (!$dimanche || $ferie)    ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
+                $disNd  = (!$dimanche || $ferie)    ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
+                $disJf  = (!$ferie || $dimanche)    ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
+                $disNf  = (!$ferie || $dimanche)    ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
+                $disJdf = (!$dimanche || !$ferie)   ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
+                $disNdf = (!$dimanche || !$ferie)   ? 'disabled style="background:#f3f4f6;color:#9ca3af"' : '';
 
                 // Champs désactivés : valeur forcée à 0 via hidden
                 $inputBase = "l[$pid][$jour]";
@@ -371,6 +388,30 @@ foreach ($profils as $profil):
                     <?php endif; ?>
                 </td>
 
+                <!-- h_jdf : Dim.+Fér. JOUR -->
+                <td class="p-1" style="background:rgba(168,85,247,0.04)">
+                    <?php if (strpos($disJdf, 'disabled') !== false): ?>
+                        <input type="hidden" name="<?= $inputBase ?>[h_jdf]" value="0">
+                        <span class="d-block text-center text-muted" style="font-size:0.75rem">—</span>
+                    <?php else: ?>
+                        <input type="number" name="<?= $inputBase ?>[h_jdf]" class="h-input form-control form-control-sm text-center px-1"
+                            data-col="h_jdf" step="0.5" min="0" value="<?= h($hJdf ?: '') ?>"
+                            style="width:60px;min-width:50px" placeholder="0">
+                    <?php endif; ?>
+                </td>
+
+                <!-- h_ndf : Dim.+Fér. NUIT -->
+                <td class="p-1" style="background:rgba(168,85,247,0.04)">
+                    <?php if (strpos($disNdf, 'disabled') !== false): ?>
+                        <input type="hidden" name="<?= $inputBase ?>[h_ndf]" value="0">
+                        <span class="d-block text-center text-muted" style="font-size:0.75rem">—</span>
+                    <?php else: ?>
+                        <input type="number" name="<?= $inputBase ?>[h_ndf]" class="h-input form-control form-control-sm text-center px-1"
+                            data-col="h_ndf" step="0.5" min="0" value="<?= h($hNdf ?: '') ?>"
+                            style="width:60px;min-width:50px" placeholder="0">
+                    <?php endif; ?>
+                </td>
+
                 <td class="text-center fw-bold ligne-total-h"><?= $totalH > 0 ? number_format($totalH, 1) : '—' ?></td>
                 <td class="text-end fw-bold ligne-total-ht" style="font-size:0.78rem"><?= $totalHT > 0 ? number_format($totalHT, 2, ',', ' ') . ' €' : '—' ?></td>
                 <td class="text-center p-0">
@@ -395,6 +436,8 @@ foreach ($profils as $profil):
                     <td class="text-center st-col" data-col="h_nd"><?= $stNd > 0 ? number_format($stNd, 1) : '—' ?></td>
                     <td class="text-center st-col" data-col="h_jf"><?= $stJf > 0 ? number_format($stJf, 1) : '—' ?></td>
                     <td class="text-center st-col" data-col="h_nf"><?= $stNf > 0 ? number_format($stNf, 1) : '—' ?></td>
+                    <td class="text-center st-col" data-col="h_jdf"><?= $stJdf > 0 ? number_format($stJdf, 1) : '—' ?></td>
+                    <td class="text-center st-col" data-col="h_ndf"><?= $stNdf > 0 ? number_format($stNdf, 1) : '—' ?></td>
                     <td class="text-center st-total-h"><?= $stH > 0 ? number_format($stH, 1) : '—' ?></td>
                     <td class="text-end st-total-ht"><?= $stHT > 0 ? number_format($stHT, 2, ',', ' ') . ' €' : '—' ?></td>
                     <td></td>
@@ -563,7 +606,7 @@ $grandTotalTTC = $htApresRemise + $tvaMontant;
             Saisissez les heures à appliquer sur <strong>chaque jour</strong> (selon le type de jour). Les colonnes désactivées pour un jour donné seront ignorées.
         </p>
         <div class="row g-2 text-center">
-            <div class="col-4"><div class="p-2 rounded" style="background:rgba(99,102,241,0.08)">
+            <div class="col-3"><div class="p-2 rounded" style="background:rgba(99,102,241,0.08)">
                 <div style="font-size:0.7rem;font-weight:700;color:#4f46e5">JOUR NORMAL</div>
                 <div class="d-flex gap-1 mt-1">
                     <div class="flex-fill"><small class="text-muted d-block">Jour</small>
@@ -572,7 +615,7 @@ $grandTotalTTC = $htApresRemise + $tvaMontant;
                         <input type="number" id="af_nn" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
                 </div>
             </div></div>
-            <div class="col-4"><div class="p-2 rounded" style="background:rgba(59,130,246,0.08)">
+            <div class="col-3"><div class="p-2 rounded" style="background:rgba(59,130,246,0.08)">
                 <div style="font-size:0.7rem;font-weight:700;color:#2563eb">DIMANCHE</div>
                 <div class="d-flex gap-1 mt-1">
                     <div class="flex-fill"><small class="text-muted d-block">Jour</small>
@@ -581,13 +624,22 @@ $grandTotalTTC = $htApresRemise + $tvaMontant;
                         <input type="number" id="af_nd" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
                 </div>
             </div></div>
-            <div class="col-4"><div class="p-2 rounded" style="background:rgba(239,68,68,0.08)">
+            <div class="col-3"><div class="p-2 rounded" style="background:rgba(239,68,68,0.08)">
                 <div style="font-size:0.7rem;font-weight:700;color:#dc2626">FÉRIÉ</div>
                 <div class="d-flex gap-1 mt-1">
                     <div class="flex-fill"><small class="text-muted d-block">Jour</small>
                         <input type="number" id="af_jf" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
                     <div class="flex-fill"><small class="text-muted d-block">Nuit</small>
                         <input type="number" id="af_nf" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
+                </div>
+            </div></div>
+            <div class="col-3"><div class="p-2 rounded" style="background:rgba(168,85,247,0.08)">
+                <div style="font-size:0.7rem;font-weight:700;color:#7c3aed">DIM.+FÉR.</div>
+                <div class="d-flex gap-1 mt-1">
+                    <div class="flex-fill"><small class="text-muted d-block">Jour</small>
+                        <input type="number" id="af_jdf" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
+                    <div class="flex-fill"><small class="text-muted d-block">Nuit</small>
+                        <input type="number" id="af_ndf" class="form-control form-control-sm text-center" step="0.5" min="0" value="" placeholder="0"></div>
                 </div>
             </div></div>
         </div>
@@ -622,12 +674,14 @@ $grandTotalTTC = $htApresRemise + $tvaMontant;
 
     function getTaux(profilCard) {
         return {
-            h_jn: parseFloat(profilCard.dataset.tauxJn) || 0,
-            h_nn: parseFloat(profilCard.dataset.tauxNn) || 0,
-            h_jd: parseFloat(profilCard.dataset.tauxJd) || 0,
-            h_nd: parseFloat(profilCard.dataset.tauxNd) || 0,
-            h_jf: parseFloat(profilCard.dataset.tauxJf) || 0,
-            h_nf: parseFloat(profilCard.dataset.tauxNf) || 0,
+            h_jn:  parseFloat(profilCard.dataset.tauxJn)  || 0,
+            h_nn:  parseFloat(profilCard.dataset.tauxNn)  || 0,
+            h_jd:  parseFloat(profilCard.dataset.tauxJd)  || 0,
+            h_nd:  parseFloat(profilCard.dataset.tauxNd)  || 0,
+            h_jf:  parseFloat(profilCard.dataset.tauxJf)  || 0,
+            h_nf:  parseFloat(profilCard.dataset.tauxNf)  || 0,
+            h_jdf: parseFloat(profilCard.dataset.tauxJdf) || 0,
+            h_ndf: parseFloat(profilCard.dataset.tauxNdf) || 0,
         };
     }
 
@@ -641,7 +695,7 @@ $grandTotalTTC = $htApresRemise + $tvaMontant;
         var inputs = row.querySelectorAll('.h-input');
         var values = {};
         inputs.forEach(function(inp) { values[inp.dataset.col] = val(inp); });
-        var cols = ['h_jn','h_nn','h_jd','h_nd','h_jf','h_nf'];
+        var cols = ['h_jn','h_nn','h_jd','h_nd','h_jf','h_nf','h_jdf','h_ndf'];
         var totalH = 0, totalHT = 0;
         cols.forEach(function(c) {
             var v = values[c] || 0;
@@ -657,7 +711,7 @@ $grandTotalTTC = $htApresRemise + $tvaMontant;
 
     function recalcProfil(profilCard) {
         var rows   = profilCard.querySelectorAll('tbody .ligne-jour');
-        var stCols = {h_jn:0,h_nn:0,h_jd:0,h_nd:0,h_jf:0,h_nf:0};
+        var stCols = {h_jn:0,h_nn:0,h_jd:0,h_nd:0,h_jf:0,h_nf:0,h_jdf:0,h_ndf:0};
         var stH    = 0, stHT = 0;
         rows.forEach(function(row) {
             row.querySelectorAll('.h-input').forEach(function(inp) {
@@ -785,32 +839,38 @@ $grandTotalTTC = $htApresRemise + $tvaMontant;
     });
 
     document.getElementById('afPresetJour').addEventListener('click', function() {
-        document.getElementById('af_jn').value = 12;
-        document.getElementById('af_nn').value = '';
-        document.getElementById('af_jd').value = 12;
-        document.getElementById('af_nd').value = '';
-        document.getElementById('af_jf').value = 12;
-        document.getElementById('af_nf').value = '';
+        document.getElementById('af_jn').value  = 12;
+        document.getElementById('af_nn').value  = '';
+        document.getElementById('af_jd').value  = 12;
+        document.getElementById('af_nd').value  = '';
+        document.getElementById('af_jf').value  = 12;
+        document.getElementById('af_nf').value  = '';
+        document.getElementById('af_jdf').value = 12;
+        document.getElementById('af_ndf').value = '';
     });
 
     document.getElementById('afPresetNuit').addEventListener('click', function() {
-        document.getElementById('af_jn').value = 3;
-        document.getElementById('af_nn').value = 9;
-        document.getElementById('af_jd').value = 3;
-        document.getElementById('af_nd').value = 9;
-        document.getElementById('af_jf').value = 3;
-        document.getElementById('af_nf').value = 9;
+        document.getElementById('af_jn').value  = 3;
+        document.getElementById('af_nn').value  = 9;
+        document.getElementById('af_jd').value  = 3;
+        document.getElementById('af_nd').value  = 9;
+        document.getElementById('af_jf').value  = 3;
+        document.getElementById('af_nf').value  = 9;
+        document.getElementById('af_jdf').value = 3;
+        document.getElementById('af_ndf').value = 9;
     });
 
     document.getElementById('btnApplyAutofill').addEventListener('click', function() {
         if (!currentProfilCard) return;
         var afVals = {
-            h_jn: parseFloat(document.getElementById('af_jn').value) || 0,
-            h_nn: parseFloat(document.getElementById('af_nn').value) || 0,
-            h_jd: parseFloat(document.getElementById('af_jd').value) || 0,
-            h_nd: parseFloat(document.getElementById('af_nd').value) || 0,
-            h_jf: parseFloat(document.getElementById('af_jf').value) || 0,
-            h_nf: parseFloat(document.getElementById('af_nf').value) || 0,
+            h_jn:  parseFloat(document.getElementById('af_jn').value)  || 0,
+            h_nn:  parseFloat(document.getElementById('af_nn').value)  || 0,
+            h_jd:  parseFloat(document.getElementById('af_jd').value)  || 0,
+            h_nd:  parseFloat(document.getElementById('af_nd').value)  || 0,
+            h_jf:  parseFloat(document.getElementById('af_jf').value)  || 0,
+            h_nf:  parseFloat(document.getElementById('af_nf').value)  || 0,
+            h_jdf: parseFloat(document.getElementById('af_jdf').value) || 0,
+            h_ndf: parseFloat(document.getElementById('af_ndf').value) || 0,
         };
         currentProfilCard.querySelectorAll('tbody .ligne-jour').forEach(function(row) {
             row.querySelectorAll('.h-input').forEach(function(inp) {
