@@ -5,7 +5,7 @@
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/functions.php';
 requireLogin();
-if (($_SESSION['role'] ?? '') !== 'admin') { http_response_code(403); exit('Accès refusé'); }
+if (($_SESSION['user']['role_slug'] ?? '') !== 'admin') { http_response_code(403); exit('Accès refusé'); }
 
 $db = getDB();
 header('Content-Type: text/html; charset=UTF-8');
