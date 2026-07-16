@@ -774,15 +774,19 @@ if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures
             <select id="posteGrilleSelect" class="form-select form-select-sm mb-1" style="border-color:var(--ov-gold);background:rgba(201,168,76,0.04)">
               <option value="">— Sélectionner depuis la grille —</option>
               <?php foreach ($postesGrille as $pg): ?>
+              <?php
+                $titre = trim(explode('(', $pg['label'])[0]); // "Agent de sécurité confirmé"
+              ?>
               <option value="<?= h($pg['id']) ?>"
                       data-label="<?= h($pg['label']) ?>"
+                      data-titre="<?= h($titre) ?>"
                       data-taux="<?= h($pg['taux_horaire']) ?>"
                       <?= ($data['categorie'] ?? '') === $pg['label'] ? 'selected' : '' ?>
-              ><?= h($pg['label']) ?><?= $pg['coefficient'] ? ' (coef.'.$pg['coefficient'].')' : '' ?> — <?= number_format($pg['taux_horaire'],4) ?> €/h</option>
+              ><?= h($pg['label']) ?> — <?= number_format($pg['taux_horaire'],2) ?> €/h</option>
               <?php endforeach; ?>
             </select>
             <?php endif; ?>
-            <input type="text" name="categorie" id="categorieTexte" class="form-control form-control-sm" value="<?= h($data['categorie']) ?>" oninput="updatePreview()" placeholder="Ex : Employé - Niveau II - Échelon 1 - Coefficient 130">
+            <input type="text" name="categorie" id="categorieTexte" class="form-control form-control-sm" value="<?= h($data['categorie']) ?>" oninput="updatePreview()" placeholder="Ex : Agent de sécurité confirmé (Niv. III - Éch. 1) - Coeff. 130">
           </div>
           <div class="col-6">
             <label class="form-label">Date de début</label>
@@ -1193,21 +1197,23 @@ document.addEventListener('DOMContentLoaded', function() {
     check24hCoherence();
     initSigPad();
 
-    // Grille des postes → auto-remplit catégorie + salaire horaire
+    // Grille des postes → auto-remplit poste + catégorie + salaire horaire
     var selPoste = document.getElementById('posteGrilleSelect');
     if (selPoste) {
         selPoste.addEventListener('change', function() {
             var opt = this.options[this.selectedIndex];
             if (!opt.value) return;
-            var catField  = document.getElementById('categorieTexte');
-            var tauxField = document.querySelector('[name="salaire_horaire"]');
-            if (catField) { catField.value = opt.dataset.label || ''; updatePreview(); }
+            var posteField = document.getElementById('posteTexte');
+            var catField   = document.getElementById('categorieTexte');
+            var tauxField  = document.querySelector('[name="salaire_horaire"]');
+            if (posteField && opt.dataset.titre) { posteField.value = opt.dataset.titre; }
+            if (catField)  { catField.value  = opt.dataset.label || ''; }
             if (tauxField && opt.dataset.taux) {
                 tauxField.value = parseFloat(opt.dataset.taux).toFixed(2);
                 tauxField.style.borderColor = 'var(--ov-gold)';
                 tauxField.style.background  = 'rgba(201,168,76,0.06)';
-                updatePreview();
             }
+            updatePreview();
         });
     }
 

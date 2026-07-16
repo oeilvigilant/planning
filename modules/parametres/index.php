@@ -16,20 +16,27 @@ try { $db->exec("CREATE TABLE IF NOT EXISTS postes (
     ordre INT NOT NULL DEFAULT 0
 )"); } catch(Exception $e){}
 
-// Grille IDCC 1351 au 1er janvier 2026 (+2,8%)
+// Grille IDCC 1351 au 1er janvier 2026 (+2,8%) — format : Intitulé (Niv. X - Éch. Y) - Coeff. ZZZ
 // Taux = salaire mensuel brut ÷ 151,67 h
 $_postes2026 = [
     // [label, coefficient, taux_horaire, ordre]
-    ['Agent de sécurité (ADS) - Coeff. 120',                    120, 12.4211, 1],
-    ['Agent de sécurité confirmé - Coeff. 130',                 130, 12.5839, 2],
-    ['Agent cynophile / Maître chien - Coeff. 140',             140, 12.9611, 3],
-    ['SSIAP 1 - Coeff. 140',                                    140, 12.9611, 4],
-    ['Rondier-intervenant / Filtrage - Coeff. 150',             150, 13.4459, 5],
-    ['SSIAP 2 agent - Coeff. 160',                              160, 14.1899, 6],
-    ['Chef d\'équipe (Maîtrise AM 150)',                        150, 14.7319, 7],
-    ['Responsable de site (Maîtrise AM 170)',                   170, 16.3578, 8],
-    ['Chef de service sécurité (Maîtrise AM 185)',              185, 17.5799, 9],
-    ['SSIAP 3 / Resp. sûreté (Maîtrise AM 235)',               235, 21.6444, 10],
+    // ── Agents d'Exploitation (AE) ──
+    ["Agent de sécurité (ADS) (Niv. II - Éch. 1) - Coeff. 120",            120, 12.4211,  1],
+    ["Agent de sécurité confirmé (Niv. III - Éch. 1) - Coeff. 130",        130, 12.5839,  2],
+    ["Agent cynophile / Maître chien (Niv. III - Éch. 2) - Coeff. 140",    140, 12.9611,  3],
+    ["SSIAP 1 (Niv. III - Éch. 2) - Coeff. 140",                           140, 12.9611,  4],
+    ["Chef de poste (Niv. III - Éch. 2) - Coeff. 140",                     140, 12.9611,  5],
+    ["SSIAP 1 confirmé (Niv. III - Éch. 3) - Coeff. 150",                  150, 13.4459,  6],
+    ["Rondier-intervenant (Niv. IV - Éch. 1) - Coeff. 160",                160, 14.1899,  7],
+    ["SSIAP 2 agent (Niv. IV - Éch. 1) - Coeff. 160",                      160, 14.1899,  8],
+    ["Agent de sécurité spécialisé (Niv. IV - Éch. 2) - Coeff. 175",       175, 15.3433,  9],
+    ["Agent de sécurité expert (Niv. IV - Éch. 3) - Coeff. 190",           190, 16.4986, 10],
+    // ── Agents de Maîtrise (AM) ──
+    ["Chef d'équipe (AM - Niv. I - Éch. 1) - Coeff. 150",                  150, 14.7319, 11],
+    ["Chef d'équipe confirmé (AM - Niv. I - Éch. 2) - Coeff. 160",         160, 15.5461, 12],
+    ["Responsable de site (AM - Niv. I - Éch. 3) - Coeff. 170",            170, 16.3578, 13],
+    ["Chef de service sécurité (AM - Niv. II - Éch. 1) - Coeff. 185",      185, 17.5799, 14],
+    ["SSIAP 3 / Chef de sécurité (AM - Niv. III - Éch. 1) - Coeff. 235",   235, 21.6444, 15],
 ];
 try {
     $nbPostes = (int)$db->query("SELECT COUNT(*) FROM postes")->fetchColumn();
