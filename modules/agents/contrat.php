@@ -159,11 +159,13 @@ if (!$hasContrats && (
     $hasContrats = true;
 }
 
-// Nettoyer les contrats vides créés par erreur (sans date ni heures, avec ou sans signature)
-// Seulement si l'agent a au moins un autre contrat (évite de supprimer l'unique contrat)
+// Nettoyer les contrats fantômes (sans date, sans heures, sans signature)
+// Ne jamais supprimer un contrat signé, même s'il n'a pas de dates
 try {
-    $db->exec("DELETE FROM contrats WHERE date_debut IS NULL AND date_fin IS NULL AND total_heures_contrat IS NULL
-        AND agent_id IN (SELECT agent_id FROM (SELECT agent_id FROM contrats GROUP BY agent_id HAVING COUNT(*) > 1) t)");
+    $db->exec("DELETE FROM contrats
+        WHERE date_debut IS NULL AND date_fin IS NULL AND total_heures_contrat IS NULL
+          AND (signature IS NULL OR signature = '')
+          AND agent_id IN (SELECT agent_id FROM (SELECT agent_id FROM contrats GROUP BY agent_id HAVING COUNT(*) > 1) t)");
 } catch (Exception $e) {}
 
 // Recompter après nettoyage
