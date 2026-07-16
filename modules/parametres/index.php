@@ -1110,7 +1110,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="row g-3 align-items-end">
       <div class="col-md-5">
         <label class="form-label">Intitulé du poste</label>
-        <input type="text" name="poste_label" class="form-control" required placeholder="Ex : Employé - Niveau III - Échelon 2 - Coefficient 140">
+        <input type="text" name="poste_label" class="form-control" required placeholder="Ex : Agent de sécurité (ADS), SSIAP 1, Maître chien…">
       </div>
       <div class="col-md-2">
         <label class="form-label">Coefficient <small class="text-muted">(optionnel)</small></label>
