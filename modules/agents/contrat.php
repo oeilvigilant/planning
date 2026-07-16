@@ -107,6 +107,8 @@ try {
         created_at           DATETIME     DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_agent_id (agent_id)
     )");
+    // remuneration en DECIMAL(10,4) pour conserver 4 décimales (taux horaire brut IDCC)
+    $db->exec("ALTER TABLE contrats MODIFY COLUMN remuneration DECIMAL(10,4) DEFAULT NULL");
 } catch (Exception $e) {}
 
 // ── Charger l'agent ────────────────────────────────────────────────────────────
@@ -281,8 +283,8 @@ $defaults = [
     'nom_evenement'        => $c['nom_evenement'] ?? '',
     'site_affectation'     => ($c['lieu_travail'] ?? '') ?: ($a['lieu_travail'] ?? ''),
     'salaire_horaire'      => ($c['remuneration'] ?? '')
-                                ? number_format((float)$c['remuneration'], 2, '.', '')
-                                : ($a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70'),
+                                ? number_format((float)$c['remuneration'], 4, '.', '')
+                                : ($a['remuneration'] ? number_format((float)$a['remuneration'], 4, '.', '') : '12.7000'),
     'type_remuneration'    => ($c['type_remuneration'] ?? '') ?: ($a['type_remuneration'] ?? 'Brute'),
     'majoration_nuit'      => ($c['majoration_nuit']  ?? '') ?: '10',
     'majoration_dim'       => ($c['majoration_dim']   ?? '') ?: '10',
@@ -851,7 +853,7 @@ if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures
           <div class="col-6">
             <label class="form-label">Salaire horaire <small class="text-muted">(brut €/h)</small></label>
             <div class="input-group input-group-sm">
-              <input type="number" name="salaire_horaire" class="form-control" step="0.01" min="0" value="<?= h($data['salaire_horaire']) ?>" oninput="updatePreview()">
+              <input type="number" name="salaire_horaire" class="form-control" step="0.0001" min="0" value="<?= h($data['salaire_horaire']) ?>" oninput="updatePreview()">
               <span class="input-group-text">€/h</span>
             </div>
           </div>
@@ -1209,7 +1211,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (posteField && opt.dataset.titre) { posteField.value = opt.dataset.titre; }
             if (catField)  { catField.value  = opt.dataset.label || ''; }
             if (tauxField && opt.dataset.taux) {
-                tauxField.value = parseFloat(opt.dataset.taux).toFixed(2);
+                tauxField.value = parseFloat(opt.dataset.taux).toFixed(4);
                 tauxField.style.borderColor = 'var(--ov-gold)';
                 tauxField.style.background  = 'rgba(201,168,76,0.06)';
             }
