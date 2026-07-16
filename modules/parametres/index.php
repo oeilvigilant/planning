@@ -16,6 +16,44 @@ try { $db->exec("CREATE TABLE IF NOT EXISTS postes (
     ordre INT NOT NULL DEFAULT 0
 )"); } catch(Exception $e){}
 
+// Grille IDCC 1351 au 1er janvier 2026 (+2,8%)
+// Taux = salaire mensuel brut ÷ 151,67 h
+$_postes2026 = [
+    // [label, coefficient, taux_horaire, ordre]
+    ['Agent de sécurité (ADS) - Coeff. 120',                    120, 12.4211, 1],
+    ['Agent de sécurité confirmé - Coeff. 130',                 130, 12.5839, 2],
+    ['Agent cynophile / Maître chien - Coeff. 140',             140, 12.9611, 3],
+    ['SSIAP 1 - Coeff. 140',                                    140, 12.9611, 4],
+    ['Rondier-intervenant / Filtrage - Coeff. 150',             150, 13.4459, 5],
+    ['SSIAP 2 agent - Coeff. 160',                              160, 14.1899, 6],
+    ['Chef d\'équipe (Maîtrise AM 150)',                        150, 14.7319, 7],
+    ['Responsable de site (Maîtrise AM 170)',                   170, 16.3578, 8],
+    ['Chef de service sécurité (Maîtrise AM 185)',              185, 17.5799, 9],
+    ['SSIAP 3 / Resp. sûreté (Maîtrise AM 235)',               235, 21.6444, 10],
+];
+try {
+    $nbPostes = (int)$db->query("SELECT COUNT(*) FROM postes")->fetchColumn();
+    if ($nbPostes === 0) {
+        // Table vide : seed complet
+        $stP = $db->prepare("INSERT INTO postes (label, coefficient, taux_horaire, ordre) VALUES (?,?,?,?)");
+        foreach ($_postes2026 as $p) $stP->execute($p);
+    } else {
+        // Mise à jour 2026 (flag pour ne tourner qu'une fois)
+        $already = $db->query("SELECT valeur FROM parametres WHERE cle='postes_2026_updated'")->fetchColumn();
+        if (!$already) {
+            // Mapping coefficient → taux 2026 pour les coefficients sans ambiguïté
+            $maj = [120 => 12.4211, 130 => 12.5839, 160 => 14.1899,
+                    175 => 15.3433, 185 => 17.5799, 190 => 16.4986, 235 => 21.6444];
+            $stU = $db->prepare("UPDATE postes SET taux_horaire=? WHERE coefficient=?");
+            foreach ($maj as $coef => $taux) $stU->execute([$taux, $coef]);
+            // coeff 140 : mise à jour si taux < 12.90 (ancienne valeur pre-2026)
+            $db->exec("UPDATE postes SET taux_horaire=12.9611 WHERE coefficient=140 AND taux_horaire < 12.90");
+            $db->exec("INSERT INTO parametres (cle, valeur) VALUES ('postes_2026_updated','1')
+                       ON DUPLICATE KEY UPDATE valeur='1'");
+        }
+    }
+} catch(Exception $e){}
+
 // Migration table profils types devis
 try { $db->exec("CREATE TABLE IF NOT EXISTS devis_profils_types (
     id       INT AUTO_INCREMENT PRIMARY KEY,
