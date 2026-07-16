@@ -777,13 +777,20 @@ if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures
               <option value="">— Sélectionner depuis la grille —</option>
               <?php foreach ($postesGrille as $pg): ?>
               <?php
-                $titre = trim(explode('(', $pg['label'])[0]); // "Agent de sécurité confirmé"
+                // titre  → champ "Poste" : "Agent de sécurité confirmé"
+                $titre = trim(explode('(', $pg['label'])[0]);
+                // classif → champ "Catégorie" : "Niv. III - Éch. 1 - Coeff. 130" (sans doublon titre)
+                if (preg_match('/\(([^)]+)\)\s*-\s*(Coeff\.\s*\d+)/i', $pg['label'], $m)) {
+                    $classif = $m[1] . ' - ' . $m[2]; // "Niv. III - Éch. 1 - Coeff. 130"
+                } else {
+                    $classif = $pg['label']; // fallback : label complet
+                }
               ?>
               <option value="<?= h($pg['id']) ?>"
-                      data-label="<?= h($pg['label']) ?>"
+                      data-label="<?= h($classif) ?>"
                       data-titre="<?= h($titre) ?>"
                       data-taux="<?= h($pg['taux_horaire']) ?>"
-                      <?= ($data['categorie'] ?? '') === $pg['label'] ? 'selected' : '' ?>
+                      <?= ($data['categorie'] ?? '') === $classif ? 'selected' : '' ?>
               ><?= h($pg['label']) ?> — <?= number_format($pg['taux_horaire'],2) ?> €/h</option>
               <?php endforeach; ?>
             </select>
