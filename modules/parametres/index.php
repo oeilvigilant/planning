@@ -171,6 +171,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         flash('success','Poste supprimé.');
         header('Location: index.php?tab=postes'); exit;
     }
+    if ($action === 'reset_postes_2026') {
+        global $_postes2026;
+        $db->exec("DELETE FROM postes");
+        $stP = $db->prepare("INSERT INTO postes (label, coefficient, taux_horaire, ordre) VALUES (?,?,?,?)");
+        foreach ($_postes2026 as $p) $stP->execute($p);
+        $db->exec("INSERT INTO parametres (cle, valeur) VALUES ('postes_2026_updated','1')
+                   ON DUPLICATE KEY UPDATE valeur='1'");
+        flash('success','Grille IDCC 1351 (janvier 2026) appliquée — ' . count($_postes2026) . ' postes.');
+        header('Location: index.php?tab=postes'); exit;
+    }
     if ($action === 'add_devis_profil') {
         $label    = trim($_POST['dp_label']    ?? '');
         $activite = trim($_POST['dp_activite'] ?? '');
@@ -1073,6 +1083,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- POSTES -->
 <div class="tab-pane fade" id="tab-postes">
+
+<div class="alert d-flex align-items-center gap-3 mb-3" style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:14px 18px">
+  <i class="fa fa-scale-balanced fa-lg" style="color:#f59e0b;flex-shrink:0"></i>
+  <div style="flex:1;font-size:0.85rem">
+    <strong>Grille IDCC 1351 — 1er janvier 2026 (+2,8 %)</strong><br>
+    Cliquez sur le bouton pour remplacer tous les postes actuels par la grille officielle de la convention collective sécurité privée.
+  </div>
+  <form method="POST" onsubmit="return confirm('Remplacer tous les postes par la grille officielle 2026 ?')">
+    <input type="hidden" name="action" value="reset_postes_2026">
+    <button type="submit" class="btn btn-warning btn-sm fw-bold">
+      <i class="fa fa-rotate me-1"></i>Appliquer grille 2026
+    </button>
+  </form>
+</div>
 
 <div class="ov-card mb-3">
   <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-plus me-2" style="color:var(--ov-gold)"></i>Ajouter un poste</h2></div>
