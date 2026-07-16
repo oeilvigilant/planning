@@ -13,6 +13,15 @@ try { getDB()->exec("ALTER TABLE contrats ADD COLUMN IF NOT EXISTS dpae_chemin V
 try { getDB()->exec("ALTER TABLE agent_documents ADD COLUMN IF NOT EXISTS date_expiration DATE NULL"); } catch(Exception $e){}
 try { getDB()->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS alertes_ignorees TEXT NULL"); } catch(Exception $e){}
 try { getDB()->exec("ALTER TABLE agent_documents MODIFY COLUMN type_document ENUM('piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','rib','contrat','autre') NOT NULL"); } catch(Exception $e){}
+try { getDB()->exec("CREATE TABLE IF NOT EXISTS agent_notes (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    agent_id   INT NOT NULL,
+    contenu    TEXT NOT NULL,
+    statut     ENUM('ouvert','fait') NOT NULL DEFAULT 'ouvert',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(100) DEFAULT NULL,
+    INDEX idx_agent (agent_id)
+)"); } catch(Exception $e){}
 
 // ── Upload DPAE pour un contrat ───────────────────────────────────────────────
 if (($_POST['action'] ?? '') === 'upload_dpae') {
@@ -147,6 +156,32 @@ if ($_GET['del_doc'] ?? false) {
     exit;
 }
 
+// ── Notes internes : handlers ─────────────────────────────────────────────────
+if (($_POST['action'] ?? '') === 'add_note') {
+    requirePerm('agents','edit');
+    $contenu = trim($_POST['note_contenu'] ?? '');
+    if ($contenu) {
+        $db->prepare("INSERT INTO agent_notes (agent_id, contenu, created_by) VALUES (?,?,?)")
+           ->execute([$id, $contenu, $_SESSION['user_nom'] ?? null]);
+        flash('success','Note ajoutée.');
+    }
+    header('Location: view.php?id='.$id.'#notes'); exit;
+}
+if (($_POST['action'] ?? '') === 'toggle_note') {
+    requirePerm('agents','edit');
+    $nid = (int)($_POST['note_id'] ?? 0);
+    $db->prepare("UPDATE agent_notes SET statut = IF(statut='ouvert','fait','ouvert') WHERE id=? AND agent_id=?")
+       ->execute([$nid, $id]);
+    header('Location: view.php?id='.$id.'#notes'); exit;
+}
+if (($_POST['action'] ?? '') === 'delete_note') {
+    requirePerm('agents','edit');
+    $nid = (int)($_POST['note_id'] ?? 0);
+    $db->prepare("DELETE FROM agent_notes WHERE id=? AND agent_id=?")->execute([$nid, $id]);
+    flash('success','Note supprimée.');
+    header('Location: view.php?id='.$id.'#notes'); exit;
+}
+
 $pageTitle    = 'Fiche agent';
 $currentModule = 'agents';
 require_once __DIR__ . '/../../includes/header.php';
@@ -159,6 +194,11 @@ if (!$a) { flash('danger','Agent introuvable'); header('Location: index.php'); e
 $docs = $db->prepare("SELECT * FROM agent_documents WHERE agent_id = ? ORDER BY type_document");
 $docs->execute([$id]);
 $documents = $docs->fetchAll();
+
+$stNotes = $db->prepare("SELECT * FROM agent_notes WHERE agent_id=? ORDER BY statut='fait', created_at DESC");
+$stNotes->execute([$id]);
+$agentNotes = $stNotes->fetchAll();
+$nbNotesOuvertes = count(array_filter($agentNotes, fn($n) => $n['statut'] === 'ouvert'));
 
 $docTypes    = array_column($documents, 'type_document');
 $ignoredKeys = json_decode($a['alertes_ignorees'] ?? '[]', true) ?: [];
@@ -705,6 +745,73 @@ if (canDo('agents','delete')) {
     </div>
   </div>
   <?php endif; ?>
+
+  <!-- Notes internes -->
+  <div class="ov-card mb-3" id="notes">
+    <div class="ov-card-header d-flex align-items-center justify-content-between">
+      <h2 class="ov-card-title mb-0"><i class="fa fa-clipboard-list me-2" style="color:var(--ov-gold)"></i>Notes internes</h2>
+      <?php if ($nbNotesOuvertes > 0): ?>
+      <span class="badge rounded-pill" style="background:#f59e0b;color:#fff;font-size:0.75rem"><?= $nbNotesOuvertes ?> en attente</span>
+      <?php endif; ?>
+    </div>
+    <div class="ov-card-body">
+
+      <?php if ($agentNotes): ?>
+      <ul class="list-unstyled mb-3" style="display:flex;flex-direction:column;gap:8px">
+        <?php foreach ($agentNotes as $n):
+          $fait = $n['statut'] === 'fait';
+        ?>
+        <li style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid <?= $fait ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.35)' ?>;background:<?= $fait ? 'rgba(34,197,94,0.04)' : 'rgba(245,158,11,0.04)' ?>">
+          <!-- Toggle statut -->
+          <form method="POST" style="flex-shrink:0;margin-top:2px">
+            <input type="hidden" name="action" value="toggle_note">
+            <input type="hidden" name="note_id" value="<?= $n['id'] ?>">
+            <button type="submit" title="<?= $fait ? 'Marquer comme à faire' : 'Marquer comme fait' ?>"
+              style="background:none;border:none;padding:0;cursor:pointer;color:<?= $fait ? '#16a34a' : '#f59e0b' ?>;font-size:1.1rem">
+              <i class="fa <?= $fait ? 'fa-circle-check' : 'fa-circle' ?>"></i>
+            </button>
+          </form>
+          <!-- Contenu -->
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.875rem;<?= $fait ? 'text-decoration:line-through;color:#9ca3af' : 'color:#1f2937' ?>"><?= h($n['contenu']) ?></div>
+            <div style="font-size:0.72rem;color:#9ca3af;margin-top:3px">
+              <?= date('d/m/Y à H:i', strtotime($n['created_at'])) ?>
+              <?= $n['created_by'] ? ' · ' . h($n['created_by']) : '' ?>
+            </div>
+          </div>
+          <!-- Supprimer -->
+          <?php if (canDo('agents','edit')): ?>
+          <form method="POST" style="flex-shrink:0" onsubmit="return confirm('Supprimer cette note ?')">
+            <input type="hidden" name="action" value="delete_note">
+            <input type="hidden" name="note_id" value="<?= $n['id'] ?>">
+            <button type="submit" style="background:none;border:none;padding:0;cursor:pointer;color:#dc2626;font-size:0.85rem" title="Supprimer">
+              <i class="fa fa-trash"></i>
+            </button>
+          </form>
+          <?php endif; ?>
+        </li>
+        <?php endforeach; ?>
+      </ul>
+      <?php else: ?>
+      <p class="text-muted mb-3" style="font-size:0.85rem"><i class="fa fa-circle-info me-1"></i>Aucune note pour cet agent.</p>
+      <?php endif; ?>
+
+      <?php if (canDo('agents','edit')): ?>
+      <form method="POST" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="action" value="add_note">
+        <div style="flex:1">
+          <textarea name="note_contenu" class="form-control form-control-sm" rows="2"
+            placeholder="Ex : Avance de 300 € le 12/07/2026 — à récupérer sur la paie d'août" required
+            style="resize:none"></textarea>
+        </div>
+        <button type="submit" class="btn btn-ov-primary btn-sm" style="height:fit-content">
+          <i class="fa fa-plus me-1"></i>Ajouter
+        </button>
+      </form>
+      <?php endif; ?>
+
+    </div>
+  </div>
 
   <!-- Pôle Social -->
   <div class="ov-card">
