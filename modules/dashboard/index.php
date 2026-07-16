@@ -34,6 +34,55 @@ $cnapsAlerte = $db->query("
     ORDER BY date_expiration_cnaps ASC LIMIT 10
 ")->fetchAll();
 
+// Notes internes en attente (toutes agents)
+$notesEnAttente = [];
+try {
+    $stN = $db->query("
+        SELECT n.id, n.contenu, n.created_at, n.created_by,
+               a.id AS agent_id, a.nom, a.prenom
+        FROM agent_notes n
+        JOIN agents a ON a.id = n.agent_id
+        WHERE n.statut = 'ouvert'
+        ORDER BY n.created_at DESC
+        LIMIT 20
+    ");
+    $notesEnAttente = $stN->fetchAll();
+} catch(Exception $e){}
+
+// Alertes documents expirés ou expirant dans 60 jours
+$alertesDocs = [];
+try {
+    // Documents avec date_expiration
+    $stD = $db->query("
+        SELECT a.id AS agent_id, a.nom, a.prenom,
+               d.type_document, d.date_expiration, d.nom_fichier
+        FROM agent_documents d
+        JOIN agents a ON a.id = d.agent_id AND a.actif=1
+        WHERE d.date_expiration IS NOT NULL
+          AND d.date_expiration <= DATE_ADD(NOW(), INTERVAL 60 DAY)
+        ORDER BY d.date_expiration ASC
+        LIMIT 20
+    ");
+    $alertesDocs = $stD->fetchAll();
+    // Ajouter CNAPS dans la même liste
+    $stC = $db->query("
+        SELECT id AS agent_id, nom, prenom,
+               'cnaps' AS type_document, date_expiration_cnaps AS date_expiration, num_autorisation_cnaps AS nom_fichier
+        FROM agents WHERE actif=1 AND date_expiration_cnaps IS NOT NULL
+        AND date_expiration_cnaps <= DATE_ADD(NOW(), INTERVAL 60 DAY)
+    ");
+    $alertesDocs = array_merge($alertesDocs, $stC->fetchAll());
+    usort($alertesDocs, fn($a,$b) => strcmp($a['date_expiration'], $b['date_expiration']));
+} catch(Exception $e){}
+
+$labelsDoc = [
+    'cnaps'             => 'CNAPS',
+    'piece_identite'    => 'CNI',
+    'titre_sejour'      => 'Titre de séjour',
+    'carte_vitale'      => 'Carte vitale',
+    'attestation_cnaps' => 'Attestation CNAPS',
+];
+
 // Derniers agents ajoutés
 $derniersAgents = $db->query("
     SELECT id, nom, prenom, poste, type_contrat, created_at
@@ -72,14 +121,20 @@ if ($version) {
   </div>
   <div class="col-md-3 col-6">
     <div class="stat-card">
-      <div class="stat-icon <?= count($cnapsAlerte)>0 ? 'red' : 'green' ?>"><i class="fa fa-shield-halved"></i></div>
-      <div><div class="stat-value"><?= count($cnapsAlerte) ?></div><div class="stat-label">Alertes CNAPS</div></div>
+      <div class="stat-icon <?= count($alertesDocs)>0 ? 'red' : 'green' ?>"><i class="fa fa-shield-halved"></i></div>
+      <div><div class="stat-value"><?= count($alertesDocs) ?></div><div class="stat-label">Alertes documents</div></div>
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="stat-card">
       <div class="stat-icon green"><i class="fa fa-calendar-day"></i></div>
       <div><div class="stat-value"><?= count($agentsAujourdhui) ?></div><div class="stat-label">En service aujourd'hui</div></div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card" onclick="document.getElementById('bloc-notes-dashboard').scrollIntoView({behavior:'smooth'})" style="cursor:pointer">
+      <div class="stat-icon <?= count($notesEnAttente)>0 ? 'red' : 'green' ?>"><i class="fa fa-clipboard-list"></i></div>
+      <div><div class="stat-value"><?= count($notesEnAttente) ?></div><div class="stat-label">Notes en attente</div></div>
     </div>
   </div>
 </div>
@@ -167,6 +222,76 @@ if ($version) {
           <div style="font-size:0.72rem;color:#9ca3af"><?= date('d/m', strtotime($a['created_at'])) ?></div>
         </div>
         <?php endforeach; ?>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Notes en attente + Alertes documents -->
+<div class="row g-3 mt-1" id="bloc-notes-dashboard">
+
+  <!-- Notes internes en attente -->
+  <div class="col-lg-6">
+    <div class="ov-card h-100">
+      <div class="ov-card-header d-flex align-items-center justify-content-between">
+        <h2 class="ov-card-title mb-0"><i class="fa fa-clipboard-list me-2" style="color:var(--ov-gold)"></i>Notes en attente</h2>
+        <?php if ($notesEnAttente): ?>
+        <span class="badge rounded-pill" style="background:#f59e0b;color:#fff"><?= count($notesEnAttente) ?></span>
+        <?php endif; ?>
+      </div>
+      <div class="ov-card-body p-0">
+        <?php if (empty($notesEnAttente)): ?>
+        <p class="text-center text-muted py-3 mb-0" style="font-size:0.85rem"><i class="fa fa-circle-check text-success me-1"></i>Aucune note en attente</p>
+        <?php else: ?>
+        <?php foreach ($notesEnAttente as $n): ?>
+        <a href="../agents/view.php?id=<?= $n['agent_id'] ?>#notes" style="text-decoration:none;color:inherit">
+          <div class="d-flex align-items-start gap-3 px-3 py-2" style="border-bottom:1px solid #f0f2f5;transition:background .15s" onmouseover="this.style.background='#fffbeb'" onmouseout="this.style.background=''">
+            <i class="fa fa-circle text-warning mt-1" style="font-size:0.6rem;flex-shrink:0;margin-top:6px"></i>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.78rem;font-weight:600;color:var(--ov-navy)"><?= h($n['prenom'].' '.$n['nom']) ?></div>
+              <div style="font-size:0.82rem;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><?= h($n['contenu']) ?></div>
+            </div>
+            <div style="font-size:0.72rem;color:#9ca3af;white-space:nowrap;flex-shrink:0"><?= date('d/m/Y', strtotime($n['created_at'])) ?></div>
+          </div>
+        </a>
+        <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alertes documents -->
+  <div class="col-lg-6">
+    <div class="ov-card h-100">
+      <div class="ov-card-header d-flex align-items-center justify-content-between">
+        <h2 class="ov-card-title mb-0"><i class="fa fa-triangle-exclamation me-2 text-warning"></i>Alertes documents</h2>
+        <?php if ($alertesDocs): ?>
+        <span class="badge rounded-pill bg-danger"><?= count($alertesDocs) ?></span>
+        <?php endif; ?>
+      </div>
+      <div class="ov-card-body p-0">
+        <?php if (empty($alertesDocs)): ?>
+        <p class="text-center text-muted py-3 mb-0" style="font-size:0.85rem"><i class="fa fa-circle-check text-success me-1"></i>Tous les documents sont valides (60 jours)</p>
+        <?php else: ?>
+        <?php foreach ($alertesDocs as $d):
+          $jours = (int)ceil((strtotime($d['date_expiration']) - time()) / 86400);
+          $typeLabel = $labelsDoc[$d['type_document']] ?? ucfirst(str_replace('_',' ',$d['type_document']));
+        ?>
+        <a href="../agents/view.php?id=<?= $d['agent_id'] ?>" style="text-decoration:none;color:inherit">
+          <div class="d-flex align-items-center gap-3 px-3 py-2" style="border-bottom:1px solid #f0f2f5;transition:background .15s" onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background=''">
+            <i class="fa fa-id-card" style="color:<?= $jours<=0?'#dc2626':($jours<=14?'#dc2626':'#f59e0b') ?>;flex-shrink:0"></i>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:0.78rem;font-weight:600;color:var(--ov-navy)"><?= h($d['prenom'].' '.$d['nom']) ?></div>
+              <div style="font-size:0.78rem;color:#6b7280"><?= h($typeLabel) ?></div>
+            </div>
+            <span class="badge <?= $jours<=0?'bg-danger':($jours<=14?'bg-danger':'bg-warning text-dark') ?>" style="font-size:0.72rem;flex-shrink:0">
+              <?= $jours<=0 ? 'Expiré' : "J-$jours" ?>
+            </span>
+          </div>
+        </a>
+        <?php endforeach; ?>
+        <?php endif; ?>
       </div>
     </div>
   </div>
