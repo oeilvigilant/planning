@@ -27,7 +27,7 @@ if ($version) {
         $stmtL = $db->prepare("
             SELECT SUM(min_normal) as n, SUM(min_nuit) as nu, SUM(min_dimanche) as d,
                    SUM(min_nuit_dimanche) as nd,
-                   SUM(min_ferie_normal) as fn, SUM(min_ferie_dimanche) as fd, SUM(min_ferie_nuit) as fnu
+                   SUM(min_ferie_normal + min_ferie_dimanche) as fn, SUM(min_ferie_nuit) as fnu
             FROM planning_lignes WHERE version_id=? AND agent_id=?
         ");
         $stmtL->execute([$version['id'], $ag['id']]);
@@ -39,7 +39,6 @@ if ($version) {
             'dimanche'      => minutesToHeures((int)$mins['d']),
             'nuit_dimanche' => minutesToHeures((int)$mins['nd']),
             'ferie_normal'  => minutesToHeures((int)$mins['fn']),
-            'ferie_dimanche'=> minutesToHeures((int)$mins['fd']),
             'ferie_nuit'    => minutesToHeures((int)$mins['fnu']),
         ];
 
@@ -66,7 +65,6 @@ $typeLabels = [
     'dimanche'      => 'Dimanche',
     'nuit_dimanche' => 'Nuit Dim.',
     'ferie_normal'  => 'Férié',
-    'ferie_dimanche'=> 'Fér. Dim.',
     'ferie_nuit'    => 'Nuit Fér.',
 ];
 $typeCols = [
@@ -75,7 +73,6 @@ $typeCols = [
     'dimanche'      => '#dc2626',
     'nuit_dimanche' => '#7c3aed',
     'ferie_normal'  => '#92400e',
-    'ferie_dimanche'=> '#be185d',
     'ferie_nuit'    => '#1d4ed8',
 ];
 

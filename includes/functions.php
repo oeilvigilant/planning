@@ -333,7 +333,7 @@ function calculerHeuresParType(string $date, string $hDebut, string $hFin): arra
         $minJour = $totalMin - $minNuit;
 
         if ($ferie && $dimanche) {
-            $result['ferie_dimanche'] += $minJour;
+            $result['ferie_normal']   += $minJour;   // Férié annule dimanche (IDCC 1351)
             $result['ferie_nuit']     += $minNuit;
         } elseif ($ferie) {
             $result['ferie_normal']   += $minJour;

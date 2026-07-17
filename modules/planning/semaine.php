@@ -76,11 +76,12 @@ $nextLundi = clone $lundi; $nextLundi->modify('+7 days');
 
 // Résumé par agent pour la semaine
 function totalSemaineAgent(array $planningData, int $agentId, array $jours): array {
-    $mins = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'ferie_normal'=>0,'ferie_dimanche'=>0,'ferie_nuit'=>0];
+    $mins = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'nuit_dimanche'=>0,'ferie_normal'=>0,'ferie_nuit'=>0];
     foreach ($jours as $j) {
         $l = $planningData[$agentId][$j['date']] ?? null;
         if ($l) {
             foreach ($mins as $k => $_) $mins[$k] += (int)$l['min_'.$k];
+            $mins['ferie_normal'] += (int)($l['min_ferie_dimanche'] ?? 0);
         }
     }
     return $mins;
@@ -224,7 +225,7 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
                 <?= ($semMins['nuit']+$semMins['ferie_nuit']) > 0 ? number_format(($semMins['nuit']+$semMins['ferie_nuit'])/60, 1).'h' : '—' ?>
             </td>
             <td style="text-align:center;font-size:0.82rem;color:#dc2626">
-                <?= ($semMins['dimanche']+$semMins['ferie_dimanche']) > 0 ? number_format(($semMins['dimanche']+$semMins['ferie_dimanche'])/60, 1).'h' : '—' ?>
+                <?= $semMins['dimanche'] > 0 ? number_format($semMins['dimanche']/60, 1).'h' : '—' ?>
             </td>
             <td style="text-align:center;font-weight:700;font-size:0.9rem"><?= number_format($semTotal/60, 1) ?>h</td>
         </tr>

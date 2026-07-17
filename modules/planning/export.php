@@ -215,12 +215,12 @@ if ($format === 'excel') {
             $headers[] = $nomsJs[date('N', strtotime($date))] . ' ' . $d;
         }
     }
-    $headers = array_merge($headers, ['Total h', 'Normal', 'Nuit', 'Dimanche', 'Férié', 'Fér.Dim', 'Nuit Fér.']);
+    $headers = array_merge($headers, ['Total h', 'Normal', 'Nuit', 'Dimanche', 'Nuit Dim.', 'Férié', 'Nuit Fér.']);
     fputcsv($f, $headers, ';');
 
     foreach ($agents as $ag) {
         $row    = [$ag['prenom'].' '.$ag['nom'], $ag['poste']??''];
-        $totMin = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'ferie_normal'=>0,'ferie_dimanche'=>0,'ferie_nuit'=>0];
+        $totMin = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'nuit_dimanche'=>0,'ferie_normal'=>0,'ferie_nuit'=>0];
 
         if ($type === 'week') {
             foreach ($dates as $dt) {
@@ -233,9 +233,10 @@ if ($format === 'excel') {
                     $dur  = round($minT/60).'h';
                     $code = detectShiftExport($hD, $hF, $shifts);
                     $row[] = ($code ? $code.' ' : '').formatHeureCourte($hD).' - '.formatHeureCourte($hF).' '.$dur;
-                    foreach (['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
+                    foreach (['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_nuit'] as $t) {
                         $totMin[$t] += (int)$ligne['min_'.$t];
                     }
+                    $totMin['ferie_normal'] += (int)($ligne['min_ferie_dimanche'] ?? 0);
                 } else {
                     $row[] = '';
                 }
@@ -251,9 +252,10 @@ if ($format === 'excel') {
                     $dur  = round($minT/60).'h';
                     $code = detectShiftExport($hD, $hF, $shifts);
                     $row[] = ($code ? $code.' ' : '').formatHeureCourte($hD).' - '.formatHeureCourte($hF).' '.$dur;
-                    foreach (['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
+                    foreach (['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_nuit'] as $t) {
                         $totMin[$t] += (int)$ligne['min_'.$t];
                     }
+                    $totMin['ferie_normal'] += (int)($ligne['min_ferie_dimanche'] ?? 0);
                 } else {
                     $row[] = '';
                 }

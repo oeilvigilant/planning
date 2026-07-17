@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
     }
 
     if ($action === 'save_taux') {
-        $types = ['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_dimanche','ferie_nuit'];
+        $types = ['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_nuit'];
         foreach ($types as $t) {
             $taux = (float)($_POST['taux_'.$t] ?? 0);
             $db->prepare("UPDATE taux_horaires SET taux=? WHERE type_heure=?")->execute([$taux,$t]);
@@ -531,8 +531,7 @@ try {
         'nuit'           => ['color'=>'#3b82f6', 'bg'=>'rgba(59,130,246,0.06)',  'icon'=>'fa-moon',            'desc'=>'Heures entre 21h et 6h (lundi au samedi)'],
         'dimanche'       => ['color'=>'#f97316', 'bg'=>'rgba(249,115,22,0.06)',  'icon'=>'fa-sun',             'desc'=>'Toute heure travaillée le dimanche (hors nuit)'],
         'nuit_dimanche'  => ['color'=>'#7c3aed', 'bg'=>'rgba(124,58,237,0.06)', 'icon'=>'fa-moon',            'desc'=>'Nuit d\'un dimanche — cumul des deux majorations'],
-        'ferie_normal'   => ['color'=>'#dc2626', 'bg'=>'rgba(220,38,38,0.05)',  'icon'=>'fa-calendar-xmark',  'desc'=>'Heure de jour d\'un jour férié (hors dimanche et nuit)'],
-        'ferie_dimanche' => ['color'=>'#dc2626', 'bg'=>'rgba(220,38,38,0.05)',  'icon'=>'fa-calendar-xmark',  'desc'=>'Jour férié tombant un dimanche — le férié annule la majoration dimanche'],
+        'ferie_normal'   => ['color'=>'#dc2626', 'bg'=>'rgba(220,38,38,0.05)',  'icon'=>'fa-calendar-xmark',  'desc'=>'Heure de jour d\'un jour férié (semaine ou dimanche) — le férié annule la majoration dimanche'],
         'ferie_nuit'     => ['color'=>'#7f1d1d', 'bg'=>'rgba(127,29,29,0.06)',  'icon'=>'fa-calendar-xmark',  'desc'=>'Heure de nuit d\'un jour férié — cumul obligatoire IDCC 1351 (+110%)'],
     ];
     ?>
@@ -1391,7 +1390,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-suggestion des taux : quand "heure normale" change, proposer les autres
     var baseField = document.getElementById('taux_normal');
     if (baseField) {
-        var coeffs = { nuit: 1.1, dimanche: 1.1, ferie_normal: 2, ferie_dimanche: 2, ferie_nuit: 2.1 };
+        var coeffs = { nuit: 1.1, dimanche: 1.1, ferie_normal: 2, ferie_nuit: 2.1 };
         baseField.addEventListener('input', function() {
             var base = parseFloat(this.value) || 0;
             Object.entries(coeffs).forEach(function(e) {
@@ -1421,7 +1420,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (f_dim)  f_dim.addEventListener('input',  function() { recalcNuitDimanche(); updateAllPct(); });
 
     // Mise à jour en temps réel des badges pourcentage
-    var tauxTypes = ['nuit','dimanche','nuit_dimanche','ferie_normal','ferie_dimanche','ferie_nuit'];
+    var tauxTypes = ['nuit','dimanche','nuit_dimanche','ferie_normal','ferie_nuit'];
     tauxTypes.forEach(function(t) {
         var f = document.getElementById('taux_' + t);
         if (f) f.addEventListener('input', updateAllPct);

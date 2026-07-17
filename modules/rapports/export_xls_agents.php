@@ -27,8 +27,8 @@ $types = [
     'normal'         => 'Normal',
     'nuit'           => 'Nuit',
     'dimanche'       => 'Dimanche',
+    'nuit_dimanche'  => 'Nuit Dim.',
     'ferie_normal'   => 'Férié',
-    'ferie_dimanche' => 'Fér.Dim.',
     'ferie_nuit'     => 'Nuit Fér.',
 ];
 
@@ -43,8 +43,7 @@ $stmt = $db->prepare("
         SUM(pl.min_nuit)            AS min_nuit,
         SUM(pl.min_dimanche)        AS min_dimanche,
         SUM(pl.min_nuit_dimanche)   AS min_nuit_dimanche,
-        SUM(pl.min_ferie_normal)    AS min_ferie_normal,
-        SUM(pl.min_ferie_dimanche)  AS min_ferie_dimanche,
+        SUM(pl.min_ferie_normal + pl.min_ferie_dimanche) AS min_ferie_normal,
         SUM(pl.min_ferie_nuit)      AS min_ferie_nuit
     FROM agents a
     JOIN planning_lignes pl   ON pl.agent_id  = a.id
@@ -80,9 +79,10 @@ foreach ($stmtLines->fetchAll(PDO::FETCH_ASSOC) as $l) {
         $detailParAgent[$aid] = ['nom'=>$l['nom'],'prenom'=>$l['prenom'],'matricule'=>$l['matricule']??'','lignes'=>[]];
     }
     $montantJ = 0;
-    foreach (['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
+    foreach (['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_nuit'] as $t) {
         $montantJ += round(((int)$l["min_$t"] / 60) * ($taux[$t] ?? 0), 2);
     }
+    $montantJ += round(((int)$l['min_ferie_dimanche'] / 60) * ($taux['ferie_normal'] ?? 0), 2);
     $detailParAgent[$aid]['lignes'][] = array_merge($l, ['montant' => $montantJ]);
 }
 
@@ -541,8 +541,8 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
         <?= strCell('Dimanche (€)', 's_hdr_dim') ?>
         <?= strCell('Férié (h)', 's_hdr_ferie') ?>
         <?= strCell('Férié (€)', 's_hdr_ferie') ?>
-        <?= strCell('Fér.Dim. (h)', 's_hdr_ferie') ?>
-        <?= strCell('Fér.Dim. (€)', 's_hdr_ferie') ?>
+        <?= strCell('Nuit Dim. (h)', 's_hdr_nuit') ?>
+        <?= strCell('Nuit Dim. (€)', 's_hdr_nuit') ?>
         <?= strCell('Nuit Fér. (h)', 's_hdr_ferie') ?>
         <?= strCell('Nuit Fér. (€)', 's_hdr_ferie') ?>
         <?= strCell('TOTAL (h)', 's_hdr_total') ?>
@@ -574,10 +574,10 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
         <?= formulaCell('=RC[-1]*Parametres!R5C2',  's_eur', $r['types']['nuit']['m']) ?>
         <?= numCell($r['types']['dimanche']['h'],       's_h') ?>
         <?= formulaCell('=RC[-1]*Parametres!R6C2',  's_eur', $r['types']['dimanche']['m']) ?>
+        <?= numCell($r['types']['nuit_dimanche']['h'],  's_h') ?>
+        <?= formulaCell('=RC[-1]*Parametres!R7C2',  's_eur', $r['types']['nuit_dimanche']['m']) ?>
         <?= numCell($r['types']['ferie_normal']['h'],   's_h') ?>
-        <?= formulaCell('=RC[-1]*Parametres!R7C2',  's_eur', $r['types']['ferie_normal']['m']) ?>
-        <?= numCell($r['types']['ferie_dimanche']['h'], 's_h') ?>
-        <?= formulaCell('=RC[-1]*Parametres!R8C2',  's_eur', $r['types']['ferie_dimanche']['m']) ?>
+        <?= formulaCell('=RC[-1]*Parametres!R8C2',  's_eur', $r['types']['ferie_normal']['m']) ?>
         <?= numCell($r['types']['ferie_nuit']['h'],     's_h') ?>
         <?= formulaCell('=RC[-1]*Parametres!R9C2',  's_eur', $r['types']['ferie_nuit']['m']) ?>
         <?php /* col 15 : total h = somme des 6 cols h */ ?>
@@ -620,8 +620,8 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
         <?= $fSum(8,  's_foot_eur', $totaux['dimanche']['m']) ?>
         <?= $fSum(9,  's_foot_h',   $totaux['ferie_normal']['h']) ?>
         <?= $fSum(10, 's_foot_eur', $totaux['ferie_normal']['m']) ?>
-        <?= $fSum(11, 's_foot_h',   $totaux['ferie_dimanche']['h']) ?>
-        <?= $fSum(12, 's_foot_eur', $totaux['ferie_dimanche']['m']) ?>
+        <?= $fSum(11, 's_foot_h',   $totaux['nuit_dimanche']['h']) ?>
+        <?= $fSum(12, 's_foot_eur', $totaux['nuit_dimanche']['m']) ?>
         <?= $fSum(13, 's_foot_h',   $totaux['ferie_nuit']['h']) ?>
         <?= $fSum(14, 's_foot_eur', $totaux['ferie_nuit']['m']) ?>
         <?= $fSum(15, 's_foot_h',   $totaux['total_h']) ?>
@@ -680,8 +680,8 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
           ['Normal',     $taux['normal']         ?? 0],
           ['Nuit',       $taux['nuit']           ?? 0],
           ['Dimanche',   $taux['dimanche']       ?? 0],
+          ['Nuit Dim.',  $taux['nuit_dimanche']  ?? 0],
           ['Férié',      $taux['ferie_normal']   ?? 0],
-          ['Fér.Dim.',   $taux['ferie_dimanche'] ?? 0],
           ['Nuit Fér.',  $taux['ferie_nuit']     ?? 0],
       ];
       $tauxStyles = [
@@ -906,7 +906,7 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
         <?= strCell('Nuit (h)',     's_hdr_nuit') ?>
         <?= strCell('Dim. (h)',     's_hdr_dim') ?>
         <?= strCell('Fér. (h)',     's_hdr_ferie') ?>
-        <?= strCell('Fér.D. (h)',   's_hdr_ferie') ?>
+        <?= strCell('N.Dim. (h)',   's_hdr_nuit') ?>
         <?= strCell('N.Fér. (h)',   's_hdr_ferie') ?>
         <?= strCell('Total (h)',    's_hdr_total') ?>
         <?= strCell('Montant (€)',  's_hdr_total') ?>
@@ -947,8 +947,8 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
             <?= numCell(minutesToHeures((int)$l['min_normal']),         $l['min_normal']         > 0 ? 's_h' : 's_zero') ?>
             <?= numCell(minutesToHeures((int)$l['min_nuit']),           $l['min_nuit']           > 0 ? 's_h' : 's_zero') ?>
             <?= numCell(minutesToHeures((int)$l['min_dimanche']),       $l['min_dimanche']       > 0 ? 's_h' : 's_zero') ?>
-            <?= numCell(minutesToHeures((int)$l['min_ferie_normal']),   $l['min_ferie_normal']   > 0 ? 's_h' : 's_zero') ?>
-            <?= numCell(minutesToHeures((int)$l['min_ferie_dimanche']), $l['min_ferie_dimanche'] > 0 ? 's_h' : 's_zero') ?>
+            <?= numCell(minutesToHeures((int)$l['min_ferie_normal'] + (int)$l['min_ferie_dimanche']), ($l['min_ferie_normal']+$l['min_ferie_dimanche']) > 0 ? 's_h' : 's_zero') ?>
+            <?= numCell(minutesToHeures((int)$l['min_nuit_dimanche']), $l['min_nuit_dimanche']   > 0 ? 's_h' : 's_zero') ?>
             <?= numCell(minutesToHeures((int)$l['min_ferie_nuit']),     $l['min_ferie_nuit']     > 0 ? 's_h' : 's_zero') ?>
             <?= numCell(minutesToHeures($totMin),  's_total_h') ?>
             <?= numCell($l['montant'],             's_total_eur') ?>

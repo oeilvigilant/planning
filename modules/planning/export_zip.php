@@ -319,7 +319,7 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
 
     // Ligne récapitulatif heures par type
     $lignesAg = $planningData[$ag['id']] ?? [];
-    $recapMins = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'ferie_normal'=>0,'ferie_dimanche'=>0,'ferie_nuit'=>0];
+    $recapMins = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'nuit_dimanche'=>0,'ferie_normal'=>0,'ferie_nuit'=>0];
     foreach ($lignesAg as $dateK => $l) {
         if ($type === 'week') {
             $inRange = false;
@@ -330,9 +330,10 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
             if ($j < $jourDebut || $j > $jourFin) continue;
         }
         foreach ($recapMins as $k => $_) $recapMins[$k] += (int)$l['min_'.$k];
+        $recapMins['ferie_normal'] += (int)($l['min_ferie_dimanche'] ?? 0);
     }
     $recapParts = [];
-    $labMap = ['normal'=>'Normal','nuit'=>'Nuit','dimanche'=>'Dim.','ferie_normal'=>'Fér.','ferie_dimanche'=>'Fér.Dim','ferie_nuit'=>'Nuit Fér.'];
+    $labMap = ['normal'=>'Normal','nuit'=>'Nuit','dimanche'=>'Dim.','nuit_dimanche'=>'Nuit Dim.','ferie_normal'=>'Fér.','ferie_nuit'=>'Nuit Fér.'];
     foreach ($recapMins as $k => $m) {
         if ($m > 0) $recapParts[] = $labMap[$k] . ' : ' . number_format($m/60,1) . 'h';
     }

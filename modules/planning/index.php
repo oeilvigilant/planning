@@ -1357,8 +1357,8 @@ function updateCalcPreview() {
     fetch('calc_preview.php?date='+encodeURIComponent(date)+'&debut='+encodeURIComponent(debut)+'&fin='+encodeURIComponent(fin))
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            var labels = {normal:'Normal',nuit:'Nuit',dimanche:'Dimanche',ferie_normal:'Férié',ferie_dimanche:'Fér.Dim',ferie_nuit:'Nuit Fér.'};
-            var colors = {normal:'#374151',nuit:'#4f46e5',dimanche:'#dc2626',ferie_normal:'#92400e',ferie_dimanche:'#be185d',ferie_nuit:'#1d4ed8'};
+            var labels = {normal:'Normal',nuit:'Nuit',dimanche:'Dimanche',nuit_dimanche:'Nuit Dim.',ferie_normal:'Férié',ferie_nuit:'Nuit Fér.'};
+            var colors = {normal:'#374151',nuit:'#4f46e5',dimanche:'#dc2626',nuit_dimanche:'#7c3aed',ferie_normal:'#92400e',ferie_nuit:'#1d4ed8'};
             var html = '', total = 0;
             for (var k in data) {
                 if (data[k] > 0) {

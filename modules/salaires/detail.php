@@ -27,9 +27,10 @@ $stmtL = $db->prepare("SELECT * FROM planning_lignes WHERE version_id=? AND agen
 $stmtL->execute([$versionId, $agentId]);
 $lignes = $stmtL->fetchAll();
 
-$totaux = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'nuit_dimanche'=>0,'ferie_normal'=>0,'ferie_dimanche'=>0,'ferie_nuit'=>0];
+$totaux = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'nuit_dimanche'=>0,'ferie_normal'=>0,'ferie_nuit'=>0];
 foreach ($lignes as $l) {
     foreach ($totaux as $k => $_) $totaux[$k] += (int)$l['min_'.$k];
+    $totaux['ferie_normal'] += (int)($l['min_ferie_dimanche'] ?? 0); // données historiques
 }
 $totalMin     = array_sum($totaux);
 $salaireTotal = 0;
@@ -47,7 +48,6 @@ $typeLabels = [
     'dimanche'      => ['Dimanche',    '#dc2626'],
     'nuit_dimanche' => ['Nuit Dim.',   '#7c3aed'],
     'ferie_normal'  => ['Férié',       '#92400e'],
-    'ferie_dimanche'=> ['Férié Dim.',  '#be185d'],
     'ferie_nuit'    => ['Nuit Férié',  '#1d4ed8'],
 ];
 $nomsJours = ['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
@@ -107,7 +107,7 @@ if (($_GET['export'] ?? '') === 'pdf') {
             <td><?= substr($l['heure_debut'],0,5) ?>→<?= substr($l['heure_fin'],0,5) ?><?= $l['depasse_minuit']?'+1':'' ?></td>
             <td><?= $l['min_normal']   >0 ? number_format($l['min_normal']  /60,2).'h' : '—' ?></td>
             <td><?= ($l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit'])>0 ? number_format(($l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit'])/60,2).'h' : '—' ?></td>
-            <td><?= ($l['min_dimanche']+$l['min_ferie_dimanche'])>0 ? number_format(($l['min_dimanche']+$l['min_ferie_dimanche'])/60,2).'h' : '—' ?></td>
+            <td><?= $l['min_dimanche']>0 ? number_format($l['min_dimanche']/60,2).'h' : '—' ?></td>
             <td><?= ($l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'])>0?'Oui':'—' ?></td>
             <td><strong><?= number_format($totL/60,2) ?>h</strong></td>
         </tr>
@@ -247,7 +247,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <?php $mn=$l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit']; echo $mn>0?number_format($mn/60,2).'h':'<span style="color:#e5e7eb">—</span>'; ?>
                     </td>
                     <td class="text-center" style="font-size:0.8rem;color:#dc2626">
-                        <?php $md=$l['min_dimanche']+$l['min_ferie_dimanche']; echo $md>0?number_format($md/60,2).'h':'<span style="color:#e5e7eb">—</span>'; ?>
+                        <?php $md=$l['min_dimanche']; echo $md>0?number_format($md/60,2).'h':'<span style="color:#e5e7eb">—</span>'; ?>
                     </td>
                     <td class="text-center" style="font-size:0.8rem;color:#92400e">
                         <?php $mf=$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit']; echo $mf>0?number_format($mf/60,2).'h':'<span style="color:#e5e7eb">—</span>'; ?>
