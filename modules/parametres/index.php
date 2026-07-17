@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
     }
 
     if ($action === 'save_taux') {
-        $types = ['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'];
+        $types = ['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_dimanche','ferie_nuit'];
         foreach ($types as $t) {
             $taux = (float)($_POST['taux_'.$t] ?? 0);
             $db->prepare("UPDATE taux_horaires SET taux=? WHERE type_heure=?")->execute([$taux,$t]);

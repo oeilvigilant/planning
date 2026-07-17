@@ -32,8 +32,8 @@ function dayStat(array $allAgents, array $planningData, string $date): array {
         $l = $planningData[$ag['id']][$date] ?? null;
         if ($l) {
             $tot++;
-            $h += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
-            $isNuit = ($l['min_nuit']+$l['min_ferie_nuit']) > 0;
+            $h += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+            $isNuit = ($l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit']) > 0;
             if (($ag['sexe'] ?? 'M') === 'F') { if ($isNuit) $fn++; else $fj++; }
             else                               { if ($isNuit) $hn++; else $hj++; }
         }
@@ -83,19 +83,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($exist) {
             $db->prepare("UPDATE planning_lignes
                 SET heure_debut=?,heure_fin=?,depasse_minuit=?,note=?,
-                    min_normal=?,min_nuit=?,min_dimanche=?,min_ferie_normal=?,min_ferie_dimanche=?,min_ferie_nuit=?,calcul_ok=1
+                    min_normal=?,min_nuit=?,min_dimanche=?,min_nuit_dimanche=?,min_ferie_normal=?,min_ferie_dimanche=?,min_ferie_nuit=?,calcul_ok=1
                 WHERE id=?")
                ->execute([$hDebut,$hFin,$depasse,$note,
-                          $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],
+                          $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                           $minutes['ferie_normal'],$minutes['ferie_dimanche'],$minutes['ferie_nuit'],
                           $exist['id']]);
         } else {
             $db->prepare("INSERT INTO planning_lignes
                 (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
-                 min_normal,min_nuit,min_dimanche,min_ferie_normal,min_ferie_dimanche,min_ferie_nuit,calcul_ok)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
+                 min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_dimanche,min_ferie_nuit,calcul_ok)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
                ->execute([$versionId,$agentId,$date,$hDebut,$hFin,$depasse,$note,
-                          $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],
+                          $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                           $minutes['ferie_normal'],$minutes['ferie_dimanche'],$minutes['ferie_nuit']]);
         }
         echo json_encode(['ok' => true, 'minutes' => $minutes]);
@@ -134,11 +134,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             foreach ($oldL->fetchAll() as $ol) {
                 $db->prepare("INSERT INTO planning_lignes
                     (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
-                     min_normal,min_nuit,min_dimanche,min_ferie_normal,min_ferie_dimanche,min_ferie_nuit,calcul_ok)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                     min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_dimanche,min_ferie_nuit,calcul_ok)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                    ->execute([$newVId,$ol['agent_id'],$ol['date_travail'],$ol['heure_debut'],$ol['heure_fin'],
                               $ol['depasse_minuit'],$ol['note'],
-                              $ol['min_normal'],$ol['min_nuit'],$ol['min_dimanche'],
+                              $ol['min_normal'],$ol['min_nuit'],$ol['min_dimanche'],$ol['min_nuit_dimanche'],
                               $ol['min_ferie_normal'],$ol['min_ferie_dimanche'],$ol['min_ferie_nuit'],$ol['calcul_ok']]);
             }
         }
@@ -246,19 +246,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $ex->execute([$vId, $agentId, $dateStr]);
                 if ($ex->fetch()) {
                     $db->prepare("UPDATE planning_lignes SET heure_debut=?,heure_fin=?,depasse_minuit=?,note=?,
-                        min_normal=?,min_nuit=?,min_dimanche=?,min_ferie_normal=?,min_ferie_dimanche=?,min_ferie_nuit=?,calcul_ok=1
+                        min_normal=?,min_nuit=?,min_dimanche=?,min_nuit_dimanche=?,min_ferie_normal=?,min_ferie_dimanche=?,min_ferie_nuit=?,calcul_ok=1
                         WHERE version_id=? AND agent_id=? AND date_travail=?")
                        ->execute([$hDebut,$hFin,$depasse,$note,
-                                  $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],
+                                  $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                                   $minutes['ferie_normal'],$minutes['ferie_dimanche'],$minutes['ferie_nuit'],
                                   $vId,$agentId,$dateStr]);
                 } else {
                     $db->prepare("INSERT INTO planning_lignes
                         (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
-                         min_normal,min_nuit,min_dimanche,min_ferie_normal,min_ferie_dimanche,min_ferie_nuit,calcul_ok)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
+                         min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_dimanche,min_ferie_nuit,calcul_ok)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
                        ->execute([$vId,$agentId,$dateStr,$hDebut,$hFin,$depasse,$note,
-                                  $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],
+                                  $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                                   $minutes['ferie_normal'],$minutes['ferie_dimanche'],$minutes['ferie_nuit']]);
                 }
                 $saved++;
@@ -342,6 +342,22 @@ foreach ($db->query("SELECT id,mois,annee FROM planning_versions WHERE is_curren
 $nomsJours  = ['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
 $canEdit    = canDo('planning','create');
 $shiftsJson = json_encode($shifts);
+
+// ── Recalcul nuit_dimanche pour les lignes existantes (migration une seule fois) ───
+try {
+    $needsRecalc = (int)$db->query("
+        SELECT COUNT(*) FROM planning_lignes
+        WHERE DAYOFWEEK(date_travail) = 1 AND min_nuit > 0 AND min_nuit_dimanche = 0
+    ")->fetchColumn();
+    if ($needsRecalc > 0) {
+        $allLignes = $db->query("SELECT id, date_travail, heure_debut, heure_fin FROM planning_lignes")->fetchAll();
+        $upd = $db->prepare("UPDATE planning_lignes SET min_normal=?,min_nuit=?,min_dimanche=?,min_nuit_dimanche=?,min_ferie_normal=?,min_ferie_dimanche=?,min_ferie_nuit=? WHERE id=?");
+        foreach ($allLignes as $lig) {
+            $m = calculerHeuresParType($lig['date_travail'], substr($lig['heure_debut'],0,5), substr($lig['heure_fin'],0,5));
+            $upd->execute([$m['normal'],$m['nuit'],$m['dimanche'],$m['nuit_dimanche'],$m['ferie_normal'],$m['ferie_dimanche'],$m['ferie_nuit'],$lig['id']]);
+        }
+    }
+} catch (Exception $e) {}
 
 // ── Vue hebdomadaire ──────────────────────────────────────────────────────────
 if ($vue === 'semaine') {
@@ -496,7 +512,7 @@ if ($vue === 'semaine') {
                 $ds = $dt->format('Y-m-d');
                 if (isset($planningData[$agent['id']][$ds])) {
                     $l = $planningData[$agent['id']][$ds];
-                    $totalMin += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+                    $totalMin += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
                 }
             }
             $curSexeSem = $agent['sexe'] ?? 'M';
@@ -522,7 +538,7 @@ if ($vue === 'semaine') {
                   if ($shift) {
                       $bgCell = $shift['bg'];
                   } else {
-                      $hasNuit = ($ligne['min_nuit']+$ligne['min_ferie_nuit']) > 0;
+                      $hasNuit = ($ligne['min_nuit']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_nuit']) > 0;
                       $bgCell  = $hasNuit ? 'rgba(79,70,229,0.08)' : ($isFer ? 'rgba(234,179,8,0.12)' : ($isDim ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.06)'));
                   }
               } else {
@@ -539,7 +555,7 @@ if ($vue === 'semaine') {
               <?php
                 $hDeb  = substr($ligne['heure_debut'], 0, 5);
                 $hFin2 = substr($ligne['heure_fin'],   0, 5);
-                $totH  = ($ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'])/60;
+                $totH  = ($ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'])/60;
                 $shift = detectShift($hDeb, $hFin2, $shifts);
               ?>
               <?php if ($shift): ?>
@@ -726,7 +742,7 @@ if ($vue === 'semaine') {
                 $date = sprintf('%04d-%02d-%02d', $annee, $mois, $d);
                 if (isset($planningData[$agent['id']][$date])) {
                     $l = $planningData[$agent['id']][$date];
-                    $totalMin += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+                    $totalMin += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
                 }
             }
             $curSexeMois = $agent['sexe'] ?? 'M';
@@ -750,7 +766,7 @@ if ($vue === 'semaine') {
                   if ($shift) {
                       $bgCell = $shift['bg'];
                   } else {
-                      $hasNuit = ($ligne['min_nuit']+$ligne['min_ferie_nuit']) > 0;
+                      $hasNuit = ($ligne['min_nuit']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_nuit']) > 0;
                       $bgCell  = $hasNuit ? 'rgba(79,70,229,0.1)' : ($isFer ? 'rgba(234,179,8,0.12)' : ($isDim ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)'));
                   }
               } else {
@@ -767,7 +783,7 @@ if ($vue === 'semaine') {
               <?php
                 $hDeb  = substr($ligne['heure_debut'], 0, 5);
                 $hFin2 = substr($ligne['heure_fin'],   0, 5);
-                $totH  = ($ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'])/60;
+                $totH  = ($ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'])/60;
                 $shift = detectShift($hDeb, $hFin2, $shifts);
               ?>
               <?php if ($shift): ?>
@@ -775,7 +791,7 @@ if ($vue === 'semaine') {
               <div style="font-size:0.52rem;color:<?= $shift['color'] ?>;opacity:0.85;font-weight:600;line-height:1.2"><?= formatHeureCourte($hDeb) ?> - <?= formatHeureCourte($hFin2) ?></div>
               <div style="font-size:0.52rem;color:#6b7280;opacity:0.85"><?= number_format($totH,0) ?>h</div>
               <?php else: ?>
-              <?php $hasN = ($ligne['min_nuit']+$ligne['min_ferie_nuit']) > 0; ?>
+              <?php $hasN = ($ligne['min_nuit']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_nuit']) > 0; ?>
               <div style="font-size:0.6rem;font-weight:700;color:var(--ov-navy);line-height:1.2"><?= formatHeureCourte($hDeb) ?> - <?= formatHeureCourte($hFin2) ?></div>
               <div style="font-size:0.58rem;color:#16a34a;font-weight:600"><?= number_format($totH,1) ?>h<?= $hasN?'<i class="fa fa-moon" style="font-size:0.45rem;margin-left:1px;color:#4f46e5"></i>':'' ?></div>
               <?php endif; ?>

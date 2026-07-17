@@ -25,6 +25,7 @@ $resultats = [];
 foreach ($agents as $ag) {
     $stmtL = $db->prepare("
         SELECT SUM(min_normal) n, SUM(min_nuit) nu, SUM(min_dimanche) d,
+               SUM(min_nuit_dimanche) nd,
                SUM(min_ferie_normal) fn, SUM(min_ferie_dimanche) fd, SUM(min_ferie_nuit) fnu
         FROM planning_lignes WHERE version_id=? AND agent_id=?
     ");
@@ -34,6 +35,7 @@ foreach ($agents as $ag) {
         'normal'        => minutesToHeures((int)$mins['n']),
         'nuit'          => minutesToHeures((int)$mins['nu']),
         'dimanche'      => minutesToHeures((int)$mins['d']),
+        'nuit_dimanche' => minutesToHeures((int)$mins['nd']),
         'ferie_normal'  => minutesToHeures((int)$mins['fn']),
         'ferie_dimanche'=> minutesToHeures((int)$mins['fd']),
         'ferie_nuit'    => minutesToHeures((int)$mins['fnu']),
@@ -52,20 +54,21 @@ if ($format === 'csv') {
     header('Content-Disposition: attachment; filename="salaires_' . sprintf('%02d', $mois) . '_' . $annee . '_v' . $version['version'] . '.csv"');
     $f = fopen('php://output', 'w');
     fprintf($f, chr(0xEF).chr(0xBB).chr(0xBF));
-    fputcsv($f, ['Agent','Matricule','Normal (h)','Nuit (h)','Dimanche (h)','Férié (h)','Fér.Dim. (h)','Nuit Fér. (h)','Total (h)','Salaire (€)'], ';');
+    fputcsv($f, ['Agent','Matricule','Normal (h)','Nuit (h)','Dimanche (h)','Nuit Dim. (h)','Férié (h)','Fér.Dim. (h)','Nuit Fér. (h)','Total (h)','Salaire (€)'], ';');
     foreach ($resultats as $r) {
         $ag = $r['agent'];
         fputcsv($f, [
             $ag['prenom'] . ' ' . $ag['nom'],
             $ag['matricule'] ?? '',
-            number_format($r['heures']['normal'],        2, '.', ''),
-            number_format($r['heures']['nuit'],          2, '.', ''),
-            number_format($r['heures']['dimanche'],      2, '.', ''),
-            number_format($r['heures']['ferie_normal'],  2, '.', ''),
-            number_format($r['heures']['ferie_dimanche'],2, '.', ''),
-            number_format($r['heures']['ferie_nuit'],    2, '.', ''),
-            number_format($r['total'],                   2, '.', ''),
-            number_format($r['salaire'],                 2, '.', ''),
+            number_format($r['heures']['normal'],         2, '.', ''),
+            number_format($r['heures']['nuit'],           2, '.', ''),
+            number_format($r['heures']['dimanche'],       2, '.', ''),
+            number_format($r['heures']['nuit_dimanche'],  2, '.', ''),
+            number_format($r['heures']['ferie_normal'],   2, '.', ''),
+            number_format($r['heures']['ferie_dimanche'], 2, '.', ''),
+            number_format($r['heures']['ferie_nuit'],     2, '.', ''),
+            number_format($r['total'],                    2, '.', ''),
+            number_format($r['salaire'],                  2, '.', ''),
         ], ';');
     }
     fclose($f);
@@ -81,7 +84,7 @@ if (file_exists($logoFile)) {
     $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
 }
 
-$typeLabels = ['normal'=>'Normal','nuit'=>'Nuit','dimanche'=>'Dimanche','ferie_normal'=>'Férié','ferie_dimanche'=>'Fér.Dim.','ferie_nuit'=>'Nuit Fér.'];
+$typeLabels = ['normal'=>'Normal','nuit'=>'Nuit','dimanche'=>'Dimanche','nuit_dimanche'=>'Nuit Dim.','ferie_normal'=>'Férié','ferie_dimanche'=>'Fér.Dim.','ferie_nuit'=>'Nuit Fér.'];
 $totaux = array_fill_keys(array_keys($typeLabels), 0);
 $totaux['total'] = 0; $totaux['salaire'] = 0;
 foreach ($resultats as $r) {

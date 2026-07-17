@@ -39,12 +39,13 @@ $stmt = $db->prepare("
         a.id, a.nom, a.prenom, a.matricule,
         a.total_heures_contrat,
         a.temps_travail_hebdo,
-        SUM(pl.min_normal)         AS min_normal,
-        SUM(pl.min_nuit)           AS min_nuit,
-        SUM(pl.min_dimanche)       AS min_dimanche,
-        SUM(pl.min_ferie_normal)   AS min_ferie_normal,
-        SUM(pl.min_ferie_dimanche) AS min_ferie_dimanche,
-        SUM(pl.min_ferie_nuit)     AS min_ferie_nuit
+        SUM(pl.min_normal)          AS min_normal,
+        SUM(pl.min_nuit)            AS min_nuit,
+        SUM(pl.min_dimanche)        AS min_dimanche,
+        SUM(pl.min_nuit_dimanche)   AS min_nuit_dimanche,
+        SUM(pl.min_ferie_normal)    AS min_ferie_normal,
+        SUM(pl.min_ferie_dimanche)  AS min_ferie_dimanche,
+        SUM(pl.min_ferie_nuit)      AS min_ferie_nuit
     FROM agents a
     JOIN planning_lignes pl   ON pl.agent_id  = a.id
     JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
@@ -61,7 +62,7 @@ $stmtLines = $db->prepare("
     SELECT
         a.id AS agent_id, a.nom, a.prenom, a.matricule,
         pl.date_travail, pl.heure_debut, pl.heure_fin, pl.depasse_minuit, pl.note,
-        pl.min_normal, pl.min_nuit, pl.min_dimanche,
+        pl.min_normal, pl.min_nuit, pl.min_dimanche, pl.min_nuit_dimanche,
         pl.min_ferie_normal, pl.min_ferie_dimanche, pl.min_ferie_nuit
     FROM agents a
     JOIN planning_lignes pl ON pl.agent_id = a.id
@@ -79,7 +80,7 @@ foreach ($stmtLines->fetchAll(PDO::FETCH_ASSOC) as $l) {
         $detailParAgent[$aid] = ['nom'=>$l['nom'],'prenom'=>$l['prenom'],'matricule'=>$l['matricule']??'','lignes'=>[]];
     }
     $montantJ = 0;
-    foreach (['normal','nuit','dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
+    foreach (['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_dimanche','ferie_nuit'] as $t) {
         $montantJ += round(((int)$l["min_$t"] / 60) * ($taux[$t] ?? 0), 2);
     }
     $detailParAgent[$aid]['lignes'][] = array_merge($l, ['montant' => $montantJ]);
@@ -926,7 +927,7 @@ echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
               $jourSem = (int)date('N', $dt);
               $isFer   = in_array($l['date_travail'], $feriesDetail);
               $isDim   = $jourSem === 7;
-              $totMin  = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+              $totMin  = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
               $subTotalMin += $totMin;
               $subTotalMnt += $l['montant'];
 

@@ -50,8 +50,8 @@ function dayStatM(array $allAgents, array $planningData, string $date): array {
         $l = $planningData[$ag['id']][$date] ?? null;
         if ($l) {
             $tot++;
-            $h += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
-            $isNuit = ($l['min_nuit']+$l['min_ferie_nuit']) > 0;
+            $h += $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+            $isNuit = ($l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit']) > 0;
             if (($ag['sexe'] ?? 'M') === 'F') { if ($isNuit) $fn++; else $fj++; }
             else                               { if ($isNuit) $hn++; else $hj++; }
         }
@@ -289,7 +289,7 @@ require_once __DIR__ . '/../../includes/header.php';
           if ($ligne):
             $hDeb    = substr($ligne['heure_debut'],0,5);
             $hFin    = substr($ligne['heure_fin'],0,5);
-            $minT    = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+            $minT    = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
             $totalMin += $minT;
             $shiftInfo = detectShiftM($hDeb, $hFin, $shifts);
             $cellBg  = $shiftInfo ? $shiftInfo['bg'] : ($bgCell ?: 'rgba(0,0,0,0.02)');

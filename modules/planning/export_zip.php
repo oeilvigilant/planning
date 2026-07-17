@@ -248,10 +248,10 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
             if ($ligne) {
                 $hDeb = substr($ligne['heure_debut'],0,5);
                 $hFin = substr($ligne['heure_fin'],0,5);
-                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$dateStr] += $minT;
-                $isNuitCell = $ligne['min_nuit']>0 || $ligne['min_ferie_nuit']>0;
+                $isNuitCell = $ligne['min_nuit']>0 || $ligne['min_nuit_dimanche']>0 || $ligne['min_ferie_nuit']>0;
                 $code    = detectShift($hDeb, $hFin, $shifts);
                 $color   = $code ? $shifts[$code]['color'] : '#374151';
                 $dur     = $showHours ? round($minT/60).'h' : '';
@@ -282,10 +282,10 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
             if ($ligne) {
                 $hDeb = substr($ligne['heure_debut'],0,5);
                 $hFin = substr($ligne['heure_fin'],0,5);
-                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$date] += $minT;
-                $isNuitCell = $ligne['min_nuit']>0 || $ligne['min_ferie_nuit']>0;
+                $isNuitCell = $ligne['min_nuit']>0 || $ligne['min_nuit_dimanche']>0 || $ligne['min_ferie_nuit']>0;
                 $code    = detectShift($hDeb, $hFin, $shifts);
                 $color   = $code ? $shifts[$code]['color'] : '#374151';
                 $dur     = $showHours ? round($minT/60).'h' : '';

@@ -295,6 +295,7 @@ function calculerHeuresParType(string $date, string $hDebut, string $hFin): arra
         'normal'        => 0,
         'nuit'          => 0,
         'dimanche'      => 0,
+        'nuit_dimanche' => 0,
         'ferie_normal'  => 0,
         'ferie_dimanche'=> 0,
         'ferie_nuit'    => 0,
@@ -339,7 +340,7 @@ function calculerHeuresParType(string $date, string $hDebut, string $hFin): arra
             $result['ferie_nuit']     += $minNuit;
         } elseif ($dimanche) {
             $result['dimanche']       += $minJour;
-            $result['nuit']           += $minNuit;
+            $result['nuit_dimanche']  += $minNuit;
         } else {
             $result['normal']         += $minJour;
             $result['nuit']           += $minNuit;

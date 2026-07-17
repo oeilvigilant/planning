@@ -229,7 +229,7 @@ if ($format === 'excel') {
                 if ($ligne) {
                     $hD = substr($ligne['heure_debut'],0,5);
                     $hF = substr($ligne['heure_fin'],0,5);
-                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                     $dur  = round($minT/60).'h';
                     $code = detectShiftExport($hD, $hF, $shifts);
                     $row[] = ($code ? $code.' ' : '').formatHeureCourte($hD).' - '.formatHeureCourte($hF).' '.$dur;
@@ -247,7 +247,7 @@ if ($format === 'excel') {
                 if ($ligne) {
                     $hD = substr($ligne['heure_debut'],0,5);
                     $hF = substr($ligne['heure_fin'],0,5);
-                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                     $dur  = round($minT/60).'h';
                     $code = detectShiftExport($hD, $hF, $shifts);
                     $row[] = ($code ? $code.' ' : '').formatHeureCourte($hD).' - '.formatHeureCourte($hF).' '.$dur;
@@ -358,10 +358,10 @@ foreach ($agents as $ag) {
             if ($ligne) {
                 $hDeb = substr($ligne['heure_debut'],0,5);
                 $hFin = substr($ligne['heure_fin'],0,5);
-                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$dateStr] += $minT;
-                $isNuitCell = $ligne['min_nuit']>0||$ligne['min_ferie_nuit']>0;
+                $isNuitCell = $ligne['min_nuit']>0||$ligne['min_nuit_dimanche']>0||$ligne['min_ferie_nuit']>0;
                 if ($curSexeExp==='F') { if ($isNuitCell) $covJour[$dateStr]['fn']++; else $covJour[$dateStr]['fj']++; }
                 else                   { if ($isNuitCell) $covJour[$dateStr]['hn']++; else $covJour[$dateStr]['hj']++; }
                 $code     = detectShiftExport($hDeb, $hFin, $shifts);
@@ -403,10 +403,10 @@ foreach ($agents as $ag) {
             if ($ligne) {
                 $hDeb     = substr($ligne['heure_debut'],0,5);
                 $hFin     = substr($ligne['heure_fin'],0,5);
-                $minT     = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $minT     = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$date] += $minT;
-                $isNuitCell = $ligne['min_nuit']>0||$ligne['min_ferie_nuit']>0;
+                $isNuitCell = $ligne['min_nuit']>0||$ligne['min_nuit_dimanche']>0||$ligne['min_ferie_nuit']>0;
                 if ($curSexeExp==='F') { if ($isNuitCell) $covJour[$date]['fn']++; else $covJour[$date]['fj']++; }
                 else                   { if ($isNuitCell) $covJour[$date]['hn']++; else $covJour[$date]['hj']++; }
                 $code     = detectShiftExport($hDeb, $hFin, $shifts);
@@ -444,7 +444,7 @@ foreach ($agents as $ag) {
     // Collecte stats résumé
     $agNuit = false;
     foreach ($planningData[$ag['id']] ?? [] as $l) {
-        if ($l['min_nuit'] > 0 || $l['min_ferie_nuit'] > 0) { $agNuit = true; break; }
+        if ($l['min_nuit'] > 0 || $l['min_nuit_dimanche'] > 0 || $l['min_ferie_nuit'] > 0) { $agNuit = true; break; }
     }
     $summaryStats[] = ['sex' => $curSexeExp, 'nuit' => $agNuit];
     $html .= '<tr style="'.$sepStyle.'"><td class="agent-name" style="'.$sepStyle.'">'.htmlspecialchars($ag['prenom'].' '.$ag['nom']).'</td>';

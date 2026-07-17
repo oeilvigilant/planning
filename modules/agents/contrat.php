@@ -21,7 +21,7 @@ if (($_GET['action'] ?? '') === 'get_heures_planning') {
     $totalH = 0;
     if ($agentId && $dD && $dF && $dF >= $dD) {
         $stmt = $db->prepare("
-            SELECT COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche
+            SELECT COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche + pl.min_nuit_dimanche
                               + pl.min_ferie_normal + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS total_min
             FROM planning_lignes pl
             JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1

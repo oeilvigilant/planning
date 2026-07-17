@@ -88,7 +88,7 @@ if (empty($defaults['total_heures_contrat']) && $defaults['date_debut'] && $defa
     $dD = DateTime::createFromFormat('d/m/Y', $defaults['date_debut']);
     $dF = DateTime::createFromFormat('d/m/Y', $defaults['date_fin']);
     if ($dD && $dF && $dF >= $dD) {
-        $stH = $db->prepare("SELECT COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche
+        $stH = $db->prepare("SELECT COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche + pl.min_nuit_dimanche
                                 + pl.min_ferie_normal + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS total_min
             FROM planning_lignes pl JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
             WHERE pl.agent_id = ? AND pl.date_travail BETWEEN ? AND ?");
