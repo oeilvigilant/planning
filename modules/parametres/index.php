@@ -526,12 +526,19 @@ try {
     <div class="row g-3">
       <?php foreach ($taux as $t): ?>
       <div class="col-md-4">
-        <label class="form-label"><?= h($t['label']) ?><?= $t['type_heure']==='normal' ? ' <span style="color:var(--ov-gold);font-size:0.75rem">★ base</span>' : '' ?></label>
+        <label class="form-label">
+          <?= h($t['label']) ?>
+          <?php if ($t['type_heure']==='normal'): ?>
+            <span style="color:var(--ov-gold);font-size:0.75rem">★ base</span>
+          <?php elseif ($t['type_heure']==='nuit_dimanche'): ?>
+            <span style="color:#7c3aed;font-size:0.72rem">= Nuit + Dim. − Normal</span>
+          <?php endif; ?>
+        </label>
         <div class="input-group">
           <input type="number" name="taux_<?= h($t['type_heure']) ?>" id="taux_<?= h($t['type_heure']) ?>"
                  class="form-control<?= $t['type_heure']==='normal' ? ' taux-base' : '' ?>"
-                 style="<?= $t['type_heure']==='normal' ? 'border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700' : '' ?>"
-                 step="0.01" min="0" value="<?= h($t['taux']) ?>">
+                 style="<?= $t['type_heure']==='normal' ? 'border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700' : ($t['type_heure']==='nuit_dimanche' ? 'border-color:#7c3aed;background:rgba(124,58,237,0.04)' : '') ?>"
+                 step="0.0001" min="0" value="<?= h($t['taux']) ?>">
           <span class="input-group-text">€/h</span>
         </div>
       </div>
@@ -1361,13 +1368,31 @@ document.addEventListener('DOMContentLoaded', function() {
             Object.entries(coeffs).forEach(function(e) {
                 var field = document.getElementById('taux_' + e[0]);
                 if (field) {
-                    field.value = (base * e[1]).toFixed(2);
+                    field.value = (base * e[1]).toFixed(4);
                     field.style.borderColor = 'var(--ov-gold)';
                     field.style.background  = 'rgba(201,168,76,0.06)';
                 }
             });
+            recalcNuitDimanche();
         });
     }
+
+    // Nuit Dimanche = Nuit + Dimanche − Normal (les deux majorations s'additionnent)
+    function recalcNuitDimanche() {
+        var fn = document.getElementById('taux_normal');
+        var fn2 = document.getElementById('taux_nuit');
+        var fd  = document.getElementById('taux_dimanche');
+        var fnd = document.getElementById('taux_nuit_dimanche');
+        if (!fn || !fn2 || !fd || !fnd) return;
+        var val = (parseFloat(fn2.value) || 0) + (parseFloat(fd.value) || 0) - (parseFloat(fn.value) || 0);
+        fnd.value = Math.max(0, val).toFixed(4);
+        fnd.style.borderColor = '#7c3aed';
+        fnd.style.background  = 'rgba(124,58,237,0.08)';
+    }
+    var f_nuit = document.getElementById('taux_nuit');
+    var f_dim  = document.getElementById('taux_dimanche');
+    if (f_nuit) f_nuit.addEventListener('input', recalcNuitDimanche);
+    if (f_dim)  f_dim.addEventListener('input', recalcNuitDimanche);
 });
 </script>
 
