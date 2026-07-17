@@ -229,14 +229,13 @@ if ($format === 'excel') {
                 if ($ligne) {
                     $hD = substr($ligne['heure_debut'],0,5);
                     $hF = substr($ligne['heure_fin'],0,5);
-                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_nuit'];
                     $dur  = round($minT/60).'h';
                     $code = detectShiftExport($hD, $hF, $shifts);
                     $row[] = ($code ? $code.' ' : '').formatHeureCourte($hD).' - '.formatHeureCourte($hF).' '.$dur;
                     foreach (['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_nuit'] as $t) {
                         $totMin[$t] += (int)$ligne['min_'.$t];
                     }
-                    $totMin['ferie_normal'] += (int)($ligne['min_ferie_dimanche'] ?? 0);
                 } else {
                     $row[] = '';
                 }
@@ -248,14 +247,13 @@ if ($format === 'excel') {
                 if ($ligne) {
                     $hD = substr($ligne['heure_debut'],0,5);
                     $hF = substr($ligne['heure_fin'],0,5);
-                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                    $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_nuit'];
                     $dur  = round($minT/60).'h';
                     $code = detectShiftExport($hD, $hF, $shifts);
                     $row[] = ($code ? $code.' ' : '').formatHeureCourte($hD).' - '.formatHeureCourte($hF).' '.$dur;
                     foreach (['normal','nuit','dimanche','nuit_dimanche','ferie_normal','ferie_nuit'] as $t) {
                         $totMin[$t] += (int)$ligne['min_'.$t];
                     }
-                    $totMin['ferie_normal'] += (int)($ligne['min_ferie_dimanche'] ?? 0);
                 } else {
                     $row[] = '';
                 }
@@ -360,7 +358,7 @@ foreach ($agents as $ag) {
             if ($ligne) {
                 $hDeb = substr($ligne['heure_debut'],0,5);
                 $hFin = substr($ligne['heure_fin'],0,5);
-                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$dateStr] += $minT;
                 $isNuitCell = $ligne['min_nuit']>0||$ligne['min_nuit_dimanche']>0||$ligne['min_ferie_nuit']>0;
@@ -405,7 +403,7 @@ foreach ($agents as $ag) {
             if ($ligne) {
                 $hDeb     = substr($ligne['heure_debut'],0,5);
                 $hFin     = substr($ligne['heure_fin'],0,5);
-                $minT     = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $minT     = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$date] += $minT;
                 $isNuitCell = $ligne['min_nuit']>0||$ligne['min_nuit_dimanche']>0||$ligne['min_ferie_nuit']>0;

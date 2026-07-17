@@ -297,7 +297,6 @@ function calculerHeuresParType(string $date, string $hDebut, string $hFin): arra
         'dimanche'      => 0,
         'nuit_dimanche' => 0,
         'ferie_normal'  => 0,
-        'ferie_dimanche'=> 0,
         'ferie_nuit'    => 0,
     ];
 

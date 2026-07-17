@@ -30,7 +30,7 @@ $lignes = $stmtL->fetchAll();
 $totaux = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'nuit_dimanche'=>0,'ferie_normal'=>0,'ferie_nuit'=>0];
 foreach ($lignes as $l) {
     foreach ($totaux as $k => $_) $totaux[$k] += (int)$l['min_'.$k];
-    $totaux['ferie_normal'] += (int)($l['min_ferie_dimanche'] ?? 0); // données historiques
+
 }
 $totalMin     = array_sum($totaux);
 $salaireTotal = 0;
@@ -99,7 +99,7 @@ if (($_GET['export'] ?? '') === 'pdf') {
         <tbody>
         <?php foreach ($lignes as $l):
             $dt   = strtotime($l['date_travail']);
-            $totL = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+            $totL = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_nuit'];
         ?>
         <tr>
             <td><?= date('d/m', $dt) ?></td>
@@ -108,7 +108,7 @@ if (($_GET['export'] ?? '') === 'pdf') {
             <td><?= $l['min_normal']   >0 ? number_format($l['min_normal']  /60,2).'h' : '—' ?></td>
             <td><?= ($l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit'])>0 ? number_format(($l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit'])/60,2).'h' : '—' ?></td>
             <td><?= $l['min_dimanche']>0 ? number_format($l['min_dimanche']/60,2).'h' : '—' ?></td>
-            <td><?= ($l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'])>0?'Oui':'—' ?></td>
+            <td><?= ($l['min_ferie_normal']+$l['min_ferie_nuit'])>0?'Oui':'—' ?></td>
             <td><strong><?= number_format($totL/60,2) ?>h</strong></td>
         </tr>
         <?php endforeach; ?>
@@ -227,7 +227,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     $jourSem = date('N', $dt);
                     $isFer   = in_array($l['date_travail'], $feries);
                     $isDim   = $jourSem == 7;
-                    $totL    = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+                    $totL    = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_nuit'];
                     $bgRow   = $isFer ? '#fffbeb' : ($isDim ? '#fef2f2' : 'white');
                 ?>
                 <tr style="background:<?= $bgRow ?>">
@@ -250,7 +250,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <?php $md=$l['min_dimanche']; echo $md>0?number_format($md/60,2).'h':'<span style="color:#e5e7eb">—</span>'; ?>
                     </td>
                     <td class="text-center" style="font-size:0.8rem;color:#92400e">
-                        <?php $mf=$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit']; echo $mf>0?number_format($mf/60,2).'h':'<span style="color:#e5e7eb">—</span>'; ?>
+                        <?php $mf=$l['min_ferie_normal']+$l['min_ferie_nuit']; echo $mf>0?number_format($mf/60,2).'h':'<span style="color:#e5e7eb">—</span>'; ?>
                     </td>
                     <td class="text-center fw-700" style="font-size:0.87rem"><?= number_format($totL/60,2) ?>h</td>
                 </tr>

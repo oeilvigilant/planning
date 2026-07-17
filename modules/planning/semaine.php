@@ -81,7 +81,7 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
         $l = $planningData[$agentId][$j['date']] ?? null;
         if ($l) {
             foreach ($mins as $k => $_) $mins[$k] += (int)$l['min_'.$k];
-            $mins['ferie_normal'] += (int)($l['min_ferie_dimanche'] ?? 0);
+
         }
     }
     return $mins;
@@ -139,7 +139,7 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
                 if ($curSexeCard === 'F') $cntF++; else $cntM++;
                 $hDeb   = substr($l['heure_debut'], 0, 5);
                 $hFin   = substr($l['heure_fin'],   0, 5);
-                $totMin = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_dimanche']+$l['min_ferie_nuit'];
+                $totMin = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_nuit'];
                 $hasNuit= $l['min_nuit']>0 || $l['min_nuit_dimanche']>0 || $l['min_ferie_nuit']>0;
             ?>
             <?php if ($isSepCard): ?><div style="border-top:1px dashed #cbd5e1;margin:3px 0"></div><?php endif; ?>

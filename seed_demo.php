@@ -347,8 +347,8 @@ $nbJours = 30;
 $stmtL = $db->prepare("
     INSERT IGNORE INTO planning_lignes
         (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,
-         min_normal,min_nuit,min_dimanche,min_ferie_normal,min_ferie_dimanche,min_ferie_nuit,calcul_ok)
-    VALUES (:vid,:aid,:date,:deb,:fin,:mn,:mnorm,:mnuit,:mdim,:mfn,:mfd,:mfnuit,1)
+         min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_nuit,calcul_ok)
+    VALUES (:vid,:aid,:date,:deb,:fin,:mn,:mnorm,:mnuit,:mdim,:mnd,:mfn,:mfnuit,1)
 ");
 
 $totalL = 0;
@@ -372,7 +372,7 @@ foreach ($agentsData as $ag) {
             ':vid'=>$versionId,':aid'=>$aid,':date'=>$dateStr,
             ':deb'=>$h['debut'],':fin'=>$h['fin'],':mn'=>$h['minuit'],
             ':mnorm'=>$mins['normal'],':mnuit'=>$mins['nuit'],':mdim'=>$mins['dimanche'],
-            ':mfn'=>$mins['ferie_normal'],':mfd'=>$mins['ferie_dimanche'],':mfnuit'=>$mins['ferie_nuit'],
+            ':mnd'=>$mins['nuit_dimanche'],':mfn'=>$mins['ferie_normal'],':mfnuit'=>$mins['ferie_nuit'],
         ]);
         $totalL++;
     }

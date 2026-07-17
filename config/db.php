@@ -20,6 +20,13 @@ function getDB(): PDO {
             if (!in_array('min_nuit_dimanche', $cols)) {
                 $pdo->exec("ALTER TABLE planning_lignes ADD COLUMN min_nuit_dimanche DECIMAL(8,2) NOT NULL DEFAULT 0 AFTER min_nuit");
             }
+            // Migration : fusionner min_ferie_dimanche dans min_ferie_normal puis supprimer la colonne
+            if (in_array('min_ferie_dimanche', $cols)) {
+                $pdo->exec("UPDATE planning_lignes SET min_ferie_normal = min_ferie_normal + min_ferie_dimanche WHERE min_ferie_dimanche > 0");
+                $pdo->exec("ALTER TABLE planning_lignes DROP COLUMN min_ferie_dimanche");
+            }
+            // Supprimer le taux ferie_dimanche (fusionné dans ferie_normal)
+            $pdo->exec("DELETE FROM taux_horaires WHERE type_heure='ferie_dimanche'");
             $hasTaux = (int)$pdo->query("SELECT COUNT(*) FROM taux_horaires WHERE type_heure='nuit_dimanche'")->fetchColumn();
             if (!$hasTaux) {
                 $tNormal = (float)($pdo->query("SELECT taux FROM taux_horaires WHERE type_heure='normal'")->fetchColumn() ?: 0);

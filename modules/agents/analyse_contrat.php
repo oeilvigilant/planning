@@ -189,9 +189,9 @@ if ($dateDebutContrat && $dateFinContrat) {
     $stmt = $db->prepare("
         SELECT
             COALESCE(SUM(pl.min_normal + pl.min_nuit + pl.min_dimanche + pl.min_nuit_dimanche
-                       + pl.min_ferie_normal + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS total_min,
-            COALESCE(SUM(pl.min_nuit + pl.min_nuit_dimanche + pl.min_ferie_nuit), 0)    AS nuit_min,
-            COALESCE(SUM(pl.min_dimanche + pl.min_ferie_dimanche + pl.min_ferie_nuit), 0) AS dim_min
+                       + pl.min_ferie_normal + pl.min_ferie_nuit), 0) AS total_min,
+            COALESCE(SUM(pl.min_nuit + pl.min_nuit_dimanche + pl.min_ferie_nuit), 0) AS nuit_min,
+            COALESCE(SUM(pl.min_dimanche + pl.min_ferie_nuit), 0) AS dim_min
         FROM planning_lignes pl
         JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
         WHERE pl.agent_id = ? AND pl.date_travail BETWEEN ? AND ?

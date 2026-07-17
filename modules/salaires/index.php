@@ -27,7 +27,7 @@ if ($version) {
         $stmtL = $db->prepare("
             SELECT SUM(min_normal) as n, SUM(min_nuit) as nu, SUM(min_dimanche) as d,
                    SUM(min_nuit_dimanche) as nd,
-                   SUM(min_ferie_normal + min_ferie_dimanche) as fn, SUM(min_ferie_nuit) as fnu
+                   SUM(min_ferie_normal) as fn, SUM(min_ferie_nuit) as fnu
             FROM planning_lignes WHERE version_id=? AND agent_id=?
         ");
         $stmtL->execute([$version['id'], $ag['id']]);

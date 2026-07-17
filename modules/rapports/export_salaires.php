@@ -26,7 +26,7 @@ foreach ($agents as $ag) {
     $stmtL = $db->prepare("
         SELECT SUM(min_normal) n, SUM(min_nuit) nu, SUM(min_dimanche) d,
                SUM(min_nuit_dimanche) nd,
-               SUM(min_ferie_normal + min_ferie_dimanche) fn, SUM(min_ferie_nuit) fnu
+               SUM(min_ferie_normal) fn, SUM(min_ferie_nuit) fnu
         FROM planning_lignes WHERE version_id=? AND agent_id=?
     ");
     $stmtL->execute([$versionId, $ag['id']]);

@@ -248,7 +248,7 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
             if ($ligne) {
                 $hDeb = substr($ligne['heure_debut'],0,5);
                 $hFin = substr($ligne['heure_fin'],0,5);
-                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$dateStr] += $minT;
                 $isNuitCell = $ligne['min_nuit']>0 || $ligne['min_nuit_dimanche']>0 || $ligne['min_ferie_nuit']>0;
@@ -282,7 +282,7 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
             if ($ligne) {
                 $hDeb = substr($ligne['heure_debut'],0,5);
                 $hFin = substr($ligne['heure_fin'],0,5);
-                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_dimanche']+$ligne['min_ferie_nuit'];
+                $minT = $ligne['min_normal']+$ligne['min_nuit']+$ligne['min_dimanche']+$ligne['min_nuit_dimanche']+$ligne['min_ferie_normal']+$ligne['min_ferie_nuit'];
                 $totalMin += $minT;
                 $totauxJour[$date] += $minT;
                 $isNuitCell = $ligne['min_nuit']>0 || $ligne['min_nuit_dimanche']>0 || $ligne['min_ferie_nuit']>0;
@@ -330,7 +330,6 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
             if ($j < $jourDebut || $j > $jourFin) continue;
         }
         foreach ($recapMins as $k => $_) $recapMins[$k] += (int)$l['min_'.$k];
-        $recapMins['ferie_normal'] += (int)($l['min_ferie_dimanche'] ?? 0);
     }
     $recapParts = [];
     $labMap = ['normal'=>'Normal','nuit'=>'Nuit','dimanche'=>'Dim.','nuit_dimanche'=>'Nuit Dim.','ferie_normal'=>'Fér.','ferie_nuit'=>'Nuit Fér.'];
