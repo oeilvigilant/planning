@@ -1362,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-suggestion des taux : quand "heure normale" change, proposer les autres
     var baseField = document.getElementById('taux_normal');
     if (baseField) {
-        var coeffs = { nuit: 1.2, dimanche: 1.5, ferie_normal: 2, ferie_dimanche: 2, ferie_nuit: 2 };
+        var coeffs = { nuit: 1.1, dimanche: 1.1, ferie_normal: 2, ferie_dimanche: 2, ferie_nuit: 2 };
         baseField.addEventListener('input', function() {
             var base = parseFloat(this.value) || 0;
             Object.entries(coeffs).forEach(function(e) {
