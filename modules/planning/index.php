@@ -347,7 +347,11 @@ $shiftsJson = json_encode($shifts);
 try {
     $needsRecalc = (int)$db->query("
         SELECT COUNT(*) FROM planning_lignes
-        WHERE DAYOFWEEK(date_travail) = 1 AND min_nuit > 0 AND min_nuit_dimanche = 0
+        WHERE min_nuit > 0 AND min_nuit_dimanche = 0
+          AND (
+            DAYOFWEEK(date_travail) = 1
+            OR (DAYOFWEEK(date_travail) = 7 AND depasse_minuit = 1)
+          )
     ")->fetchColumn();
     if ($needsRecalc > 0) {
         $allLignes = $db->query("SELECT id, date_travail, heure_debut, heure_fin FROM planning_lignes")->fetchAll();
