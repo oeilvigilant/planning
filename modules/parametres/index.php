@@ -520,31 +520,60 @@ try {
 <div class="ov-card">
   <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-euro-sign me-2" style="color:var(--ov-gold)"></i>Taux horaires (€/heure)</h2></div>
   <div class="ov-card-body">
-    <p style="font-size:0.82rem;color:#6b7280" class="mb-3"><i class="fa fa-lightbulb me-1" style="color:var(--ov-gold)"></i>Modifiez le taux <strong>Heure normale</strong> — les autres seront mis à jour automatiquement selon les majorations légales. Vous pouvez ajuster chaque valeur avant de sauvegarder.</p>
+    <p style="font-size:0.82rem;color:#6b7280" class="mb-3"><i class="fa fa-lightbulb me-1" style="color:var(--ov-gold)"></i>Modifiez le taux <strong>Heure normale</strong> — les autres seront recalculés automatiquement. Les pourcentages affichés sont calculés par rapport à la base.</p>
     <form method="POST">
     <input type="hidden" name="action" value="save_taux">
-    <div class="row g-3">
-      <?php foreach ($taux as $t): ?>
-      <div class="col-md-4">
-        <label class="form-label">
-          <?= h($t['label']) ?>
-          <?php if ($t['type_heure']==='normal'): ?>
-            <span style="color:var(--ov-gold);font-size:0.75rem">★ base</span>
-          <?php elseif ($t['type_heure']==='nuit_dimanche'): ?>
-            <span style="color:#7c3aed;font-size:0.72rem">= Nuit + Dim. − Normal</span>
-          <?php endif; ?>
-        </label>
-        <div class="input-group">
-          <input type="number" name="taux_<?= h($t['type_heure']) ?>" id="taux_<?= h($t['type_heure']) ?>"
-                 class="form-control<?= $t['type_heure']==='normal' ? ' taux-base' : '' ?>"
-                 style="<?= $t['type_heure']==='normal' ? 'border-color:var(--ov-gold);background:rgba(201,168,76,0.06);font-weight:700' : ($t['type_heure']==='nuit_dimanche' ? 'border-color:#7c3aed;background:rgba(124,58,237,0.04)' : '') ?>"
-                 step="0.0001" min="0" value="<?= h($t['taux']) ?>">
-          <span class="input-group-text">€/h</span>
-        </div>
+    <?php
+    $tauxBase = 0;
+    foreach ($taux as $t) { if ($t['type_heure'] === 'normal') { $tauxBase = (float)$t['taux']; break; } }
+    $tauxMeta = [
+        'normal'         => ['color'=>'#c9a84c', 'bg'=>'rgba(201,168,76,0.08)',  'icon'=>'fa-star',            'desc'=>'Référence IDCC 1351 — toutes majorations sont calculées sur cette base'],
+        'nuit'           => ['color'=>'#3b82f6', 'bg'=>'rgba(59,130,246,0.06)',  'icon'=>'fa-moon',            'desc'=>'Heures entre 21h et 6h (lundi au samedi)'],
+        'dimanche'       => ['color'=>'#f97316', 'bg'=>'rgba(249,115,22,0.06)',  'icon'=>'fa-sun',             'desc'=>'Toute heure travaillée le dimanche (hors nuit)'],
+        'nuit_dimanche'  => ['color'=>'#7c3aed', 'bg'=>'rgba(124,58,237,0.06)', 'icon'=>'fa-moon',            'desc'=>'Nuit d\'un dimanche — cumul des deux majorations'],
+        'ferie_normal'   => ['color'=>'#dc2626', 'bg'=>'rgba(220,38,38,0.05)',  'icon'=>'fa-calendar-xmark',  'desc'=>'Heure de jour d\'un jour férié (hors dimanche et nuit)'],
+        'ferie_dimanche' => ['color'=>'#dc2626', 'bg'=>'rgba(220,38,38,0.05)',  'icon'=>'fa-calendar-xmark',  'desc'=>'Jour férié tombant un dimanche — le férié annule la majoration dimanche'],
+        'ferie_nuit'     => ['color'=>'#7f1d1d', 'bg'=>'rgba(127,29,29,0.06)',  'icon'=>'fa-calendar-xmark',  'desc'=>'Heure de nuit d\'un jour férié — cumul obligatoire IDCC 1351 (+110%)'],
+    ];
+    ?>
+    <div style="display:flex;flex-direction:column;gap:8px">
+    <?php foreach ($taux as $t):
+        $isNormal = $t['type_heure'] === 'normal';
+        $isND     = $t['type_heure'] === 'nuit_dimanche';
+        $meta     = $tauxMeta[$t['type_heure']] ?? ['color'=>'#6b7280','bg'=>'#f9fafb','icon'=>'fa-circle','desc'=>''];
+        $pct      = ($tauxBase > 0 && !$isNormal) ? (((float)$t['taux'] / $tauxBase) - 1) * 100 : 0;
+        $pctLabel = $isNormal ? 'base' : (($pct >= 0 ? '+' : '') . number_format($pct, 0) . ' %');
+    ?>
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;border:1px solid <?= $isNormal ? '#c9a84c' : '#e5e7eb' ?>;background:<?= $meta['bg'] ?>">
+      <!-- Icône couleur -->
+      <div style="width:32px;height:32px;border-radius:50%;background:<?= $meta['color'] ?>22;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="fa <?= $meta['icon'] ?>" style="color:<?= $meta['color'] ?>;font-size:0.85rem<?= $isND?' transform:scale(-1,1)':'' ?>"></i>
       </div>
-      <?php endforeach; ?>
+      <!-- Label + description -->
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:0.9rem;color:#1f2937">
+          <?= h($t['label']) ?>
+          <?php if ($isNormal): ?><span style="color:var(--ov-gold);font-size:0.72rem;margin-left:6px">★ base</span><?php endif; ?>
+          <?php if ($isND): ?><span style="color:#7c3aed;font-size:0.70rem;margin-left:6px">= Nuit + Dim. − Normal</span><?php endif; ?>
+        </div>
+        <div style="font-size:0.75rem;color:#9ca3af;margin-top:1px"><?= $meta['desc'] ?></div>
+      </div>
+      <!-- Input taux -->
+      <div class="input-group" style="max-width:170px;flex-shrink:0">
+        <input type="number" name="taux_<?= h($t['type_heure']) ?>" id="taux_<?= h($t['type_heure']) ?>"
+               class="form-control<?= $isNormal ? ' taux-base' : '' ?>"
+               style="text-align:right;font-weight:<?= $isNormal?'700':'500' ?>;border-color:<?= $meta['color'] ?>"
+               step="0.0001" min="0" value="<?= h($t['taux']) ?>">
+        <span class="input-group-text" style="font-size:0.8rem">€/h</span>
+      </div>
+      <!-- Badge pourcentage -->
+      <div id="pct_<?= h($t['type_heure']) ?>" style="min-width:68px;text-align:center;flex-shrink:0">
+        <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:0.78rem;font-weight:700;background:<?= $meta['color'] ?>22;color:<?= $meta['color'] ?>"><?= $pctLabel ?></span>
+      </div>
     </div>
-    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder les taux</button></div>
+    <?php endforeach; ?>
+    </div>
+    <div class="mt-4"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder les taux</button></div>
     </form>
   </div>
 </div>
@@ -1362,37 +1391,56 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-suggestion des taux : quand "heure normale" change, proposer les autres
     var baseField = document.getElementById('taux_normal');
     if (baseField) {
-        var coeffs = { nuit: 1.1, dimanche: 1.1, ferie_normal: 2, ferie_dimanche: 2, ferie_nuit: 2 };
+        var coeffs = { nuit: 1.1, dimanche: 1.1, ferie_normal: 2, ferie_dimanche: 2, ferie_nuit: 2.1 };
         baseField.addEventListener('input', function() {
             var base = parseFloat(this.value) || 0;
             Object.entries(coeffs).forEach(function(e) {
                 var field = document.getElementById('taux_' + e[0]);
-                if (field) {
-                    field.value = (base * e[1]).toFixed(4);
-                    field.style.borderColor = 'var(--ov-gold)';
-                    field.style.background  = 'rgba(201,168,76,0.06)';
-                }
+                if (field) field.value = (base * e[1]).toFixed(4);
             });
             recalcNuitDimanche();
+            updateAllPct();
         });
+        baseField.addEventListener('input', updateAllPct);
     }
 
     // Nuit Dimanche = Nuit + Dimanche − Normal (les deux majorations s'additionnent)
     function recalcNuitDimanche() {
-        var fn = document.getElementById('taux_normal');
+        var fn  = document.getElementById('taux_normal');
         var fn2 = document.getElementById('taux_nuit');
         var fd  = document.getElementById('taux_dimanche');
         var fnd = document.getElementById('taux_nuit_dimanche');
         if (!fn || !fn2 || !fd || !fnd) return;
         var val = (parseFloat(fn2.value) || 0) + (parseFloat(fd.value) || 0) - (parseFloat(fn.value) || 0);
         fnd.value = Math.max(0, val).toFixed(4);
-        fnd.style.borderColor = '#7c3aed';
-        fnd.style.background  = 'rgba(124,58,237,0.08)';
+        updateAllPct();
     }
     var f_nuit = document.getElementById('taux_nuit');
     var f_dim  = document.getElementById('taux_dimanche');
-    if (f_nuit) f_nuit.addEventListener('input', recalcNuitDimanche);
-    if (f_dim)  f_dim.addEventListener('input', recalcNuitDimanche);
+    if (f_nuit) f_nuit.addEventListener('input', function() { recalcNuitDimanche(); updateAllPct(); });
+    if (f_dim)  f_dim.addEventListener('input',  function() { recalcNuitDimanche(); updateAllPct(); });
+
+    // Mise à jour en temps réel des badges pourcentage
+    var tauxTypes = ['nuit','dimanche','nuit_dimanche','ferie_normal','ferie_dimanche','ferie_nuit'];
+    tauxTypes.forEach(function(t) {
+        var f = document.getElementById('taux_' + t);
+        if (f) f.addEventListener('input', updateAllPct);
+    });
+
+    function updateAllPct() {
+        var base = parseFloat((document.getElementById('taux_normal') || {}).value) || 0;
+        tauxTypes.forEach(function(t) {
+            var field = document.getElementById('taux_' + t);
+            var badge = document.getElementById('pct_' + t);
+            if (!field || !badge) return;
+            var span = badge.querySelector('span');
+            if (!span) return;
+            if (base <= 0) { span.textContent = '—'; return; }
+            var val = parseFloat(field.value) || 0;
+            var pct = ((val / base) - 1) * 100;
+            span.textContent = (pct >= 0 ? '+' : '') + Math.round(pct) + ' %';
+        });
+    }
 });
 </script>
 

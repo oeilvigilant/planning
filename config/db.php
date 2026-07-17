@@ -22,8 +22,11 @@ function getDB(): PDO {
             }
             $hasTaux = (int)$pdo->query("SELECT COUNT(*) FROM taux_horaires WHERE type_heure='nuit_dimanche'")->fetchColumn();
             if (!$hasTaux) {
-                $nuitTaux = (float)($pdo->query("SELECT taux FROM taux_horaires WHERE type_heure='nuit'")->fetchColumn() ?: 0);
-                $pdo->prepare("INSERT INTO taux_horaires (type_heure, label, taux, ordre) VALUES ('nuit_dimanche', 'Nuit Dimanche', ?, 3)")->execute([$nuitTaux]);
+                $tNormal = (float)($pdo->query("SELECT taux FROM taux_horaires WHERE type_heure='normal'")->fetchColumn() ?: 0);
+                $tNuit   = (float)($pdo->query("SELECT taux FROM taux_horaires WHERE type_heure='nuit'")->fetchColumn() ?: 0);
+                $tDim    = (float)($pdo->query("SELECT taux FROM taux_horaires WHERE type_heure='dimanche'")->fetchColumn() ?: 0);
+                $tND     = round($tNuit + $tDim - $tNormal, 4);
+                $pdo->prepare("INSERT INTO taux_horaires (type_heure, label, taux, ordre) VALUES ('nuit_dimanche', 'Nuit Dimanche', ?, 3)")->execute([$tND]);
             }
         } catch (Exception $e) {}
     }
