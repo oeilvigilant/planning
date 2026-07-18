@@ -93,9 +93,11 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
     <a href="?mois=<?= $nextMois ?>&annee=<?= $nextAnnee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
 
     <?php if ($version): ?>
-    <div class="ms-auto d-flex gap-2">
-        <a href="../rapports/export_salaires.php?version_id=<?= $version['id'] ?>&format=pdf" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.8rem"><i class="fa fa-file-pdf me-1"></i>Export PDF</a>
-        <a href="../rapports/export_salaires.php?version_id=<?= $version['id'] ?>&format=excel" class="btn btn-sm" style="background:rgba(34,197,94,0.1);color:#16a34a;border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.8rem"><i class="fa fa-file-excel me-1"></i>Export Excel</a>
+    <div class="ms-auto">
+        <button type="button" class="btn btn-sm" data-bs-toggle="modal" data-bs-target="#modalExport"
+                style="background:rgba(99,102,241,0.1);color:#6366f1;border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:0.35rem 0.9rem;font-size:0.8rem">
+            <i class="fa fa-download me-1"></i>Exporter
+        </button>
     </div>
     <?php endif; ?>
 </div>
@@ -203,6 +205,137 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
     </div>
   </div>
 </div>
+<?php endif; ?>
+
+<?php if ($version): ?>
+<!-- Modal export colonnes -->
+<div class="modal fade" id="modalExport" tabindex="-1" aria-labelledby="modalExportLabel">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form id="formExport" method="GET" action="../rapports/export_salaires.php" target="_blank">
+        <input type="hidden" name="version_id" value="<?= $version['id'] ?>">
+        <input type="hidden" name="format" id="exportFormat" value="pdf">
+
+        <div class="modal-header" style="background:var(--ov-dark);color:white">
+          <h5 class="modal-title" id="modalExportLabel">
+            <i class="fa fa-sliders me-2" style="color:var(--ov-gold)"></i>Configurer l'export — <?= formatMois($mois,$annee) ?>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Presets -->
+          <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+            <small class="text-muted me-1">Sélection rapide :</small>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="presetPolesSociale()">
+              <i class="fa fa-building me-1"></i>Pôle sociale
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="presetCompta()">
+              <i class="fa fa-calculator me-1"></i>Comptabilité
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll(true)">Tout cocher</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll(false)">Tout décocher</button>
+          </div>
+
+          <div class="row g-3">
+            <!-- Colonne gauche : heures -->
+            <div class="col-md-6">
+              <div class="card h-100">
+                <div class="card-header py-2" style="font-size:0.8rem;font-weight:700;background:#eff6ff;color:#1e40af">
+                  <i class="fa fa-clock me-1"></i>Heures par type
+                </div>
+                <div class="card-body py-2">
+                  <?php
+                  $colsH = ['h_normal'=>'Normal','h_nuit'=>'Nuit','h_dimanche'=>'Dimanche',
+                             'h_nuit_dimanche'=>'Nuit Dim.','h_ferie_normal'=>'Férié','h_ferie_nuit'=>'Nuit Fér.','total_h'=>'Total heures'];
+                  foreach ($colsH as $val => $lab): ?>
+                  <div class="form-check mb-1">
+                    <input class="form-check-input export-col" type="checkbox" name="cols[]"
+                           value="<?= $val ?>" id="col_<?= $val ?>" checked>
+                    <label class="form-check-label" for="col_<?= $val ?>" style="font-size:0.85rem"><?= $lab ?></label>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            </div>
+
+            <!-- Colonne droite : salaire + primes + net -->
+            <div class="col-md-6">
+              <div class="card mb-2">
+                <div class="card-header py-2" style="font-size:0.8rem;font-weight:700;background:#f0fdf4;color:#166534">
+                  <i class="fa fa-euro-sign me-1"></i>Salaire &amp; Cotisations
+                </div>
+                <div class="card-body py-2">
+                  <?php foreach (['brut'=>'Salaire brut','cotisations'=>'Cotisations salariales'] as $val=>$lab): ?>
+                  <div class="form-check mb-1">
+                    <input class="form-check-input export-col" type="checkbox" name="cols[]"
+                           value="<?= $val ?>" id="col_<?= $val ?>" checked>
+                    <label class="form-check-label" for="col_<?= $val ?>" style="font-size:0.85rem"><?= $lab ?></label>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header py-2" style="font-size:0.8rem;font-weight:700;background:#faf5ff;color:#7e22ce">
+                  <i class="fa fa-gift me-1"></i>Primes exonérées &amp; Net
+                </div>
+                <div class="card-body py-2">
+                  <?php
+                  $colsP = ['prime_panier'=>'Panier repas','prime_habillage'=>'Prime habillage',
+                             'prime_entretien'=>'Prime entretien','net_estime'=>'Net estimé ★'];
+                  foreach ($colsP as $val=>$lab): ?>
+                  <div class="form-check mb-1">
+                    <input class="form-check-input export-col" type="checkbox" name="cols[]"
+                           value="<?= $val ?>" id="col_<?= $val ?>" checked>
+                    <label class="form-check-label" for="col_<?= $val ?>"
+                           style="font-size:0.85rem<?= $val==='net_estime'?';color:#16a34a;font-weight:700':'' ?>"><?= $lab ?></label>
+                  </div>
+                  <?php endforeach; ?>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 p-2 rounded" style="background:#f0fdf4;border:1px solid #bbf7d0;font-size:0.78rem;color:#166534">
+            <i class="fa fa-info-circle me-1"></i>
+            Les colonnes <strong>Agent</strong> et <strong>Matricule</strong> sont toujours incluses.
+            Le PDF passe automatiquement en paysage si plus de 7 colonnes sont sélectionnées.
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-sm"
+                  onclick="document.getElementById('exportFormat').value='excel'"
+                  style="background:rgba(34,197,94,0.1);color:#16a34a;border:1px solid rgba(34,197,94,0.2)">
+            <i class="fa fa-file-excel me-1"></i>Excel (CSV)
+          </button>
+          <button type="submit" class="btn btn-sm"
+                  onclick="document.getElementById('exportFormat').value='pdf'"
+                  style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.2)">
+            <i class="fa fa-file-pdf me-1"></i>PDF
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function toggleAll(state) {
+    document.querySelectorAll('.export-col').forEach(c => c.checked = state);
+}
+function presetPolesSociale() {
+    toggleAll(false);
+    ['col_total_h','col_brut','col_cotisations','col_prime_panier','col_prime_habillage','col_prime_entretien','col_net_estime']
+        .forEach(id => { const el = document.getElementById(id); if(el) el.checked = true; });
+}
+function presetCompta() {
+    toggleAll(false);
+    ['col_h_normal','col_h_nuit','col_h_dimanche','col_h_nuit_dimanche','col_h_ferie_normal','col_h_ferie_nuit',
+     'col_total_h','col_brut','col_cotisations','col_net_estime']
+        .forEach(id => { const el = document.getElementById(id); if(el) el.checked = true; });
+}
+</script>
 <?php endif; ?>
 
 <?php include __DIR__ . '/../../includes/footer.php'; ?>

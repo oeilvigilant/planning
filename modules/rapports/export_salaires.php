@@ -15,21 +15,80 @@ $stmt->execute([$versionId]);
 $version = $stmt->fetch();
 if (!$version) die('Version introuvable.');
 
-$mois   = $version['mois'];
-$annee  = $version['annee'];
-$taux   = getTauxHoraires();
-$agents = $db->query("SELECT * FROM agents WHERE actif=1 ORDER BY nom,prenom")->fetchAll();
-$params = getAllParams();
+$mois      = $version['mois'];
+$annee     = $version['annee'];
+$taux      = getTauxHoraires();
+$agents    = $db->query("SELECT * FROM agents WHERE actif=1 ORDER BY nom,prenom")->fetchAll();
+$params    = getAllParams();
+$primesCfg = getPrimesConfig();
+$minPanier = (int)round($primesCfg['panier_min_heures'] * 60);
 
+// Colonnes disponibles (ordre d'affichage)
+$allCols = [
+    'h_normal'        => 'Normal (h)',
+    'h_nuit'          => 'Nuit (h)',
+    'h_dimanche'      => 'Dimanche (h)',
+    'h_nuit_dimanche' => 'Nuit Dim. (h)',
+    'h_ferie_normal'  => 'Férié (h)',
+    'h_ferie_nuit'    => 'Nuit Fér. (h)',
+    'total_h'         => 'Total (h)',
+    'brut'            => 'Brut (€)',
+    'cotisations'     => 'Cotis. sal. (€)',
+    'prime_panier'    => 'Panier (€)',
+    'prime_habillage' => 'Habillage (€)',
+    'prime_entretien' => 'Entretien (€)',
+    'net_estime'      => 'Net estimé (€)',
+];
+
+// Colonnes actives (intersection ordonnée avec la définition)
+$requestedCols = (isset($_GET['cols']) && is_array($_GET['cols']))
+    ? array_values(array_intersect(array_keys($allCols), $_GET['cols']))
+    : array_keys($allCols);
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function salExportColVal(array $r, string $col): float {
+    return match($col) {
+        'h_normal'        => $r['heures']['normal'],
+        'h_nuit'          => $r['heures']['nuit'],
+        'h_dimanche'      => $r['heures']['dimanche'],
+        'h_nuit_dimanche' => $r['heures']['nuit_dimanche'],
+        'h_ferie_normal'  => $r['heures']['ferie_normal'],
+        'h_ferie_nuit'    => $r['heures']['ferie_nuit'],
+        'total_h'         => $r['total'],
+        'brut'            => $r['paie']['brut'],
+        'cotisations'     => $r['paie']['cotisations'],
+        'prime_panier'    => $r['paie']['panier'],
+        'prime_habillage' => $r['paie']['habillage'],
+        'prime_entretien' => $r['paie']['entretien'],
+        'net_estime'      => $r['paie']['net_total'],
+        default           => 0.0,
+    };
+}
+function salExportIsHeure(string $col): bool {
+    return in_array($col, ['h_normal','h_nuit','h_dimanche','h_nuit_dimanche','h_ferie_normal','h_ferie_nuit','total_h']);
+}
+function salExportColCss(string $col): string {
+    return match($col) {
+        'net_estime'                              => 'col-net',
+        'cotisations'                             => 'col-cotis',
+        'brut'                                    => 'col-brut',
+        'prime_panier','prime_habillage',
+        'prime_entretien'                         => 'col-prime',
+        default                                   => '',
+    };
+}
+
+// ─── Résultats avec paie ────────────────────────────────────────────────────
 $resultats = [];
 foreach ($agents as $ag) {
     $stmtL = $db->prepare("
         SELECT SUM(min_normal) n, SUM(min_nuit) nu, SUM(min_dimanche) d,
                SUM(min_nuit_dimanche) nd,
-               SUM(min_ferie_normal) fn, SUM(min_ferie_nuit) fnu
+               SUM(min_ferie_normal) fn, SUM(min_ferie_nuit) fnu,
+               SUM(CASE WHEN (min_normal+min_nuit+min_dimanche+min_nuit_dimanche+min_ferie_normal+min_ferie_nuit) >= ? THEN 1 ELSE 0 END) AS nb_vacations_panier
         FROM planning_lignes WHERE version_id=? AND agent_id=?
     ");
-    $stmtL->execute([$versionId, $ag['id']]);
+    $stmtL->execute([$minPanier, $versionId, $ag['id']]);
     $mins = $stmtL->fetch();
     $heures = [
         'normal'        => minutesToHeures((int)$mins['n']),
@@ -43,53 +102,62 @@ foreach ($agents as $ag) {
     if ($tot > 0) {
         $sal = 0;
         foreach ($heures as $t => $h) $sal += $h * ($taux[$t] ?? 0);
-        $resultats[] = ['agent' => $ag, 'heures' => $heures, 'total' => $tot, 'salaire' => round($sal, 2)];
+        $brut = round($sal, 2);
+        $paie = calculerPaie($brut, (int)$mins['nb_vacations_panier']);
+        $resultats[] = ['agent' => $ag, 'heures' => $heures, 'total' => $tot, 'salaire' => $brut, 'paie' => $paie];
     }
 }
 
-// CSV
-if ($format === 'csv') {
+// ─── CSV / Excel ────────────────────────────────────────────────────────────
+if ($format === 'csv' || $format === 'excel') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="salaires_' . sprintf('%02d', $mois) . '_' . $annee . '_v' . $version['version'] . '.csv"');
     $f = fopen('php://output', 'w');
     fprintf($f, chr(0xEF).chr(0xBB).chr(0xBF));
-    fputcsv($f, ['Agent','Matricule','Normal (h)','Nuit (h)','Dimanche (h)','Nuit Dim. (h)','Férié (h)','Nuit Fér. (h)','Total (h)','Salaire (€)'], ';');
+    $headers = ['Agent', 'Matricule'];
+    foreach ($requestedCols as $col) $headers[] = $allCols[$col];
+    fputcsv($f, $headers, ';');
     foreach ($resultats as $r) {
-        $ag = $r['agent'];
-        fputcsv($f, [
-            $ag['prenom'] . ' ' . $ag['nom'],
-            $ag['matricule'] ?? '',
-            number_format($r['heures']['normal'],         2, '.', ''),
-            number_format($r['heures']['nuit'],           2, '.', ''),
-            number_format($r['heures']['dimanche'],       2, '.', ''),
-            number_format($r['heures']['nuit_dimanche'],  2, '.', ''),
-            number_format($r['heures']['ferie_normal'],   2, '.', ''),
-            number_format($r['heures']['ferie_nuit'],     2, '.', ''),
-            number_format($r['total'],                    2, '.', ''),
-            number_format($r['salaire'],                  2, '.', ''),
-        ], ';');
+        $ag  = $r['agent'];
+        $row = [$ag['prenom'] . ' ' . $ag['nom'], $ag['matricule'] ?? ''];
+        foreach ($requestedCols as $col) {
+            $row[] = number_format(salExportColVal($r, $col), 2, '.', '');
+        }
+        fputcsv($f, $row, ';');
     }
     fclose($f);
     exit;
 }
 
-// Logo
-$logoB64 = '';
+// ─── PDF ────────────────────────────────────────────────────────────────────
+$orientation = count($requestedCols) > 7 ? 'landscape' : 'portrait';
+
+$logoB64  = '';
 $logoFile = APP_ROOT . '/assets/img/' . ($params['logo_principal'] ?? 'logo.png');
 if (file_exists($logoFile)) {
-    $ext  = strtolower(pathinfo($logoFile, PATHINFO_EXTENSION));
-    $mime = ($ext === 'jpg' || $ext === 'jpeg') ? 'image/jpeg' : 'image/png';
+    $ext     = strtolower(pathinfo($logoFile, PATHINFO_EXTENSION));
+    $mime    = ($ext === 'jpg' || $ext === 'jpeg') ? 'image/jpeg' : 'image/png';
     $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
 }
 
-$typeLabels = ['normal'=>'Normal','nuit'=>'Nuit','dimanche'=>'Dimanche','nuit_dimanche'=>'Nuit Dim.','ferie_normal'=>'Férié','ferie_nuit'=>'Nuit Fér.'];
-$totaux = array_fill_keys(array_keys($typeLabels), 0);
-$totaux['total'] = 0; $totaux['salaire'] = 0;
+// Totaux par colonne active
+$totaux = array_fill_keys($requestedCols, 0.0);
 foreach ($resultats as $r) {
-    foreach ($typeLabels as $k => $_) $totaux[$k] += $r['heures'][$k];
-    $totaux['total']   += $r['total'];
-    $totaux['salaire'] += $r['salaire'];
+    foreach ($requestedCols as $col) $totaux[$col] += salExportColVal($r, $col);
 }
+
+$typeLabelsMap = [
+    'h_normal'        => ['label' => 'Normal',    'taux_key' => 'normal'],
+    'h_nuit'          => ['label' => 'Nuit',      'taux_key' => 'nuit'],
+    'h_dimanche'      => ['label' => 'Dimanche',  'taux_key' => 'dimanche'],
+    'h_nuit_dimanche' => ['label' => 'Nuit Dim.', 'taux_key' => 'nuit_dimanche'],
+    'h_ferie_normal'  => ['label' => 'Férié',     'taux_key' => 'ferie_normal'],
+    'h_ferie_nuit'    => ['label' => 'Nuit Fér.', 'taux_key' => 'ferie_nuit'],
+];
+
+$nCols   = count($requestedCols);
+$fntData = $nCols > 9 ? '7' : '8';
+$fntHead = $nCols > 9 ? '6.5' : '7.5';
 
 ob_start();
 ?>
@@ -99,10 +167,13 @@ ob_start();
 <meta charset="UTF-8">
 <?= pdfBaseStyle() ?>
 <style>
-.type-nuit    { color: #4f46e5; }
-.type-dim     { color: #dc2626; }
-.type-ferie   { color: #92400e; }
-.salaire-col  { color: #16a34a; font-weight: 700; font-size: 9.5pt; }
+.col-net   { color: #16a34a; font-weight: 700; }
+.col-cotis { color: #dc2626; }
+.col-prime { color: #8b5cf6; }
+.col-brut  { color: #374151; font-weight: 600; }
+th.col-net   { color: #a7f3d0; }
+th.col-cotis { color: #fca5a5; }
+th.col-prime { color: #ddd6fe; }
 </style>
 </head>
 <body>
@@ -119,29 +190,36 @@ ob_start();
     </div>
     <div style="text-align:right">
       <div style="background:#1a2332;color:#c9a84c;padding:8px 14px;border-radius:6px;font-size:8pt;font-weight:700">
-        <?= count($resultats) ?> agents<br>
-        <?= number_format($totaux['total'], 2) ?> h total<br>
-        <span style="font-size:11pt"><?= number_format($totaux['salaire'], 2) ?> €</span>
+        <?= count($resultats) ?> agents
+        <?php if (in_array('total_h', $requestedCols)): ?><br><?= number_format($totaux['total_h'], 2) ?> h<?php endif; ?>
+        <br>
+        <?php if (in_array('net_estime', $requestedCols)): ?>
+        <span style="font-size:11pt"><?= number_format($totaux['net_estime'], 2) ?> € net</span>
+        <?php elseif (in_array('brut', $requestedCols)): ?>
+        <span style="font-size:11pt"><?= number_format($totaux['brut'], 2) ?> € brut</span>
+        <?php endif; ?>
       </div>
     </div>
   </div>
 
-  <!-- Taux appliqués -->
-  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:7pt">
-    <?php foreach ($typeLabels as $k => $l): ?>
+  <?php $hColsActive = array_intersect($requestedCols, array_keys($typeLabelsMap));
+  if (!empty($hColsActive)): ?>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:7pt">
+    <?php foreach ($hColsActive as $col): $info = $typeLabelsMap[$col]; ?>
     <span style="background:#f0f2f5;padding:2px 7px;border-radius:10px">
-      <strong><?= $l ?></strong> : <?= number_format($taux[$k] ?? 0, 2) ?> €/h
+      <strong><?= $info['label'] ?></strong> : <?= number_format($taux[$info['taux_key']] ?? 0, 2) ?> €/h
     </span>
     <?php endforeach; ?>
   </div>
+  <?php endif; ?>
 
   <table>
     <thead>
       <tr>
-        <th>Agent</th>
-        <?php foreach ($typeLabels as $l): ?><th><?= $l ?></th><?php endforeach; ?>
-        <th>Total h.</th>
-        <th>Salaire €</th>
+        <th style="text-align:left">Agent</th>
+        <?php foreach ($requestedCols as $col): ?>
+        <th class="<?= salExportColCss($col) ?>" style="font-size:<?= $fntHead ?>pt"><?= $allCols[$col] ?></th>
+        <?php endforeach; ?>
       </tr>
     </thead>
     <tbody>
@@ -155,22 +233,32 @@ ob_start();
         <br><span style="font-size:6.5pt;color:#999"><?= htmlspecialchars($ag['matricule']) ?></span>
         <?php endif; ?>
       </td>
-      <?php foreach ($typeLabels as $k => $_): ?>
-      <td><?= $r['heures'][$k] > 0 ? number_format($r['heures'][$k], 2) . 'h' : '—' ?></td>
+      <?php foreach ($requestedCols as $col):
+        $v   = salExportColVal($r, $col);
+        $isH = salExportIsHeure($col);
+        $css = salExportColCss($col);
+        $pfx = $col === 'cotisations' ? '−' : '';
+        $sfx = $isH ? 'h' : ' €';
+      ?>
+      <td class="<?= $css ?>" style="font-size:<?= $fntData ?>pt">
+        <?= $v > 0 ? $pfx . number_format($v, 2) . $sfx : '—' ?>
+      </td>
       <?php endforeach; ?>
-      <td><strong><?= number_format($r['total'], 2) ?>h</strong></td>
-      <td class="salaire-col"><?= number_format($r['salaire'], 2) ?> €</td>
     </tr>
     <?php endforeach; ?>
     </tbody>
     <tfoot>
       <tr>
         <td><strong>TOTAL</strong></td>
-        <?php foreach ($typeLabels as $k => $_): ?>
-        <td><strong><?= $totaux[$k] > 0 ? number_format($totaux[$k], 2) . 'h' : '—' ?></strong></td>
+        <?php foreach ($requestedCols as $col):
+          $v   = $totaux[$col];
+          $isH = salExportIsHeure($col);
+          $pfx = $col === 'cotisations' ? '−' : '';
+          $sfx = $isH ? 'h' : ' €';
+          $css = salExportColCss($col);
+        ?>
+        <td class="<?= $css ?>"><strong><?= $v > 0 ? $pfx . number_format($v, 2) . $sfx : '—' ?></strong></td>
         <?php endforeach; ?>
-        <td><strong><?= number_format($totaux['total'], 2) ?>h</strong></td>
-        <td class="salaire-col" style="font-size:10pt"><?= number_format($totaux['salaire'], 2) ?> €</td>
       </tr>
     </tfoot>
   </table>
@@ -185,4 +273,4 @@ ob_start();
 </html>
 <?php
 $html = ob_get_clean();
-renderPdf($html, 'salaires_' . sprintf('%02d', $mois) . '_' . $annee . '.pdf');
+renderPdf($html, 'salaires_' . sprintf('%02d', $mois) . '_' . $annee . '.pdf', $orientation);
