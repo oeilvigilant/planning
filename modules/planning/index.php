@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $db->prepare("INSERT INTO planning_lignes
                 (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
                  min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_nuit,calcul_ok)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
                ->execute([$versionId,$agentId,$date,$hDebut,$hFin,$depasse,$note,
                           $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                           $minutes['ferie_normal'],$minutes['ferie_nuit']]);
@@ -135,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $db->prepare("INSERT INTO planning_lignes
                     (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
                      min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_nuit,calcul_ok)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                    ->execute([$newVId,$ol['agent_id'],$ol['date_travail'],$ol['heure_debut'],$ol['heure_fin'],
                               $ol['depasse_minuit'],$ol['note'],
                               $ol['min_normal'],$ol['min_nuit'],$ol['min_dimanche'],$ol['min_nuit_dimanche'],
@@ -256,7 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $db->prepare("INSERT INTO planning_lignes
                         (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
                          min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_nuit,calcul_ok)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)")
                        ->execute([$vId,$agentId,$dateStr,$hDebut,$hFin,$depasse,$note,
                                   $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                                   $minutes['ferie_normal'],$minutes['ferie_nuit']]);
