@@ -27,10 +27,13 @@ if ($version) {
         $stmtL = $db->prepare("
             SELECT SUM(min_normal) as n, SUM(min_nuit) as nu, SUM(min_dimanche) as d,
                    SUM(min_nuit_dimanche) as nd,
-                   SUM(min_ferie_normal) as fn, SUM(min_ferie_nuit) as fnu
+                   SUM(min_ferie_normal) as fn, SUM(min_ferie_nuit) as fnu,
+                   SUM(CASE WHEN (min_normal+min_nuit+min_dimanche+min_nuit_dimanche+min_ferie_normal+min_ferie_nuit) >= ? THEN 1 ELSE 0 END) AS nb_vacations_panier
             FROM planning_lignes WHERE version_id=? AND agent_id=?
         ");
-        $stmtL->execute([$version['id'], $ag['id']]);
+        $primesCfg = getPrimesConfig();
+        $minPanier = (int)round($primesCfg['panier_min_heures'] * 60);
+        $stmtL->execute([$minPanier, $version['id'], $ag['id']]);
         $mins = $stmtL->fetch();
 
         $heures = [
@@ -47,13 +50,16 @@ if ($version) {
         foreach ($heures as $type => $h) {
             $salaireCalc += $h * ($taux[$type] ?? 0);
         }
+        $brut = round($salaireCalc, 2);
 
         if ($totalHeures > 0) {
+            $paie = calculerPaie($brut, (int)$mins['nb_vacations_panier']);
             $resultats[$ag['id']] = [
                 'agent'       => $ag,
                 'heures'      => $heures,
                 'total_heures'=> $totalHeures,
-                'salaire'     => round($salaireCalc, 2),
+                'salaire'     => $brut,
+                'paie'        => $paie,
             ];
         }
     }
@@ -137,7 +143,10 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
           <th class="text-center" style="color:<?= $typeCols[$k] ?>"><?= $l ?><br><small style="font-weight:normal;font-size:0.68rem"><?= number_format($taux[$k]??0,2) ?>€</small></th>
           <?php endforeach; ?>
           <th class="text-center">Total h.</th>
-          <th class="text-center" style="color:#16a34a">Salaire</th>
+          <th class="text-center" style="color:#374151">Brut</th>
+          <th class="text-center" style="color:#dc2626">Cotis.</th>
+          <th class="text-center" style="color:#8b5cf6">Primes</th>
+          <th class="text-center" style="color:#16a34a;font-size:0.95rem">Net estimé</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -154,7 +163,16 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
         </td>
         <?php endforeach; ?>
         <td class="text-center fw-700"><?= number_format($r['total_heures'],2) ?>h</td>
-        <td class="text-center fw-700" style="color:#16a34a;font-size:1rem"><?= number_format($r['salaire'],2) ?> €</td>
+        <td class="text-center fw-600" style="color:#374151"><?= number_format($r['paie']['brut'],2) ?> €</td>
+        <td class="text-center" style="color:#dc2626;font-size:0.82rem">
+          <span title="Cotisations salariales">−<?= number_format($r['paie']['cotisations'],2) ?> €</span>
+        </td>
+        <td class="text-center" style="color:#8b5cf6;font-size:0.82rem">
+          <span title="Panier : <?= number_format($r['paie']['panier'],2) ?> € · Habillage : <?= number_format($r['paie']['habillage'],2) ?> € · Entretien : <?= number_format($r['paie']['entretien'],2) ?> €">
+            +<?= number_format($r['paie']['total_primes'],2) ?> €
+          </span>
+        </td>
+        <td class="text-center fw-700" style="color:#16a34a;font-size:1rem"><?= number_format($r['paie']['net_total'],2) ?> €</td>
         <td>
           <div class="d-flex gap-1">
             <a href="detail.php?agent_id=<?= $rid ?>&version_id=<?= $version['id'] ?>" class="btn-sm-icon view" title="Détail"><i class="fa fa-eye"></i></a>
@@ -174,7 +192,10 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
           </td>
           <?php endforeach; ?>
           <td class="text-center fw-700"><?= number_format(array_sum(array_column($resultats,'total_heures')),2) ?>h</td>
-          <td class="text-center fw-700" style="color:#16a34a;font-size:1rem"><?= number_format($totalSalaires,2) ?> €</td>
+          <td class="text-center fw-700"><?= number_format($totalSalaires,2) ?> €</td>
+          <td class="text-center fw-700" style="color:#dc2626">−<?= number_format(array_sum(array_map(fn($r)=>$r['paie']['cotisations'],$resultats)),2) ?> €</td>
+          <td class="text-center fw-700" style="color:#8b5cf6">+<?= number_format(array_sum(array_map(fn($r)=>$r['paie']['total_primes'],$resultats)),2) ?> €</td>
+          <td class="text-center fw-700" style="color:#16a34a;font-size:1rem"><?= number_format(array_sum(array_map(fn($r)=>$r['paie']['net_total'],$resultats)),2) ?> €</td>
           <td></td>
         </tr>
       </tfoot>

@@ -398,6 +398,39 @@ function calculerSalaire(array $minutesParType): float {
     return round($salaire, 2);
 }
 
+// ── Primes légales (IDCC 1351) ───────────────────────────────────────────────
+
+function getPrimesConfig(): array {
+    return [
+        'panier_montant'    => (float)getParam('panier_montant',    '4.48'),
+        'panier_min_heures' => (float)getParam('panier_min_heures', '6'),
+        'prime_habillage'   => (float)getParam('prime_habillage',   '13.00'),
+        'prime_entretien'   => (float)getParam('prime_entretien',   '8.78'),
+    ];
+}
+
+// Calcule la paie complète (brut → net) pour un agent sur un mois.
+// $nbVacationsPanier = nombre de shifts d'au moins panier_min_heures heures continues.
+function calculerPaie(float $brut, int $nbVacationsPanier): array {
+    $cotis   = calculerCotisations($brut);
+    $primes  = getPrimesConfig();
+    $panier  = round($nbVacationsPanier * $primes['panier_montant'], 2);
+    $habill  = $primes['prime_habillage'];
+    $entret  = $primes['prime_entretien'];
+    return [
+        'brut'           => $brut,
+        'cotisations'    => $cotis['salarial'],
+        'net_base'       => $cotis['net'],
+        'panier'         => $panier,
+        'habillage'      => $habill,
+        'entretien'      => $entret,
+        'total_primes'   => round($panier + $habill + $entret, 2),
+        'net_total'      => round($cotis['net'] + $panier + $habill + $entret, 2),
+        'cout_employeur' => $cotis['cout_employeur'],
+        'cotis_detail'   => $cotis['detail'],
+    ];
+}
+
 // ── Cotisations sociales ──────────────────────────────────────────────────────
 
 function initCotisationsTable(): void {

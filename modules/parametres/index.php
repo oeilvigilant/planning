@@ -238,6 +238,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('parametres','edit')) {
         header('Location: index.php?tab=devis-profils'); exit;
     }
 
+    if ($action === 'save_primes') {
+        setParam('panier_montant',    number_format((float)($_POST['panier_montant']    ?? 4.48),  2, '.', ''));
+        setParam('panier_min_heures', number_format((float)($_POST['panier_min_heures'] ?? 6),     1, '.', ''));
+        setParam('prime_habillage',   number_format((float)($_POST['prime_habillage']   ?? 13.00), 2, '.', ''));
+        setParam('prime_entretien',   number_format((float)($_POST['prime_entretien']   ?? 8.78),  2, '.', ''));
+        flash('success', 'Primes légales sauvegardées.');
+        header('Location: index.php?tab=cotisations'); exit;
+    }
+
     if ($action === 'save_planning') {
         setParam('nuit_debut', $_POST['nuit_debut'] ?? '21:00');
         setParam('nuit_fin',   $_POST['nuit_fin']   ?? '06:00');
@@ -978,6 +987,55 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- COTISATIONS SOCIALES -->
 <div class="tab-pane fade" id="tab-cotisations">
+
+<!-- Primes légales IDCC 1351 -->
+<div class="ov-card mb-3">
+  <div class="ov-card-header">
+    <h2 class="ov-card-title"><i class="fa fa-utensils me-2" style="color:var(--ov-gold)"></i>Primes légales — IDCC 1351</h2>
+    <small class="text-muted">Exonérées de cotisations — ajoutées directement au net</small>
+  </div>
+  <div class="ov-card-body">
+    <form method="POST">
+    <input type="hidden" name="action" value="save_primes">
+    <?php $primesCfg = getPrimesConfig(); ?>
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label fw-600">Panier repas</label>
+        <div class="input-group">
+          <input type="number" name="panier_montant" class="form-control" step="0.01" min="0" value="<?= h($primesCfg['panier_montant']) ?>">
+          <span class="input-group-text">€ / vacation</span>
+        </div>
+        <div class="form-text">4,48 € selon IDCC 1351 (jan. 2025)</div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-600">Durée min. panier</label>
+        <div class="input-group">
+          <input type="number" name="panier_min_heures" class="form-control" step="0.5" min="1" max="12" value="<?= h($primesCfg['panier_min_heures']) ?>">
+          <span class="input-group-text">h</span>
+        </div>
+        <div class="form-text">Shift ≥ 6 h continues</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-600">Prime habillage</label>
+        <div class="input-group">
+          <input type="number" name="prime_habillage" class="form-control" step="0.01" min="0" value="<?= h($primesCfg['prime_habillage']) ?>">
+          <span class="input-group-text">€ / mois</span>
+        </div>
+        <div class="form-text">13,00 € / mois selon IDCC 1351</div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-600">Entretien tenue</label>
+        <div class="input-group">
+          <input type="number" name="prime_entretien" class="form-control" step="0.01" min="0" value="<?= h($primesCfg['prime_entretien']) ?>">
+          <span class="input-group-text">€ / mois</span>
+        </div>
+        <div class="form-text">8,78 € / mois selon IDCC 1351</div>
+      </div>
+    </div>
+    <div class="mt-3"><button type="submit" class="btn btn-ov-primary"><i class="fa fa-save me-2"></i>Sauvegarder</button></div>
+    </form>
+  </div>
+</div>
 
 <div class="ov-card mb-3">
   <div class="ov-card-header">

@@ -42,6 +42,16 @@ foreach ($totaux as $k => $min) {
     $salaireDetail[$k] = ['heures' => $h, 'taux' => $taux[$k] ?? 0, 'montant' => $montant];
 }
 
+// Calcul paie nette
+$primesCfg = getPrimesConfig();
+$minPanier = (int)round($primesCfg['panier_min_heures'] * 60);
+$nbVacationsPanier = 0;
+foreach ($lignes as $l) {
+    $totL = $l['min_normal']+$l['min_nuit']+$l['min_dimanche']+$l['min_nuit_dimanche']+$l['min_ferie_normal']+$l['min_ferie_nuit'];
+    if ($totL >= $minPanier) $nbVacationsPanier++;
+}
+$paie = calculerPaie(round($salaireTotal, 2), $nbVacationsPanier);
+
 $typeLabels = [
     'normal'        => ['Normal',      '#374151'],
     'nuit'          => ['Nuit',        '#4f46e5'],
@@ -261,6 +271,96 @@ require_once __DIR__ . '/../../includes/header.php';
             <?php endif; ?>
         </div>
     </div>
+</div>
+
+<!-- ── Fiche de paie estimée ─────────────────────────────────────────────── -->
+<div class="ov-card mt-3">
+  <div class="ov-card-header">
+    <h2 class="ov-card-title"><i class="fa fa-file-invoice-dollar me-2" style="color:var(--ov-gold)"></i>Fiche de paie estimée</h2>
+    <small class="text-muted">Estimation basée sur les taux IDCC 1351 configurés</small>
+  </div>
+  <div class="ov-card-body">
+    <div class="row g-3">
+
+      <!-- Colonne gauche : brut + cotisations -->
+      <div class="col-md-5">
+        <div style="background:#f8f9fa;border-radius:8px;padding:16px;border:1px solid #e5e7eb">
+          <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:8px">Salaire brut</div>
+
+          <?php foreach ($salaireDetail as $k => $d): if ($d['heures'] <= 0) continue; ?>
+          <?php $typeLabels2 = ['normal'=>'Normal','nuit'=>'Nuit','dimanche'=>'Dimanche','nuit_dimanche'=>'Nuit Dim.','ferie_normal'=>'Férié','ferie_nuit'=>'Nuit Fér.']; ?>
+          <div class="d-flex justify-content-between" style="font-size:0.82rem;padding:3px 0;border-bottom:1px solid #f3f4f6">
+            <span style="color:#6b7280"><?= $typeLabels2[$k] ?> — <?= number_format($d['heures'],2) ?>h × <?= number_format($d['taux'],2) ?>€</span>
+            <span style="font-weight:600"><?= number_format($d['montant'],2) ?> €</span>
+          </div>
+          <?php endforeach; ?>
+
+          <div class="d-flex justify-content-between mt-2" style="font-size:1rem;font-weight:700;color:#1a2332">
+            <span>Total brut</span>
+            <span><?= number_format($paie['brut'],2) ?> €</span>
+          </div>
+
+          <div style="margin-top:12px;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:6px">Cotisations salariales</div>
+          <?php foreach ($paie['cotis_detail'] as $c): if ($c['taux_sal'] <= 0) continue; ?>
+          <div class="d-flex justify-content-between" style="font-size:0.78rem;padding:2px 0;border-bottom:1px solid #f3f4f6">
+            <span style="color:#6b7280"><?= h($c['libelle']) ?> (<?= number_format($c['taux_sal'],3) ?>%)</span>
+            <span style="color:#dc2626">−<?= number_format($c['montant_sal'],2) ?> €</span>
+          </div>
+          <?php endforeach; ?>
+
+          <div class="d-flex justify-content-between mt-2" style="font-size:0.9rem;font-weight:700;color:#dc2626">
+            <span>Total cotisations</span>
+            <span>−<?= number_format($paie['cotisations'],2) ?> €</span>
+          </div>
+
+          <div class="d-flex justify-content-between mt-2 pt-2" style="border-top:2px solid #e5e7eb;font-size:1rem;font-weight:700;color:#374151">
+            <span>Net avant primes</span>
+            <span><?= number_format($paie['net_base'],2) ?> €</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Colonne milieu : primes exonérées -->
+      <div class="col-md-3">
+        <div style="background:#f0fdf4;border-radius:8px;padding:16px;border:1px solid #bbf7d0;height:100%">
+          <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#16a34a;margin-bottom:8px">Primes exonérées</div>
+
+          <div class="d-flex justify-content-between" style="font-size:0.82rem;padding:4px 0;border-bottom:1px solid #dcfce7">
+            <span style="color:#374151">Panier repas<br><small style="color:#6b7280"><?= $nbVacationsPanier ?> vacation<?= $nbVacationsPanier>1?'s':'' ?> × <?= number_format($paie['panier']/$nbVacationsPanier ?: 0,2) ?> €</small></span>
+            <span style="font-weight:600;color:#16a34a">+<?= number_format($paie['panier'],2) ?> €</span>
+          </div>
+          <div class="d-flex justify-content-between" style="font-size:0.82rem;padding:4px 0;border-bottom:1px solid #dcfce7">
+            <span style="color:#374151">Habillage</span>
+            <span style="font-weight:600;color:#16a34a">+<?= number_format($paie['habillage'],2) ?> €</span>
+          </div>
+          <div class="d-flex justify-content-between" style="font-size:0.82rem;padding:4px 0">
+            <span style="color:#374151">Entretien tenue</span>
+            <span style="font-weight:600;color:#16a34a">+<?= number_format($paie['entretien'],2) ?> €</span>
+          </div>
+
+          <div class="d-flex justify-content-between mt-3 pt-2" style="border-top:2px solid #86efac;font-size:0.9rem;font-weight:700;color:#16a34a">
+            <span>Total primes</span>
+            <span>+<?= number_format($paie['total_primes'],2) ?> €</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Colonne droite : net total -->
+      <div class="col-md-4">
+        <div style="background:linear-gradient(135deg,#1a2332,#2d3f5c);border-radius:8px;padding:20px;color:white;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center">
+          <div style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#c9a84c;margin-bottom:8px">Net à payer estimé</div>
+          <div style="font-size:2.2rem;font-weight:800;color:#fff"><?= number_format($paie['net_total'],2) ?> €</div>
+          <div style="font-size:0.75rem;color:rgba(255,255,255,0.6);margin-top:4px"><?= number_format($totalMin/60,2) ?>h travaillées</div>
+          <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.15);width:100%">
+            <div style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-bottom:4px">Coût employeur estimé</div>
+            <div style="font-size:1.1rem;font-weight:700;color:#f97316"><?= number_format($paie['cout_employeur'] + $paie['total_primes'],2) ?> €</div>
+          </div>
+          <div style="margin-top:8px;font-size:0.65rem;color:rgba(255,255,255,0.35)">Estimation — hors mutuelle, 13e mois, ancienneté</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
 </div>
 </div>
 
