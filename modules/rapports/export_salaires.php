@@ -32,6 +32,7 @@ $allCols = [
     'h_ferie_normal'  => 'Férié (h)',
     'h_ferie_nuit'    => 'Nuit Fér. (h)',
     'total_h'         => 'Total (h)',
+    'h_contrat'       => 'Contrat (h)',
     'brut'            => 'Brut (€)',
     'cotisations'     => 'Cotis. sal. (€)',
     'prime_panier'    => 'Panier (€)',
@@ -61,11 +62,12 @@ function salExportColVal(array $r, string $col): float {
         'prime_habillage' => $r['paie']['habillage'],
         'prime_entretien' => $r['paie']['entretien'],
         'net_estime'      => $r['paie']['net_total'],
+        'h_contrat'       => (float)($r['agent']['total_heures_contrat'] ?? 0),
         default           => 0.0,
     };
 }
 function salExportIsHeure(string $col): bool {
-    return in_array($col, ['h_normal','h_nuit','h_dimanche','h_nuit_dimanche','h_ferie_normal','h_ferie_nuit','total_h']);
+    return in_array($col, ['h_normal','h_nuit','h_dimanche','h_nuit_dimanche','h_ferie_normal','h_ferie_nuit','total_h','h_contrat']);
 }
 function salExportColCss(string $col): string {
     return match($col) {

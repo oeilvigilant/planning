@@ -247,7 +247,8 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
                 <div class="card-body py-2">
                   <?php
                   $colsH = ['h_normal'=>'Normal','h_nuit'=>'Nuit','h_dimanche'=>'Dimanche',
-                             'h_nuit_dimanche'=>'Nuit Dim.','h_ferie_normal'=>'Férié','h_ferie_nuit'=>'Nuit Fér.','total_h'=>'Total heures'];
+                             'h_nuit_dimanche'=>'Nuit Dim.','h_ferie_normal'=>'Férié','h_ferie_nuit'=>'Nuit Fér.',
+                             'total_h'=>'Total heures','h_contrat'=>'H. contrat'];
                   foreach ($colsH as $val => $lab): ?>
                   <div class="form-check mb-1">
                     <input class="form-check-input export-col" type="checkbox" name="cols[]"
@@ -326,13 +327,13 @@ function toggleAll(state) {
 }
 function presetPolesSociale() {
     toggleAll(false);
-    ['col_total_h','col_brut','col_cotisations','col_prime_panier','col_prime_habillage','col_prime_entretien','col_net_estime']
+    ['col_total_h','col_h_contrat','col_brut','col_cotisations','col_prime_panier','col_prime_habillage','col_prime_entretien','col_net_estime']
         .forEach(id => { const el = document.getElementById(id); if(el) el.checked = true; });
 }
 function presetCompta() {
     toggleAll(false);
     ['col_h_normal','col_h_nuit','col_h_dimanche','col_h_nuit_dimanche','col_h_ferie_normal','col_h_ferie_nuit',
-     'col_total_h','col_brut','col_cotisations','col_net_estime']
+     'col_total_h','col_h_contrat','col_brut','col_cotisations','col_net_estime']
         .forEach(id => { const el = document.getElementById(id); if(el) el.checked = true; });
 }
 </script>
