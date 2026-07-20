@@ -85,6 +85,7 @@ function buildContratHtml(array $d, array $p, array $a): string {
     $typeCdd    = in_array($d['type_contrat'] ?? 'CDD', ['CDD','CDD Usage','Saisonnier']);
     $isCddUsage = ($d['type_contrat'] ?? 'CDD') === 'CDD Usage';
     $totalH     = trim($d['total_heures_contrat'] ?? '');
+    $heuresMois = ($d['heures_unite'] ?? 'periode') === 'mois';
     $calcEssai  = calculerPeriodeEssai($d['date_debut'] ?? '', $d['date_fin'] ?? '');
 
     ob_start(); ?>
@@ -151,7 +152,9 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <?php if ($typeCdd): ?>
     Le présent contrat est conclu pour une durée déterminée du <strong><?= $e($d['date_debut']) ?></strong>
     au <strong><?= $e($d['date_fin']) ?></strong>
-    <?php if ($totalH): ?>
+    <?php if ($totalH && $heuresMois): ?>
+    pour un volume horaire de <strong class="highlight"><?= $e($totalH) ?> heures par mois</strong>, réparties selon le planning.
+    <?php elseif ($totalH): ?>
     pour une durée de travail globale de <strong class="highlight"><?= $e($totalH) ?> heures</strong> pour l'ensemble de la période, réparties selon le planning.
     <?php else: ?>
     .
@@ -203,7 +206,9 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
 <div class="art">
   <div class="art-title">ARTICLE N° 04 — Horaires de travail</div>
   <div class="art-body">
-    <?php if ($totalH): ?>
+    <?php if ($totalH && $heuresMois): ?>
+    La durée de travail est fixée à <strong class="highlight"><?= $e($totalH) ?> heures par mois</strong>, réparties selon le planning.
+    <?php elseif ($totalH): ?>
     La durée globale de travail est fixée à <strong class="highlight"><?= $e($totalH) ?> heures</strong> pour la durée du contrat.
     <?php endif; ?>
     <?php if (!empty($d['horaires_vacation'])): ?>
@@ -211,7 +216,7 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
     <?php else: ?>
     Les horaires de travail seront définis selon le planning communiqué au salarié. Le salarié s'engage à respecter scrupuleusement les vacations prévues.<br><br>
     <?php endif; ?>
-    En fonction des nécessités du service, le salarié pourra être amené à effectuer des heures complémentaires. Le volume total de ces heures complémentaires ne pourra en aucun cas excéder le <strong>tiers (1/3)</strong> de la durée globale fixée au présent contrat (Art L3123-28 CT).<br><br>
+    En fonction des nécessités du service, le salarié pourra être amené à effectuer des heures complémentaires. Le volume total de ces heures complémentaires ne pourra en aucun cas excéder le <strong>tiers (1/3)</strong> de la durée <?= $heuresMois ? 'mensuelle' : 'globale' ?> fixée au présent contrat (Art L3123-28 CT).<br><br>
     L'Employeur s'engage à respecter un délai de prévenance de <strong>7 jours</strong> pour toute modification du planning. En cas de circonstances exceptionnelles (remplacement d'un salarié défaillant, urgence client), ce délai pourra être réduit à moins de 3 jours ouvrés, en contrepartie d'un <strong>repos compensateur équivalent à 10%</strong> des heures effectuées sur la vacation modifiée.<br><br>
     L'amplitude horaire sur laquelle le salarié est susceptible de travailler est comprise entre 00h00 et 23h59.<br><br>
 

@@ -35,6 +35,18 @@ if (($_GET['action'] ?? '') === 'get_heures_planning') {
     exit;
 }
 
+// ── Migration colonne heures_unite (indépendante : le serveur MySQL de prod
+//    ne supporte pas la syntaxe "ADD COLUMN IF NOT EXISTS" ci-dessous) ────────
+try {
+    $hasHeuresUnite = (int)$db->query("
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contrats' AND COLUMN_NAME = 'heures_unite'
+    ")->fetchColumn();
+    if (!$hasHeuresUnite) {
+        $db->exec("ALTER TABLE contrats ADD COLUMN heures_unite VARCHAR(10) NOT NULL DEFAULT 'periode' AFTER total_heures_contrat");
+    }
+} catch (Exception $e) {}
+
 // ── Auto-migration ─────────────────────────────────────────────────────────────
 try {
     $db->exec("ALTER TABLE agents ADD COLUMN IF NOT EXISTS signature LONGTEXT NULL");
@@ -91,6 +103,7 @@ try {
         remuneration         DECIMAL(8,2),
         type_remuneration    VARCHAR(20)  DEFAULT 'Brute',
         total_heures_contrat DECIMAL(8,2) NULL,
+        heures_unite         VARCHAR(10)  DEFAULT 'periode',
         majoration_nuit      VARCHAR(5)   DEFAULT '10',
         majoration_dim       VARCHAR(5)   DEFAULT '10',
         majoration_ferie     VARCHAR(5)   DEFAULT '100',
@@ -198,15 +211,15 @@ if ($action === 'dupliquer' && $contratId) {
             agent_id, type_contrat, poste, categorie,
             date_debut, date_fin, motif_embauche, description_motif,
             periode_essai, lieu_travail, remuneration, type_remuneration,
-            total_heures_contrat, majoration_nuit, majoration_dim, majoration_ferie,
+            total_heures_contrat, heures_unite, majoration_nuit, majoration_dim, majoration_ferie,
             non_renouvelable, inclure_annexe_24h, mutuelle_choix,
             lieu_signature, date_signature
-        ) VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?)")
+        ) VALUES (?,?,?,?,NULL,NULL,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?)")
         ->execute([
             $id, $src['type_contrat'], $src['poste'], $src['categorie'],
             $src['motif_embauche'], $src['description_motif'],
             $src['periode_essai'], $src['lieu_travail'], $src['remuneration'], $src['type_remuneration'],
-            $src['majoration_nuit'], $src['majoration_dim'], $src['majoration_ferie'],
+            $src['heures_unite'] ?? 'periode', $src['majoration_nuit'], $src['majoration_dim'], $src['majoration_ferie'],
             $src['non_renouvelable'], $src['inclure_annexe_24h'], $src['mutuelle_choix'],
             $src['lieu_signature'], date('d/m/Y'),
         ]);
@@ -281,6 +294,7 @@ $defaults = [
     'description_motif'    => ($c['description_motif'] ?? '') ?: "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
     'periode_essai'        => '',
     'total_heures_contrat' => ($c['total_heures_contrat'] ?? '') ? (string)$c['total_heures_contrat'] : '',
+    'heures_unite'         => ($c['heures_unite'] ?? '') ?: 'periode',
     'horaires_vacation'    => $c['horaires_vacation'] ?? '',
     'nom_evenement'        => $c['nom_evenement'] ?? '',
     'site_affectation'     => ($c['lieu_travail'] ?? '') ?: ($a['lieu_travail'] ?? ''),
@@ -453,6 +467,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
         !empty($_POST['salaire_horaire']) ? (float)$_POST['salaire_horaire'] : null,
         $_POST['type_remuneration']    ?? 'Brute',
         !empty($_POST['total_heures_contrat']) ? (float)$_POST['total_heures_contrat'] : null,
+        ($_POST['heures_unite'] ?? 'periode') === 'mois' ? 'mois' : 'periode',
         trim($_POST['horaires_vacation'] ?? ''),
         trim($_POST['nom_evenement']   ?? ''),
         $_POST['majoration_nuit']      ?? '10',
@@ -473,7 +488,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
             motif_embauche=?, description_motif=?,
             periode_essai=?, lieu_travail=?,
             remuneration=?, type_remuneration=?,
-            total_heures_contrat=?, horaires_vacation=?, nom_evenement=?,
+            total_heures_contrat=?, heures_unite=?, horaires_vacation=?, nom_evenement=?,
             majoration_nuit=?, majoration_dim=?, majoration_ferie=?,
             non_renouvelable=?, inclure_annexe_24h=?, mutuelle_choix=?,
             lieu_signature=?, date_signature=?
@@ -487,11 +502,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['save_contrat'])) {
             motif_embauche, description_motif,
             periode_essai, lieu_travail,
             remuneration, type_remuneration,
-            total_heures_contrat, horaires_vacation, nom_evenement,
+            total_heures_contrat, heures_unite, horaires_vacation, nom_evenement,
             majoration_nuit, majoration_dim, majoration_ferie,
             non_renouvelable, inclure_annexe_24h, mutuelle_choix,
             lieu_signature, date_signature, agent_id
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
         ->execute($fields);
         $contratId = (int)$db->lastInsertId();
     }
@@ -808,14 +823,18 @@ if (empty($defaults['total_heures_contrat'])) $controleContrat[] = 'Total heures
             <input type="text" name="date_fin" id="dateFin" class="form-control form-control-sm" value="<?= h($data['date_fin']) ?>" placeholder="dd/mm/yyyy" oninput="calcPeriodeEssai(); updatePreview(); check24hCoherence()">
           </div>
           <div class="col-6">
-            <label class="form-label">Total heures contrat</label>
+            <label class="form-label" id="labelTotalHeures"><?= $data['heures_unite'] === 'mois' ? 'Heures par mois' : 'Total heures contrat' ?></label>
             <div class="input-group input-group-sm">
               <input type="number" name="total_heures_contrat" id="totalHeuresContrat" class="form-control" step="0.5" min="0" value="<?= h($data['total_heures_contrat'] ?? '') ?>" placeholder="ex: 36" oninput="updatePreview(); check24hCoherence()">
-              <span class="input-group-text">h</span>
+              <select name="heures_unite" id="heuresUnite" class="form-select" style="max-width:100px;flex:0 0 auto" onchange="updateHeuresUnite()" title="Unité du volume horaire">
+                <option value="periode" <?= $data['heures_unite']==='periode'?'selected':'' ?>>h / période</option>
+                <option value="mois"    <?= $data['heures_unite']==='mois'   ?'selected':'' ?>>h / mois</option>
+              </select>
               <button type="button" class="btn btn-outline-secondary" id="btnCalcHeures" onclick="calcHeuresPlanning()" title="Calculer depuis le planning">
                 <i class="fa fa-rotate" id="calcHeuresIcon"></i>
               </button>
             </div>
+            <div class="form-text">« h / mois » calcule un volume mensuel récurrent (utile en CDI ou contrat long) plutôt qu'un total figé pour toute la période.</div>
           </div>
           <div class="col-6">
             <label class="form-label">Période d'essai <small class="text-muted">(auto)</small></label>
@@ -1129,7 +1148,15 @@ function calcHeuresPlanning() {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.ok && data.total_heures > 0) {
-                document.getElementById('totalHeuresContrat').value = data.total_heures;
+                var unite = document.getElementById('heuresUnite').value;
+                var val   = data.total_heures;
+                if (unite === 'mois') {
+                    var d1 = parseDate(debut), d2 = parseDate(fin);
+                    var nbJours = (d1 && d2 && d2 > d1) ? (Math.round((d2 - d1) / 86400000) + 1) : 30.44;
+                    var nbMois  = Math.max(nbJours / 30.44, 1 / 30.44);
+                    val = Math.round((val / nbMois) * 100) / 100;
+                }
+                document.getElementById('totalHeuresContrat').value = val;
                 updatePreview(); check24hCoherence();
                 icon.className = 'fa fa-check text-success';
                 setTimeout(function() { icon.className = 'fa fa-rotate'; }, 2000);
@@ -1142,19 +1169,33 @@ function calcHeuresPlanning() {
         .catch(function() { icon.className = 'fa fa-rotate'; btn.disabled = false; });
 }
 
+function updateHeuresUnite() {
+    var unite = document.getElementById('heuresUnite').value;
+    document.getElementById('labelTotalHeures').textContent = unite === 'mois' ? 'Heures par mois' : 'Total heures contrat';
+    updatePreview();
+    check24hCoherence();
+}
+
 function check24hCoherence() {
     var totalH  = parseFloat(document.querySelector('[name="total_heures_contrat"]').value) || 0;
+    var unite   = document.getElementById('heuresUnite').value;
     var debut   = document.getElementById('dateDebut').value;
     var fin     = document.getElementById('dateFin').value;
     var inclure = document.querySelector('[name="inclure_annexe_24h"]').value;
     var el      = document.getElementById('alert24h');
     if (!el) return;
     el.innerHTML = '';
-    if (!totalH || !debut || !fin) return;
-    var d1 = parseDate(debut), d2 = parseDate(fin);
-    if (!d1 || !d2 || d2 <= d1) return;
-    var nbJours     = Math.round((d2 - d1) / 86400000) + 1;
-    var hParSemaine = totalH / (nbJours / 7);
+    if (!totalH) return;
+    var hParSemaine;
+    if (unite === 'mois') {
+        hParSemaine = totalH * 12 / 52;
+    } else {
+        if (!debut || !fin) return;
+        var d1 = parseDate(debut), d2 = parseDate(fin);
+        if (!d1 || !d2 || d2 <= d1) return;
+        var nbJours = Math.round((d2 - d1) / 86400000) + 1;
+        hParSemaine = totalH / (nbJours / 7);
+    }
     if (hParSemaine >= 24 && inclure === '1') {
         el.innerHTML = '<div class="alert alert-warning py-1 px-2 mb-0 d-flex align-items-center gap-2" style="font-size:0.78rem">'
             + '<i class="fa fa-triangle-exclamation"></i>'

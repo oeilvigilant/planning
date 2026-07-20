@@ -52,6 +52,7 @@ $defaults = [
     'description_motif'    => ($c['description_motif'] ?: '') ?: "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
     'periode_essai'        => '',
     'total_heures_contrat' => $c['total_heures_contrat'] ? (string)$c['total_heures_contrat'] : ($a['total_heures_contrat'] ? (string)$a['total_heures_contrat'] : ''),
+    'heures_unite'         => $c['heures_unite'] ?? 'periode',
     'horaires_vacation'    => $c['horaires_vacation'] ?? '',
     'nom_evenement'        => $c['nom_evenement'] ?? '',
     'site_affectation'     => $c['lieu_travail'] ?? ($a['lieu_travail'] ?? ''),

@@ -651,7 +651,7 @@ if (canDo('agents','delete')) {
                 <span class="text-muted fw-normal"><?= h($debut) ?> → <?= h($fin) ?></span>
               </div>
               <div style="font-size:0.72rem;color:#9ca3af">
-                <?= $ct['total_heures_contrat'] ? h(number_format($ct['total_heures_contrat'],2)).'h' : '' ?>
+                <?= $ct['total_heures_contrat'] ? h(number_format($ct['total_heures_contrat'],2)).'h'.(($ct['heures_unite'] ?? 'periode') === 'mois' ? '/mois' : '') : '' ?>
                 <?= !empty($ct['remuneration']) ? ' · '.number_format($ct['remuneration'],2).' €/h' : '' ?>
               </div>
             </div>
