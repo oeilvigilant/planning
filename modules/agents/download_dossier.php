@@ -32,57 +32,7 @@ try {
     }
 } catch (Exception $e) { $c = []; }
 
-$defaults = [
-    'civilite'             => 'M.',
-    'nom_prenom'           => strtoupper($a['nom']) . ' ' . $a['prenom'],
-    'adresse'              => trim(($a['adresse'] ?? '') . ', ' . ($a['cp'] ?? '') . ' ' . ($a['ville'] ?? ''), ', '),
-    'date_naissance'       => $a['date_naissance'] ? date('d/m/Y', strtotime($a['date_naissance'])) : '',
-    'lieu_naissance'       => $a['lieu_naissance'] ?? '',
-    'nationalite'          => $a['nationalite'] ?? '',
-    'num_secu'             => $a['num_secu'] ?? '',
-    'num_cnaps'            => $a['num_autorisation_cnaps'] ?? '',
-    'type_contrat'         => $c['type_contrat'] ?? ($a['type_contrat'] ?? 'CDD'),
-    'poste'                => $c['poste'] ?? ($a['poste'] ?? 'Agent de sécurité'),
-    'categorie'            => ($c['categorie'] ?: '') ?: 'Employé - Niveau III - Échelon 2 - Coefficient 140',
-    'date_debut'           => $c['date_debut'] ? date('d/m/Y', strtotime($c['date_debut'])) : ($a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : ''),
-    'date_fin'             => $c['date_fin']   ? date('d/m/Y', strtotime($c['date_fin']))   : ($a['date_fin_contrat']   ? date('d/m/Y', strtotime($a['date_fin_contrat']))   : ''),
-    'motif_cdd'            => $c['motif_embauche'] ?: ($a['motif_embauche'] === 'Accroissement activité'
-                              ? "accroissement temporaire d'activité"
-                              : ($a['motif_embauche'] ?? "accroissement temporaire d'activité")),
-    'description_motif'    => ($c['description_motif'] ?: '') ?: "lié à une demande urgente et imprévisible (Article L1242-2-2° du Code du travail).",
-    'periode_essai'        => '',
-    'total_heures_contrat' => $c['total_heures_contrat'] ? (string)$c['total_heures_contrat'] : ($a['total_heures_contrat'] ? (string)$a['total_heures_contrat'] : ''),
-    'heures_unite'         => $c['heures_unite'] ?? 'periode',
-    'horaires_vacation'    => $c['horaires_vacation'] ?? '',
-    'nom_evenement'        => $c['nom_evenement'] ?? '',
-    'site_affectation'     => $c['lieu_travail'] ?? ($a['lieu_travail'] ?? ''),
-    'salaire_horaire'      => $c['remuneration'] ? number_format((float)$c['remuneration'], 2, '.', '') : ($a['remuneration'] ? number_format((float)$a['remuneration'], 2, '.', '') : '12.70'),
-    'type_remuneration'    => $c['type_remuneration'] ?? ($a['type_remuneration'] ?? 'Brute'),
-    'majoration_nuit'      => ($c['majoration_nuit']  ?: '') ?: '10',
-    'majoration_dim'       => ($c['majoration_dim']   ?: '') ?: '10',
-    'majoration_ferie'     => ($c['majoration_ferie'] ?: '') ?: '100',
-    'date_signature'       => ($c['date_signature'] ?: '') ?: ($a['date_signature'] ?? date('d/m/Y')),
-    'lieu_signature'       => ($c['lieu_signature']  ?: '') ?: ($a['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris')),
-    'non_renouvelable'     => isset($c['non_renouvelable']) ? (string)(int)$c['non_renouvelable'] : '1',
-    'inclure_annexe_24h'   => isset($c['inclure_annexe_24h']) ? (string)(int)$c['inclure_annexe_24h'] : (string)($a['inclure_annexe_24h'] ?? '1'),
-    'mutuelle_choix'       => $c['mutuelle_choix'] ?? ($a['mutuelle_choix'] ?? 'dispense'),
-];
-
-$defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
-
-// Auto-détecter dates depuis le planning si absentes
-if (!$defaults['date_debut'] || !$defaults['date_fin']) {
-    $stP = $db->prepare("SELECT MIN(pl.date_travail) AS min_date, MAX(pl.date_travail) AS max_date
-        FROM planning_lignes pl JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
-        WHERE pl.agent_id = ?");
-    $stP->execute([$id]);
-    $pr = $stP->fetch();
-    if ($pr && $pr['min_date']) {
-        if (!$defaults['date_debut']) $defaults['date_debut'] = date('d/m/Y', strtotime($pr['min_date']));
-        if (!$defaults['date_fin'])   $defaults['date_fin']   = date('d/m/Y', strtotime($pr['max_date']));
-        $defaults['periode_essai'] = calculerPeriodeEssai($defaults['date_debut'], $defaults['date_fin']);
-    }
-}
+$defaults = buildContratDefaults($db, $a, $c, $params, $id, true);
 
 // Pré-calculer heures contrat
 if (empty($defaults['total_heures_contrat']) && $defaults['date_debut'] && $defaults['date_fin']) {
