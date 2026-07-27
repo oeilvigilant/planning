@@ -550,6 +550,53 @@ function generateToken(): string {
     return bin2hex(random_bytes(32));
 }
 
+/**
+ * Calcule les heures de contrat applicables à un mois calendaire donné.
+ * - Contrat au forfait mensuel (heures_unite='mois') : le "mois complet" est
+ *   le taux mensuel brut du contrat ; le "mois prévu" est ce taux proratisé
+ *   selon le nombre de jours du mois réellement couverts par le contrat.
+ * - Contrat sur la période totale (heures_unite='periode') : on dérive un
+ *   taux journalier moyen (total_heures_contrat / nb jours du contrat) pour
+ *   obtenir les mêmes deux valeurs.
+ * $contrat doit contenir : total_heures_contrat, heures_unite, date_debut, date_fin (Y-m-d).
+ * Retourne ['periode'=>float, 'mois_complet'=>float, 'mois_prorata'=>float].
+ */
+function calculerHeuresContratMois(array $contrat, int $mois, int $annee): array {
+    $totalHeures = (float)($contrat['total_heures_contrat'] ?? 0);
+    $unite       = $contrat['heures_unite'] ?? 'periode';
+    $dateDebut   = $contrat['date_debut'] ?? null;
+    $dateFin     = $contrat['date_fin']   ?? null;
+
+    $joursMois = (int)date('t', mktime(0, 0, 0, $mois, 1, $annee));
+    $moisDebut = sprintf('%04d-%02d-01', $annee, $mois);
+    $moisFin   = sprintf('%04d-%02d-%02d', $annee, $mois, $joursMois);
+
+    $joursCouverts = 0;
+    if ($dateDebut && $dateFin) {
+        $ovDebut = max($dateDebut, $moisDebut);
+        $ovFin   = min($dateFin, $moisFin);
+        if ($ovDebut <= $ovFin) {
+            $joursCouverts = (int)((strtotime($ovFin) - strtotime($ovDebut)) / 86400) + 1;
+        }
+    }
+
+    if ($unite === 'mois') {
+        $moisComplet = $totalHeures;
+        $moisProrata = ($dateDebut && $dateFin) ? round($totalHeures * $joursCouverts / $joursMois, 2) : $totalHeures;
+    } else {
+        $joursContrat   = ($dateDebut && $dateFin) ? (int)((strtotime($dateFin) - strtotime($dateDebut)) / 86400) + 1 : 0;
+        $tauxJournalier = $joursContrat > 0 ? $totalHeures / $joursContrat : 0;
+        $moisComplet    = round($tauxJournalier * $joursMois, 2);
+        $moisProrata    = round($tauxJournalier * $joursCouverts, 2);
+    }
+
+    return [
+        'periode'      => $totalHeures,
+        'mois_complet' => $moisComplet,
+        'mois_prorata' => $moisProrata,
+    ];
+}
+
 function flash(string $type, string $message): void {
     $_SESSION['flash'][] = ['type' => $type, 'message' => $message];
 }

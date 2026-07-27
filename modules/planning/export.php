@@ -38,22 +38,9 @@ $showPlage         = $hoursDisplay === 'none'
     ? (($_GET['show_plage'] ?? '0') === '1')
     : (($_GET['show_plage'] ?? '1') !== '0');
 $showHeuresContrat = !empty($_GET['heures_contrat']);
-
-// Charger les heures contrat par agent si demandé
-$heuresContratMap = [];
-if ($showHeuresContrat) {
-    $agentIdsList = array_column($agents, 'id');
-    if ($agentIdsList) {
-        $ph = implode(',', array_fill(0, count($agentIdsList), '?'));
-        $stC = $db->prepare("SELECT agent_id, total_heures_contrat FROM contrats WHERE agent_id IN ($ph) AND statut='actif' ORDER BY created_at DESC");
-        $stC->execute($agentIdsList);
-        foreach ($stC->fetchAll() as $cr) {
-            if (!isset($heuresContratMap[$cr['agent_id']])) {
-                $heuresContratMap[$cr['agent_id']] = (float)$cr['total_heures_contrat'];
-            }
-        }
-    }
-}
+$heuresContratMode = in_array($_GET['heures_contrat_mode'] ?? '', ['mois_complet', 'mois_prorata'], true)
+    ? $_GET['heures_contrat_mode'] : 'periode';
+$origType          = $type; // capturé avant la conversion mission → week ci-dessous
 
 $shifts = [
     'J'  => ['label'=>'Journée', 'debut'=>'07:00', 'fin'=>'19:00', 'color'=>'#16a34a'],
@@ -197,6 +184,31 @@ if ($type === 'week') {
     $fileLabel    = sprintf('%02d', $mois) . '_' . $annee . '_v' . $version['version'];
 }
 
+// ── Charger les heures contrat par agent si demandé (après résolution mois/année) ──
+$heuresContratMap = [];
+if ($showHeuresContrat) {
+    $agentIdsList = array_column($agents, 'id');
+    if ($agentIdsList) {
+        $ph = implode(',', array_fill(0, count($agentIdsList), '?'));
+        $stC = $db->prepare("SELECT agent_id, total_heures_contrat, heures_unite, date_debut, date_fin FROM contrats WHERE agent_id IN ($ph) AND statut='actif' ORDER BY created_at DESC");
+        $stC->execute($agentIdsList);
+        $contratsParAgent = [];
+        foreach ($stC->fetchAll() as $cr) {
+            if (!isset($contratsParAgent[$cr['agent_id']])) $contratsParAgent[$cr['agent_id']] = $cr;
+        }
+        foreach ($contratsParAgent as $agentId => $cr) {
+            if ($heuresContratMode !== 'periode' && $origType === 'month') {
+                $heuresContratMap[$agentId] = calculerHeuresContratMois($cr, $mois, $annee)[$heuresContratMode];
+            } else {
+                $heuresContratMap[$agentId] = (float)$cr['total_heures_contrat'];
+            }
+        }
+    }
+}
+$heuresContratLabel = 'Contrat';
+if ($showHeuresContrat && $heuresContratMode === 'mois_complet') $heuresContratLabel = 'Contrat (mois complet)';
+elseif ($showHeuresContrat && $heuresContratMode === 'mois_prorata') $heuresContratLabel = 'Contrat (mois prévu)';
+
 // ── Export CSV/Excel ──────────────────────────────────────────────────────────
 if ($format === 'excel') {
     header('Content-Type: text/csv; charset=utf-8');
@@ -336,7 +348,7 @@ if ($type === 'week') {
     }
 }
 $html .= '<th class="total-col">Total planifié</th>';
-if ($showHeuresContrat) $html .= '<th class="total-col" style="background:#fef9ec;color:#92400e">Contrat</th>';
+if ($showHeuresContrat) $html .= '<th class="total-col" style="background:#fef9ec;color:#92400e">' . htmlspecialchars($heuresContratLabel) . '</th>';
 $html .= '</tr></thead><tbody>';
 
 $prevSexeExp = null;

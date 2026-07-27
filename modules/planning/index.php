@@ -1176,7 +1176,22 @@ if ($vue === 'semaine') {
           </div>
           <div class="form-check mb-1">
             <input class="form-check-input" type="checkbox" id="exportHeuresContrat">
-            <label class="form-check-label" style="font-size:0.82rem" for="exportHeuresContrat">Afficher les heures totales du contrat <span style="color:#92400e">(colonne dorée)</span></label>
+            <label class="form-check-label" style="font-size:0.82rem" for="exportHeuresContrat">Afficher les heures du contrat <span style="color:#92400e">(colonne dorée)</span></label>
+          </div>
+          <div id="exportHeuresContratModeRow" style="display:none;padding-left:24px;margin-top:2px;margin-bottom:6px">
+            <div class="form-check mb-1">
+              <input class="form-check-input" type="radio" name="exportHeuresContratMode" id="ehcPeriode" value="periode" checked>
+              <label class="form-check-label" style="font-size:0.8rem" for="ehcPeriode">Total période <span style="color:#6b7280">(valeur du contrat)</span></label>
+            </div>
+            <div class="form-check mb-1">
+              <input class="form-check-input" type="radio" name="exportHeuresContratMode" id="ehcMoisComplet" value="mois_complet">
+              <label class="form-check-label" style="font-size:0.8rem" for="ehcMoisComplet">Mois complet <span style="color:#6b7280">(taux mensuel plein)</span></label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="exportHeuresContratMode" id="ehcMoisProrata" value="mois_prorata">
+              <label class="form-check-label" style="font-size:0.8rem" for="ehcMoisProrata">Mois prévu selon contrat <span style="color:#6b7280">(prorata selon les dates réelles)</span></label>
+            </div>
+            <div class="form-text" style="font-size:0.72rem">Disponible uniquement pour un export mensuel (pas semaine).</div>
           </div>
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="exportShowFooter" checked>
@@ -1582,7 +1597,17 @@ if (btnExportEl) {
         document.getElementById('exportAllAgents').checked = true;
         document.getElementById('exportAgentList').style.display = 'none';
         document.querySelector('input[name="exportFormat"][value="pdf"]').checked = true;
+        document.getElementById('exportHeuresContratModeRow').style.display =
+            (document.getElementById('exportHeuresContrat').checked && exportVue === 'mois') ? '' : 'none';
         exportModal.show();
+    });
+}
+
+var exportHeuresContratCb = document.getElementById('exportHeuresContrat');
+if (exportHeuresContratCb) {
+    exportHeuresContratCb.addEventListener('change', function() {
+        document.getElementById('exportHeuresContratModeRow').style.display =
+            (this.checked && exportVue === 'mois') ? '' : 'none';
     });
 }
 
@@ -1650,7 +1675,13 @@ window.doExport = function() {
         url += '&hours_pct=' + pct;
     }
     if (!document.getElementById('exportShowPlage').checked) url += '&show_plage=0';
-    if (document.getElementById('exportHeuresContrat').checked) url += '&heures_contrat=1';
+    if (document.getElementById('exportHeuresContrat').checked) {
+        url += '&heures_contrat=1';
+        if (exportVue === 'mois') {
+            var hcMode = document.querySelector('input[name="exportHeuresContratMode"]:checked').value;
+            if (hcMode !== 'periode') url += '&heures_contrat_mode=' + hcMode;
+        }
+    }
     exportModal.hide();
     window.location.href = url;
 };

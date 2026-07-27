@@ -149,21 +149,32 @@ $showPlage         = $hoursDisplay === 'none'
     ? (($_GET['show_plage'] ?? '0') === '1')
     : (($_GET['show_plage'] ?? '1') !== '0');
 $showHeuresContrat = !empty($_GET['heures_contrat']);
+$heuresContratMode = in_array($_GET['heures_contrat_mode'] ?? '', ['mois_complet', 'mois_prorata'], true)
+    ? $_GET['heures_contrat_mode'] : 'periode';
 
 $heuresContratMap = [];
 if ($showHeuresContrat) {
     $allIds = array_column($agents, 'id');
     if ($allIds) {
         $ph  = implode(',', array_fill(0, count($allIds), '?'));
-        $stC = $db->prepare("SELECT agent_id, total_heures_contrat FROM contrats WHERE agent_id IN ($ph) AND statut='actif' ORDER BY created_at DESC");
+        $stC = $db->prepare("SELECT agent_id, total_heures_contrat, heures_unite, date_debut, date_fin FROM contrats WHERE agent_id IN ($ph) AND statut='actif' ORDER BY created_at DESC");
         $stC->execute($allIds);
+        $contratsParAgent = [];
         foreach ($stC->fetchAll() as $cr) {
-            if (!isset($heuresContratMap[$cr['agent_id']])) {
-                $heuresContratMap[$cr['agent_id']] = (float)$cr['total_heures_contrat'];
+            if (!isset($contratsParAgent[$cr['agent_id']])) $contratsParAgent[$cr['agent_id']] = $cr;
+        }
+        foreach ($contratsParAgent as $agentId => $cr) {
+            if ($heuresContratMode !== 'periode' && $type !== 'week') {
+                $heuresContratMap[$agentId] = calculerHeuresContratMois($cr, $mois, $annee)[$heuresContratMode];
+            } else {
+                $heuresContratMap[$agentId] = (float)$cr['total_heures_contrat'];
             }
         }
     }
 }
+$heuresContratLabel = 'Contrat';
+if ($showHeuresContrat && $heuresContratMode === 'mois_complet') $heuresContratLabel = 'Contrat (mois complet)';
+elseif ($showHeuresContrat && $heuresContratMode === 'mois_prorata') $heuresContratLabel = 'Contrat (mois prévu)';
 
 // ── CSS partagé ───────────────────────────────────────────────────────────────
 function buildPdfCss(string $marginBottom): string {
@@ -192,7 +203,7 @@ tfoot td { background: #f4f6fa; font-weight: 700; border-top: 2px solid #c9a84c;
 </style></head><body>';
 }
 
-function buildAgentPdf(array $ag, array $planningData, array $dates, array $feries, array $shifts, string $nomsJs, string $type, int $jourDebut, int $jourFin, int $mois, int $annee, string $periodeLabel, string $entreprise, bool $showFooter, string $marginBottom, bool $showHours = true, bool $showPlage = true, bool $showHeuresContrat = false, float $heuresContrat = 0): string {
+function buildAgentPdf(array $ag, array $planningData, array $dates, array $feries, array $shifts, string $nomsJs, string $type, int $jourDebut, int $jourFin, int $mois, int $annee, string $periodeLabel, string $entreprise, bool $showFooter, string $marginBottom, bool $showHours = true, bool $showPlage = true, bool $showHeuresContrat = false, float $heuresContrat = 0, string $heuresContratLabel = 'Contrat'): string {
     $nomsJsArr = explode(',', $nomsJs);
     $html = buildPdfCss($marginBottom);
 
@@ -232,7 +243,7 @@ function buildAgentPdf(array $ag, array $planningData, array $dates, array $feri
         }
     }
     $html .= '<th class="total-col">Total planifié</th>';
-    if ($showHeuresContrat) $html .= '<th class="total-col" style="background:#fef9ec;color:#92400e">Contrat</th>';
+    if ($showHeuresContrat) $html .= '<th class="total-col" style="background:#fef9ec;color:#92400e">' . htmlspecialchars($heuresContratLabel) . '</th>';
     $html .= '</tr></thead><tbody>';
 
     $totalMin = 0;
@@ -385,7 +396,8 @@ foreach ($agents as $ag) {
         $mois ?? 0, $annee,
         $periodeLabel, $entreprise, $showFooter, $marginBottom,
         $showHours, $showPlage, $showHeuresContrat,
-        $heuresContratMap[$ag['id']] ?? 0
+        $heuresContratMap[$ag['id']] ?? 0,
+        $heuresContratLabel
     );
 
     $dompdf = new \Dompdf\Dompdf($options);
