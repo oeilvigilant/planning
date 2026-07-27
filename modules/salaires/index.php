@@ -20,6 +20,18 @@ $version = $stmtV->fetch();
 $taux   = getTauxHoraires();
 $agents = $db->query("SELECT id,nom,prenom,matricule,poste,remuneration,type_remuneration FROM agents WHERE actif=1 ORDER BY nom,prenom")->fetchAll();
 
+// Charger le contrat actif de chaque agent (pour la colonne info "H. contrat")
+$contratsMap = [];
+$agentIdsAll = array_column($agents, 'id');
+if ($agentIdsAll) {
+    $ph = implode(',', array_fill(0, count($agentIdsAll), '?'));
+    $stCtr = $db->prepare("SELECT agent_id, total_heures_contrat, heures_unite, date_debut, date_fin FROM contrats WHERE agent_id IN ($ph) AND statut='actif' ORDER BY created_at DESC");
+    $stCtr->execute($agentIdsAll);
+    foreach ($stCtr->fetchAll() as $cr) {
+        if (!isset($contratsMap[$cr['agent_id']])) $contratsMap[$cr['agent_id']] = $cr;
+    }
+}
+
 // Calculer les totaux par agent
 $resultats = [];
 if ($version) {
@@ -54,12 +66,24 @@ if ($version) {
 
         if ($totalHeures > 0) {
             $paie = calculerPaie($brut, (int)$mins['nb_vacations_panier']);
+
+            $contratInfo = null;
+            if (isset($contratsMap[$ag['id']])) {
+                $cv = calculerHeuresContratMois($contratsMap[$ag['id']], $mois, $annee);
+                $contratInfo = [
+                    'mois_prorata' => $cv['mois_prorata'],
+                    'mois_complet' => $cv['mois_complet'],
+                    'heures_unite' => $contratsMap[$ag['id']]['heures_unite'] ?? 'periode',
+                ];
+            }
+
             $resultats[$ag['id']] = [
                 'agent'       => $ag,
                 'heures'      => $heures,
                 'total_heures'=> $totalHeures,
                 'salaire'     => $brut,
                 'paie'        => $paie,
+                'contrat'     => $contratInfo,
             ];
         }
     }
@@ -145,6 +169,7 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
           <th class="text-center" style="color:<?= $typeCols[$k] ?>"><?= $l ?><br><small style="font-weight:normal;font-size:0.68rem"><?= number_format($taux[$k]??0,2) ?>€</small></th>
           <?php endforeach; ?>
           <th class="text-center">Total h.</th>
+          <th class="text-center" style="color:#92400e;background:#fef9ec" title="Heures contractuelles prévues pour ce mois, au prorata des dates du contrat">H. contrat</th>
           <th class="text-center" style="color:#374151">Brut</th>
           <th class="text-center" style="color:#dc2626">Cotis.</th>
           <th class="text-center" style="color:#8b5cf6">Primes</th>
@@ -165,6 +190,15 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
         </td>
         <?php endforeach; ?>
         <td class="text-center fw-700"><?= number_format($r['total_heures'],2) ?>h</td>
+        <td class="text-center" style="color:#92400e;background:#fef9ec;font-size:0.83rem">
+          <?php if ($r['contrat']): ?>
+          <span title="Mois complet (taux plein du contrat) : <?= number_format($r['contrat']['mois_complet'],2) ?>h<?= $r['contrat']['heures_unite']==='mois' ? ' / mois' : ' (période)' ?>">
+            <?= number_format($r['contrat']['mois_prorata'],1) ?>h
+          </span>
+          <?php else: ?>
+          —
+          <?php endif; ?>
+        </td>
         <td class="text-center fw-600" style="color:#374151"><?= number_format($r['paie']['brut'],2) ?> €</td>
         <td class="text-center" style="color:#dc2626;font-size:0.82rem">
           <span title="Cotisations salariales">−<?= number_format($r['paie']['cotisations'],2) ?> €</span>
@@ -194,6 +228,10 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
           </td>
           <?php endforeach; ?>
           <td class="text-center fw-700"><?= number_format(array_sum(array_column($resultats,'total_heures')),2) ?>h</td>
+          <td class="text-center fw-700" style="color:#92400e;background:#fef9ec">
+            <?php $totContrat = array_sum(array_map(fn($r) => $r['contrat']['mois_prorata'] ?? 0, $resultats)); ?>
+            <?= $totContrat > 0 ? number_format($totContrat,1).'h' : '—' ?>
+          </td>
           <td class="text-center fw-700"><?= number_format($totalSalaires,2) ?> €</td>
           <td class="text-center fw-700" style="color:#dc2626">−<?= number_format(array_sum(array_map(fn($r)=>$r['paie']['cotisations'],$resultats)),2) ?> €</td>
           <td class="text-center fw-700" style="color:#8b5cf6">+<?= number_format(array_sum(array_map(fn($r)=>$r['paie']['total_primes'],$resultats)),2) ?> €</td>
