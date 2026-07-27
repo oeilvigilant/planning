@@ -23,22 +23,35 @@ $params    = getAllParams();
 $primesCfg = getPrimesConfig();
 $minPanier = (int)round($primesCfg['panier_min_heures'] * 60);
 
+// Charger le contrat actif de chaque agent (pour "Contrat (h)" et le détail mensuel complet)
+$contratsMap = [];
+$agentIdsAll = array_column($agents, 'id');
+if ($agentIdsAll) {
+    $ph = implode(',', array_fill(0, count($agentIdsAll), '?'));
+    $stCtr = $db->prepare("SELECT agent_id, total_heures_contrat, heures_unite, date_debut, date_fin FROM contrats WHERE agent_id IN ($ph) AND statut='actif' ORDER BY created_at DESC");
+    $stCtr->execute($agentIdsAll);
+    foreach ($stCtr->fetchAll() as $cr) {
+        if (!isset($contratsMap[$cr['agent_id']])) $contratsMap[$cr['agent_id']] = $cr;
+    }
+}
+
 // Colonnes disponibles (ordre d'affichage)
 $allCols = [
-    'h_normal'        => 'Normal (h)',
-    'h_nuit'          => 'Nuit (h)',
-    'h_dimanche'      => 'Dimanche (h)',
-    'h_nuit_dimanche' => 'Nuit Dim. (h)',
-    'h_ferie_normal'  => 'Férié (h)',
-    'h_ferie_nuit'    => 'Nuit Fér. (h)',
-    'total_h'         => 'Total (h)',
-    'h_contrat'       => 'Contrat (h)',
-    'brut'            => 'Brut (€)',
-    'cotisations'     => 'Cotis. sal. (€)',
-    'prime_panier'    => 'Panier (€)',
-    'prime_habillage' => 'Habillage (€)',
-    'prime_entretien' => 'Entretien (€)',
-    'net_estime'      => 'Net estimé (€)',
+    'h_normal'             => 'Normal (h)',
+    'h_nuit'               => 'Nuit (h)',
+    'h_dimanche'           => 'Dimanche (h)',
+    'h_nuit_dimanche'      => 'Nuit Dim. (h)',
+    'h_ferie_normal'       => 'Férié (h)',
+    'h_ferie_nuit'         => 'Nuit Fér. (h)',
+    'total_h'              => 'Total (h)',
+    'h_contrat'            => 'Contrat (h)',
+    'detail_contrat_mois'  => 'Détail contrat complet (h/mois prévu)',
+    'brut'                 => 'Brut (€)',
+    'cotisations'          => 'Cotis. sal. (€)',
+    'prime_panier'         => 'Panier (€)',
+    'prime_habillage'      => 'Habillage (€)',
+    'prime_entretien'      => 'Entretien (€)',
+    'net_estime'           => 'Net estimé (€)',
 ];
 
 // Colonnes actives (intersection ordonnée avec la définition)
@@ -48,36 +61,56 @@ $requestedCols = (isset($_GET['cols']) && is_array($_GET['cols']))
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function salExportColVal(array $r, string $col): float {
-    return match($col) {
-        'h_normal'        => $r['heures']['normal'],
-        'h_nuit'          => $r['heures']['nuit'],
-        'h_dimanche'      => $r['heures']['dimanche'],
-        'h_nuit_dimanche' => $r['heures']['nuit_dimanche'],
-        'h_ferie_normal'  => $r['heures']['ferie_normal'],
-        'h_ferie_nuit'    => $r['heures']['ferie_nuit'],
-        'total_h'         => $r['total'],
-        'brut'            => $r['paie']['brut'],
-        'cotisations'     => $r['paie']['cotisations'],
-        'prime_panier'    => $r['paie']['panier'],
-        'prime_habillage' => $r['paie']['habillage'],
-        'prime_entretien' => $r['paie']['entretien'],
-        'net_estime'      => $r['paie']['net_total'],
-        'h_contrat'       => (float)($r['agent']['total_heures_contrat'] ?? 0),
-        default           => 0.0,
-    };
+    switch ($col) {
+        case 'h_normal':        return $r['heures']['normal'];
+        case 'h_nuit':          return $r['heures']['nuit'];
+        case 'h_dimanche':      return $r['heures']['dimanche'];
+        case 'h_nuit_dimanche': return $r['heures']['nuit_dimanche'];
+        case 'h_ferie_normal':  return $r['heures']['ferie_normal'];
+        case 'h_ferie_nuit':    return $r['heures']['ferie_nuit'];
+        case 'total_h':         return $r['total'];
+        case 'brut':            return $r['paie']['brut'];
+        case 'cotisations':     return $r['paie']['cotisations'];
+        case 'prime_panier':    return $r['paie']['panier'];
+        case 'prime_habillage': return $r['paie']['habillage'];
+        case 'prime_entretien': return $r['paie']['entretien'];
+        case 'net_estime':      return $r['paie']['net_total'];
+        case 'h_contrat':       return (float)($r['agent']['total_heures_contrat'] ?? 0);
+        default:                return 0.0;
+    }
 }
 function salExportIsHeure(string $col): bool {
     return in_array($col, ['h_normal','h_nuit','h_dimanche','h_nuit_dimanche','h_ferie_normal','h_ferie_nuit','total_h','h_contrat']);
 }
+function salExportIsTexte(string $col): bool {
+    return $col === 'detail_contrat_mois';
+}
+// Détail complet du contrat : heures prévues, mois par mois, sur toute la durée du contrat
+function salExportDetailContratMois(?array $contrat): string {
+    if (!$contrat || empty($contrat['date_debut']) || empty($contrat['date_fin'])) return '—';
+    $moisNoms = ['','Janv.','Févr.','Mars','Avr.','Mai','Juin','Juil.','Août','Sept.','Oct.','Nov.','Déc.'];
+    $cur = new DateTime(substr($contrat['date_debut'], 0, 7) . '-01');
+    $end = new DateTime(substr($contrat['date_fin'],   0, 7) . '-01');
+    $parts = [];
+    while ($cur <= $end) {
+        $m = (int)$cur->format('n');
+        $y = (int)$cur->format('Y');
+        $v = calculerHeuresContratMois($contrat, $m, $y);
+        $parts[] = $moisNoms[$m] . ' ' . $y . ' : ' . number_format($v['mois_prorata'], 1) . 'h';
+        $cur->modify('+1 month');
+    }
+    return implode(' · ', $parts);
+}
 function salExportColCss(string $col): string {
-    return match($col) {
-        'net_estime'                              => 'col-net',
-        'cotisations'                             => 'col-cotis',
-        'brut'                                    => 'col-brut',
-        'prime_panier','prime_habillage',
-        'prime_entretien'                         => 'col-prime',
-        default                                   => '',
-    };
+    switch ($col) {
+        case 'net_estime':      return 'col-net';
+        case 'cotisations':     return 'col-cotis';
+        case 'brut':            return 'col-brut';
+        case 'prime_panier':
+        case 'prime_habillage':
+        case 'prime_entretien': return 'col-prime';
+        default:                return '';
+    }
 }
 
 // ─── Résultats avec paie ────────────────────────────────────────────────────
@@ -106,7 +139,7 @@ foreach ($agents as $ag) {
         foreach ($heures as $t => $h) $sal += $h * ($taux[$t] ?? 0);
         $brut = round($sal, 2);
         $paie = calculerPaie($brut, (int)$mins['nb_vacations_panier']);
-        $resultats[] = ['agent' => $ag, 'heures' => $heures, 'total' => $tot, 'salaire' => $brut, 'paie' => $paie];
+        $resultats[] = ['agent' => $ag, 'heures' => $heures, 'total' => $tot, 'salaire' => $brut, 'paie' => $paie, 'contrat' => $contratsMap[$ag['id']] ?? null];
     }
 }
 
@@ -123,7 +156,9 @@ if ($format === 'csv' || $format === 'excel') {
         $ag  = $r['agent'];
         $row = [$ag['prenom'] . ' ' . $ag['nom'], $ag['matricule'] ?? ''];
         foreach ($requestedCols as $col) {
-            $row[] = number_format(salExportColVal($r, $col), 2, '.', '');
+            $row[] = salExportIsTexte($col)
+                ? salExportDetailContratMois($r['contrat'])
+                : number_format(salExportColVal($r, $col), 2, '.', '');
         }
         fputcsv($f, $row, ';');
     }
@@ -132,7 +167,7 @@ if ($format === 'csv' || $format === 'excel') {
 }
 
 // ─── PDF ────────────────────────────────────────────────────────────────────
-$orientation = count($requestedCols) > 7 ? 'landscape' : 'portrait';
+$orientation = (count($requestedCols) > 7 || in_array('detail_contrat_mois', $requestedCols, true)) ? 'landscape' : 'portrait';
 
 $logoB64  = '';
 $logoFile = APP_ROOT . '/assets/img/' . ($params['logo_principal'] ?? 'logo.png');
@@ -142,10 +177,13 @@ if (file_exists($logoFile)) {
     $logoB64 = 'data:' . $mime . ';base64,' . base64_encode(file_get_contents($logoFile));
 }
 
-// Totaux par colonne active
+// Totaux par colonne active (les colonnes texte n'ont pas de total numérique)
 $totaux = array_fill_keys($requestedCols, 0.0);
 foreach ($resultats as $r) {
-    foreach ($requestedCols as $col) $totaux[$col] += salExportColVal($r, $col);
+    foreach ($requestedCols as $col) {
+        if (salExportIsTexte($col)) continue;
+        $totaux[$col] += salExportColVal($r, $col);
+    }
 }
 
 $typeLabelsMap = [
@@ -236,6 +274,14 @@ th.col-prime { color: #ddd6fe; }
         <?php endif; ?>
       </td>
       <?php foreach ($requestedCols as $col):
+        if (salExportIsTexte($col)):
+      ?>
+      <td style="font-size:<?= $fntData ?>pt;text-align:left;white-space:normal">
+        <?= htmlspecialchars(salExportDetailContratMois($r['contrat'])) ?>
+      </td>
+      <?php
+          continue;
+        endif;
         $v   = salExportColVal($r, $col);
         $isH = salExportIsHeure($col);
         $css = salExportColCss($col);
@@ -253,6 +299,12 @@ th.col-prime { color: #ddd6fe; }
       <tr>
         <td><strong>TOTAL</strong></td>
         <?php foreach ($requestedCols as $col):
+          if (salExportIsTexte($col)):
+        ?>
+        <td>—</td>
+        <?php
+            continue;
+          endif;
           $v   = $totaux[$col];
           $isH = salExportIsHeure($col);
           $pfx = $col === 'cotisations' ? '−' : '';

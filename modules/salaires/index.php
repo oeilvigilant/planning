@@ -286,7 +286,8 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
                   <?php
                   $colsH = ['h_normal'=>'Normal','h_nuit'=>'Nuit','h_dimanche'=>'Dimanche',
                              'h_nuit_dimanche'=>'Nuit Dim.','h_ferie_normal'=>'Férié','h_ferie_nuit'=>'Nuit Fér.',
-                             'total_h'=>'Total heures','h_contrat'=>'H. contrat'];
+                             'total_h'=>'Total heures','h_contrat'=>'H. contrat',
+                             'detail_contrat_mois'=>'Détail contrat complet (h/mois prévu)'];
                   foreach ($colsH as $val => $lab): ?>
                   <div class="form-check mb-1">
                     <input class="form-check-input export-col" type="checkbox" name="cols[]"
@@ -365,7 +366,7 @@ function toggleAll(state) {
 }
 function presetPolesSociale() {
     toggleAll(false);
-    ['col_total_h','col_h_contrat','col_brut','col_cotisations','col_prime_panier','col_prime_habillage','col_prime_entretien','col_net_estime']
+    ['col_total_h','col_h_contrat','col_detail_contrat_mois','col_brut','col_cotisations','col_prime_panier','col_prime_habillage','col_prime_entretien','col_net_estime']
         .forEach(id => { const el = document.getElementById(id); if(el) el.checked = true; });
 }
 function presetCompta() {
