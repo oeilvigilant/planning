@@ -12,6 +12,7 @@ $db = getDB();
 
 $nbAgents       = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn();
 $nbAgentsTotal  = $db->query("SELECT COUNT(*) FROM agents")->fetchColumn();
+$nbInscriptionsAttente = countInscriptionsEnAttente();
 $moisActuel     = (int)date('n');
 $anneeActuelle  = (int)date('Y');
 
@@ -137,6 +138,14 @@ if ($version) {
       <div><div class="stat-value"><?= count($notesEnAttente) ?></div><div class="stat-label">Notes en attente</div></div>
     </div>
   </div>
+  <?php if (canDo('agents','create')): ?>
+  <div class="col-md-3 col-6">
+    <a href="<?= APP_URL ?>/modules/agents/inscriptions.php" class="stat-card" style="cursor:pointer;text-decoration:none">
+      <div class="stat-icon <?= $nbInscriptionsAttente>0 ? 'red' : 'green' ?>"><i class="fa fa-user-clock"></i></div>
+      <div><div class="stat-value"><?= $nbInscriptionsAttente ?></div><div class="stat-label">Inscriptions en attente</div></div>
+    </a>
+  </div>
+  <?php endif; ?>
 </div>
 
 <div class="row g-3">

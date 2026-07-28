@@ -18,6 +18,62 @@ function ensureAgentsSchema(): void {
     } catch (Exception $e) {}
 }
 
+/**
+ * Schéma pour l'auto-inscription candidats : colonnes de statut sur agents
+ * (réutilise actif=0 pour rester invisible des requêtes normales, sans
+ * mélanger avec les agents archivés/supprimés qui utilisent aussi actif=0),
+ * table des invitations nominatives, et garantie que 'rib' existe bien dans
+ * l'ENUM agent_documents.type_document (sinon dépend de l'ouverture préalable
+ * de view.php qui contient le même MODIFY).
+ */
+function ensureInscriptionSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db = getDB();
+
+        $has = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agents' AND COLUMN_NAME = 'statut_inscription'")->fetchColumn();
+        if (!$has) {
+            $db->exec("ALTER TABLE agents ADD COLUMN statut_inscription ENUM('en_attente','validee','refusee') NULL DEFAULT NULL AFTER actif");
+        }
+        $has = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agents' AND COLUMN_NAME = 'motif_refus_inscription'")->fetchColumn();
+        if (!$has) {
+            $db->exec("ALTER TABLE agents ADD COLUMN motif_refus_inscription VARCHAR(255) NULL AFTER statut_inscription");
+        }
+        $has = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'agents' AND COLUMN_NAME = 'ip_inscription'")->fetchColumn();
+        if (!$has) {
+            $db->exec("ALTER TABLE agents ADD COLUMN ip_inscription VARCHAR(45) NULL AFTER motif_refus_inscription");
+        }
+
+        // Défensif : 'rib' doit exister dans l'ENUM même si view.php n'a jamais tourné
+        $db->exec("ALTER TABLE agent_documents MODIFY COLUMN type_document ENUM('piece_identite','carte_vitale','attestation_domicile','titre_sejour','attestation_cnaps','rib','contrat','autre') NOT NULL");
+
+        $db->exec("CREATE TABLE IF NOT EXISTS invitations_recrutement (
+            id            INT AUTO_INCREMENT PRIMARY KEY,
+            token         VARCHAR(64) NOT NULL UNIQUE,
+            email         VARCHAR(255) NULL,
+            expires_at    DATETIME NOT NULL,
+            used          TINYINT(1) NOT NULL DEFAULT 0,
+            created_by    INT NULL,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            agent_id_cree INT NULL,
+            INDEX idx_token (token)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Exception $e) {}
+}
+
+function countInscriptionsEnAttente(): int {
+    try {
+        return (int)getDB()->query("SELECT COUNT(*) FROM agents WHERE actif=0 AND statut_inscription='en_attente'")->fetchColumn();
+    } catch (Exception $e) {
+        return 0;
+    }
+}
+
 function ensureDevisSchema(): void {
     static $done = false;
     if ($done) return;

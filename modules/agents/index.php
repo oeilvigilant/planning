@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('agents', 'view');
+ensureInscriptionSchema();
 
 $db = getDB();
 
@@ -30,7 +31,7 @@ if ($search !== '') {
     $params = array_merge($params, [$s,$s,$s,$s]);
 }
 if ($filtre === 'actif')   { $where[] = 'a.actif = 1'; }
-if ($filtre === 'inactif') { $where[] = 'a.actif = 0'; }
+if ($filtre === 'inactif') { $where[] = "a.actif = 0 AND (a.statut_inscription IS NULL OR a.statut_inscription NOT IN ('en_attente','refusee'))"; }
 
 $sql = "SELECT a.*,
         (SELECT COUNT(*) FROM agent_documents d WHERE d.agent_id = a.id) as nb_docs,
@@ -62,7 +63,7 @@ foreach ($agents as &$ag) {
 }
 unset($ag);
 
-$total   = $db->query("SELECT COUNT(*) FROM agents")->fetchColumn();
+$total   = $db->query("SELECT COUNT(*) FROM agents WHERE statut_inscription IS NULL OR statut_inscription NOT IN ('en_attente','refusee')")->fetchColumn();
 $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn();
 ?>
 
@@ -87,6 +88,14 @@ $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn(
         </form>
         <?php endif; ?>
         <?php if (canDo('agents','create')): ?>
+        <a href="inscriptions.php" class="btn" style="background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:8px;font-size:0.85rem;color:#92400e">
+            <i class="fa fa-user-clock me-1"></i>Inscriptions en attente
+            <?php $nbEnAttente = countInscriptionsEnAttente(); ?>
+            <?php if ($nbEnAttente > 0): ?><span class="badge bg-danger rounded-pill ms-1"><?= $nbEnAttente ?></span><?php endif; ?>
+        </a>
+        <a href="invitation_recrutement.php" class="btn" style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);border-radius:8px;font-size:0.85rem;color:#3730a3">
+            <i class="fa fa-envelope-open-text me-1"></i>Inviter un candidat
+        </a>
         <a href="add.php" class="btn-ov-primary btn">
             <i class="fa fa-user-plus me-1"></i> Nouvel agent
         </a>

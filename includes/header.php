@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/functions.php';
 requireLogin();
+ensureInscriptionSchema();
 $user = getCurrentUser();
 $currentModule = $currentModule ?? '';
 ?>
@@ -49,6 +50,15 @@ $currentModule = $currentModule ?? '';
                 <span class="nav-icon"><i class="fa fa-user-plus"></i></span> Ajouter un agent
             </a>
         </li>
+        <?php if (canDo('agents','create')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/modules/agents/inscriptions.php" class="nav-link <?= $currentModule==='agents-inscriptions'?'active':'' ?>">
+                <span class="nav-icon"><i class="fa fa-user-clock"></i></span> Inscriptions en attente
+                <?php $nbEnAttenteNav = countInscriptionsEnAttente(); ?>
+                <?php if ($nbEnAttenteNav > 0): ?><span class="badge bg-danger rounded-pill ms-1"><?= $nbEnAttenteNav ?></span><?php endif; ?>
+            </a>
+        </li>
+        <?php endif; ?>
         <?php endif; ?>
 
         <?php if (canDo('planning','view')): ?>
