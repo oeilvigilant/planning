@@ -52,11 +52,11 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
         Merci de votre intérêt ! Complétez ce formulaire pour candidater — votre dossier sera examiné par notre équipe dans les meilleurs délais.
       </div>
 
-      <?php if ($errors): ?>
-      <div class="alert alert-danger py-2" style="font-size:0.85rem"><ul class="mb-0"><?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?></ul></div>
-      <?php endif; ?>
+      <div class="alert alert-danger py-2" id="formErrorSummary" style="font-size:0.85rem<?= $errors ? '' : ';display:none' ?>">
+        <ul class="mb-0" id="formErrorList"><?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?></ul>
+      </div>
 
-      <form method="POST" enctype="multipart/form-data" id="inscriptionForm">
+      <form method="POST" enctype="multipart/form-data" id="inscriptionForm" novalidate>
         <?= inscriptionHoneypotField() ?>
 
         <div class="section-title">Identité</div>
@@ -136,19 +136,19 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
           </div>
         </div>
 
-        <div class="section-title">Autorisation CNAPS <span style="color:#9ca3af;font-weight:400;text-transform:none;letter-spacing:0">(si vous en avez déjà une)</span></div>
+        <div class="section-title">Autorisation CNAPS</div>
         <div class="row g-3">
           <div class="col-md-4">
-            <label class="form-label">N° Autorisation CNAPS</label>
-            <input type="text" name="num_autorisation_cnaps" class="form-control" value="<?= h($ro('num_autorisation_cnaps')) ?>">
+            <label class="form-label">N° Autorisation CNAPS <span class="text-danger">*</span></label>
+            <input type="text" name="num_autorisation_cnaps" class="form-control" value="<?= h($ro('num_autorisation_cnaps')) ?>" required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Date d'autorisation</label>
-            <input type="date" name="date_autorisation_cnaps" class="form-control" value="<?= h($ro('date_autorisation_cnaps')) ?>">
+            <label class="form-label">Date d'autorisation <span class="text-danger">*</span></label>
+            <input type="date" name="date_autorisation_cnaps" class="form-control" value="<?= h($ro('date_autorisation_cnaps')) ?>" required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Date d'expiration</label>
-            <input type="date" name="date_expiration_cnaps" class="form-control" value="<?= h($ro('date_expiration_cnaps')) ?>">
+            <label class="form-label">Date d'expiration <span class="text-danger">*</span></label>
+            <input type="date" name="date_expiration_cnaps" class="form-control" value="<?= h($ro('date_expiration_cnaps')) ?>" required>
           </div>
         </div>
 
@@ -188,19 +188,56 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
 </div>
 <script>
 (function() {
-    var email = document.getElementById('emailInput');
-    var confirm = document.getElementById('emailConfirmInput');
-    var warn = document.getElementById('emailMismatch');
-    var form = document.getElementById('inscriptionForm');
-    function check() {
+    var email    = document.getElementById('emailInput');
+    var confirm  = document.getElementById('emailConfirmInput');
+    var warn     = document.getElementById('emailMismatch');
+    var form     = document.getElementById('inscriptionForm');
+    var summary  = document.getElementById('formErrorSummary');
+    var listEl   = document.getElementById('formErrorList');
+
+    function emailsMatch() {
         var mismatch = confirm.value !== '' && email.value !== confirm.value;
         warn.style.display = mismatch ? 'block' : 'none';
         return !mismatch;
     }
-    email.addEventListener('input', check);
-    confirm.addEventListener('input', check);
+
+    function fieldLabel(field) {
+        var wrapper = field.closest('[class*="col-"]');
+        var label = wrapper ? wrapper.querySelector('.form-label') : null;
+        return label ? label.textContent.replace('*', '').trim() : (field.name || 'Champ');
+    }
+
+    function validateRequiredFields() {
+        var missing = [];
+        var firstInvalid = null;
+        form.querySelectorAll('[required]').forEach(function(f) {
+            f.classList.remove('is-invalid');
+            if (!f.value || !f.value.trim()) {
+                missing.push(fieldLabel(f));
+                f.classList.add('is-invalid');
+                if (!firstInvalid) firstInvalid = f;
+            }
+        });
+        return { missing: missing, firstInvalid: firstInvalid };
+    }
+
+    email.addEventListener('input', emailsMatch);
+    confirm.addEventListener('input', emailsMatch);
+
     form.addEventListener('submit', function(e) {
-        if (!check()) { e.preventDefault(); confirm.focus(); }
+        var result = validateRequiredFields();
+        var emailOk = emailsMatch();
+        var messages = result.missing.map(function(m) { return 'Le champ « ' + m + ' » est obligatoire.'; });
+        if (!emailOk) messages.push('Les deux adresses email ne correspondent pas.');
+
+        if (messages.length > 0) {
+            e.preventDefault();
+            listEl.innerHTML = messages.map(function(m) { return '<li>' + m + '</li>'; }).join('');
+            summary.style.display = 'block';
+            summary.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            var focusTarget = result.firstInvalid || (!emailOk ? confirm : null);
+            if (focusTarget) focusTarget.focus();
+        }
     });
 })();
 </script>
@@ -280,6 +317,9 @@ function handleInscriptionSubmit(PDO $db, array $post, array $files, ?array $inv
     } elseif ($email !== $emailConfirm) {
         $errors[] = 'Les deux adresses email ne correspondent pas.';
     }
+    if (empty(trim($post['num_autorisation_cnaps'] ?? '')))   $errors[] = 'Le numéro d\'autorisation CNAPS est obligatoire.';
+    if (empty(trim($post['date_autorisation_cnaps'] ?? '')))  $errors[] = 'La date d\'autorisation CNAPS est obligatoire.';
+    if (empty(trim($post['date_expiration_cnaps'] ?? '')))    $errors[] = 'La date d\'expiration CNAPS est obligatoire.';
 
     $photo = null;
     if (!empty($files['photo']['name'])) {
