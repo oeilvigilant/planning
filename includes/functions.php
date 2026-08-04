@@ -75,6 +75,36 @@ function countInscriptionsEnAttente(): int {
 }
 
 /**
+ * Crée un rôle "Planificateur" prêt à l'emploi : accès au planning
+ * (voir/créer/modifier/exporter) sans droit de suppression, rien d'autre.
+ * Pensé pour des comptes donnés à plusieurs personnes pour saisir le
+ * planning sans risque de tout effacer par erreur.
+ */
+function ensurePlanificateurRole(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db  = getDB();
+        $has = $db->query("SELECT id FROM roles WHERE slug='planificateur'")->fetchColumn();
+        if ($has) return;
+
+        $db->prepare("INSERT INTO roles (nom, slug, description) VALUES (?,?,?)")
+           ->execute(['Planificateur', 'planificateur', 'Gestion du planning uniquement, sans droit de suppression.']);
+        $roleId = (int)$db->lastInsertId();
+
+        $perms = [
+            'dashboard' => [1,0,0,0,0],
+            'planning'  => [1,1,1,0,1],
+        ];
+        foreach ($perms as $module => [$view,$create,$edit,$delete,$export]) {
+            $db->prepare("INSERT INTO role_permissions (role_id,module,can_view,can_create,can_edit,can_delete,can_export) VALUES (?,?,?,?,?,?,?)")
+               ->execute([$roleId, $module, $view, $create, $edit, $delete, $export]);
+        }
+    } catch (Exception $e) {}
+}
+
+/**
  * Journal des modifications du planning — table séparée (et non des colonnes
  * updated_by/updated_at sur planning_lignes) pour survivre aux suppressions :
  * une case supprimée disparaît de planning_lignes, mais on veut savoir qui

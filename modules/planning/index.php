@@ -107,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($action === 'delete_ligne') {
+        requirePerm('planning', 'delete');
         $agentId   = (int)($_POST['agent_id']  ?? 0);
         $date      =      ($_POST['date']       ?? '');
         $versionId = (int)($_POST['version_id'] ?? 0);
@@ -158,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($action === 'reset_month') {
-        requirePerm('planning', 'create');
+        requirePerm('planning', 'delete');
         $versionId = (int)($_POST['version_id'] ?? 0);
         if ($versionId) {
             // Récupérer mois/année de la version courante
@@ -266,6 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($action === 'bulk_delete') {
+        requirePerm('planning', 'delete');
         $agentId  = (int)($_POST['agent_id']  ?? 0);
         $dateDebut =     ($_POST['date_debut'] ?? '');
         $dateFin  =      ($_POST['date_fin']   ?? '');

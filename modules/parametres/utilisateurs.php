@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('utilisateurs', 'view');
+ensurePlanificateurRole();
 
 $db = getDB();
 
@@ -44,10 +45,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('utilisateurs','create')) {
         header('Location: utilisateurs.php'); exit;
     }
 
+    if ($action === 'add_role') {
+        requirePerm('utilisateurs','edit');
+        $nomRole = trim($_POST['nom_role'] ?? '');
+        $slug    = preg_replace('/[^a-z0-9_]/', '', strtolower(str_replace(' ', '_', $nomRole)));
+        if ($nomRole && $slug) {
+            try {
+                $db->prepare("INSERT INTO roles (nom, slug) VALUES (?,?)")->execute([$nomRole, $slug]);
+                flash('success', 'Rôle « ' . h($nomRole) . ' » créé — configurez ses permissions ci-dessous.');
+            } catch (Exception $e) { flash('danger', 'Ce rôle existe déjà.'); }
+        } else {
+            flash('danger', 'Nom de rôle invalide.');
+        }
+        header('Location: utilisateurs.php'); exit;
+    }
+
     if ($action === 'save_perms') {
         requirePerm('utilisateurs','edit');
         $roleId  = (int)($_POST['role_id'] ?? 0);
-        $modules = ['dashboard','agents','planning','salaires','parametres','rapports','utilisateurs'];
+        $modules = ['dashboard','agents','planning','salaires','clients','devis','parametres','rapports','utilisateurs'];
         foreach ($modules as $module) {
             $perms = $_POST['perms'][$module] ?? [];
             $db->prepare("INSERT INTO role_permissions (role_id,module,can_view,can_create,can_edit,can_delete,can_export)
@@ -74,7 +90,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
 $users = $db->query("SELECT u.*, r.nom as role_nom FROM utilisateurs u JOIN roles r ON r.id=u.role_id ORDER BY u.nom")->fetchAll();
 $roles = $db->query("SELECT * FROM roles WHERE slug != 'agent' ORDER BY id")->fetchAll();
-$modules = ['dashboard','agents','planning','salaires','parametres','rapports','utilisateurs'];
+$modules = ['dashboard','agents','planning','salaires','clients','devis','parametres','rapports','utilisateurs'];
 $actions = ['view'=>'Voir','create'=>'Créer','edit'=>'Modifier','delete'=>'Supprimer','export'=>'Exporter'];
 
 // Permissions par rôle
@@ -143,6 +159,16 @@ foreach ($roles as $r) {
   <div class="ov-card">
     <div class="ov-card-header"><h2 class="ov-card-title"><i class="fa fa-shield-halved me-2" style="color:var(--ov-gold)"></i>Permissions par rôle</h2></div>
     <div class="ov-card-body">
+      <?php if (canDo('utilisateurs','edit')): ?>
+      <form method="POST" class="d-flex gap-2 align-items-end mb-3 pb-3" style="border-bottom:1px solid #f0f2f5">
+        <input type="hidden" name="action" value="add_role">
+        <div class="flex-grow-1">
+          <label class="form-label" style="font-size:0.8rem">Nouveau rôle</label>
+          <input type="text" name="nom_role" class="form-control form-control-sm" placeholder="Ex : Planificateur" required>
+        </div>
+        <button type="submit" class="btn btn-ov-secondary btn-sm"><i class="fa fa-plus me-1"></i>Créer le rôle</button>
+      </form>
+      <?php endif; ?>
       <?php foreach ($roles as $r):
         if ($r['slug'] === 'admin') continue; // Admin a tout, pas configurable
       ?>
