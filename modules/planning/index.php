@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('planning', 'view');
+ensurePlanningAuditSchema();
 
 $db  = getDB();
 $vue = $_GET['vue'] ?? 'mois';
@@ -76,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $minutes = calculerHeuresParType($date, $hDebut, $hFin);
         $depasse = timeToMinutes($hFin) <= timeToMinutes($hDebut) ? 1 : 0;
 
-        $ex = $db->prepare("SELECT id FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?");
+        $ex = $db->prepare("SELECT id, heure_debut, heure_fin FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?");
         $ex->execute([$versionId, $agentId, $date]);
         $exist = $ex->fetch();
 
@@ -89,6 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                           $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                           $minutes['ferie_normal'],$minutes['ferie_nuit'],
                           $exist['id']]);
+            logPlanningAudit($db, $versionId, $agentId, $date, 'modification',
+                substr($exist['heure_debut'],0,5), substr($exist['heure_fin'],0,5), $hDebut, $hFin);
         } else {
             $db->prepare("INSERT INTO planning_lignes
                 (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
@@ -97,6 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                ->execute([$versionId,$agentId,$date,$hDebut,$hFin,$depasse,$note,
                           $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                           $minutes['ferie_normal'],$minutes['ferie_nuit']]);
+            logPlanningAudit($db, $versionId, $agentId, $date, 'creation', null, null, $hDebut, $hFin);
         }
         echo json_encode(['ok' => true, 'minutes' => $minutes]);
         exit;
@@ -107,8 +111,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $date      =      ($_POST['date']       ?? '');
         $versionId = (int)($_POST['version_id'] ?? 0);
         if ($agentId && $date && $versionId) {
+            $old = $db->prepare("SELECT heure_debut, heure_fin FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?");
+            $old->execute([$versionId, $agentId, $date]);
+            $oldRow = $old->fetch();
             $db->prepare("DELETE FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?")
                ->execute([$versionId, $agentId, $date]);
+            if ($oldRow) {
+                logPlanningAudit($db, $versionId, $agentId, $date, 'suppression',
+                    substr($oldRow['heure_debut'],0,5), substr($oldRow['heure_fin'],0,5), null, null);
+            }
         }
         echo json_encode(['ok' => true]);
         exit;
@@ -118,30 +129,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $reqMois  = (int)($_POST['mois']  ?? date('n'));
         $reqAnnee = (int)($_POST['annee'] ?? date('Y'));
         $note     =      ($_POST['note']  ?? '');
-        $stmtCur  = $db->prepare("SELECT * FROM planning_versions WHERE mois=? AND annee=? AND is_current=1 LIMIT 1");
-        $stmtCur->execute([$reqMois, $reqAnnee]);
-        $curV = $stmtCur->fetch();
-        $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mois=? AND annee=?")->execute([$reqMois,$reqAnnee]);
-        $stmtMax = $db->prepare("SELECT MAX(version) as mv FROM planning_versions WHERE mois=? AND annee=?");
-        $stmtMax->execute([$reqMois,$reqAnnee]);
-        $nextV = ((int)$stmtMax->fetch()['mv']) + 1;
-        $db->prepare("INSERT INTO planning_versions (mois,annee,version,note,is_current,created_by) VALUES (?,?,?,?,1,?)")
-           ->execute([$reqMois,$reqAnnee,$nextV,$note,getCurrentUser()['id']]);
-        $newVId = (int)$db->lastInsertId();
-        if ($curV) {
-            $oldL = $db->prepare("SELECT * FROM planning_lignes WHERE version_id=?");
-            $oldL->execute([$curV['id']]);
-            foreach ($oldL->fetchAll() as $ol) {
-                $db->prepare("INSERT INTO planning_lignes
-                    (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
-                     min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_nuit,calcul_ok)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                   ->execute([$newVId,$ol['agent_id'],$ol['date_travail'],$ol['heure_debut'],$ol['heure_fin'],
-                              $ol['depasse_minuit'],$ol['note'],
-                              $ol['min_normal'],$ol['min_nuit'],$ol['min_dimanche'],$ol['min_nuit_dimanche'],
-                              $ol['min_ferie_normal'],$ol['min_ferie_nuit'],$ol['calcul_ok']]);
-            }
-        }
+        $newVId   = creerVersionPlanningAvecCopie($db, $reqMois, $reqAnnee, $note, getCurrentUser()['id']);
+        $stmtNv   = $db->prepare("SELECT version FROM planning_versions WHERE id=?");
+        $stmtNv->execute([$newVId]);
+        $nextV    = (int)$stmtNv->fetchColumn();
         echo json_encode(['ok' => true, 'version' => $nextV, 'version_id' => $newVId]);
         exit;
     }
@@ -242,9 +233,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $minutes = calculerHeuresParType($dateStr, $hDebut, $hFin);
                 $depasse = timeToMinutes($hFin) <= timeToMinutes($hDebut) ? 1 : 0;
 
-                $ex = $db->prepare("SELECT id FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?");
+                $ex = $db->prepare("SELECT id, heure_debut, heure_fin FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?");
                 $ex->execute([$vId, $agentId, $dateStr]);
-                if ($ex->fetch()) {
+                $exRow = $ex->fetch();
+                if ($exRow) {
                     $db->prepare("UPDATE planning_lignes SET heure_debut=?,heure_fin=?,depasse_minuit=?,note=?,
                         min_normal=?,min_nuit=?,min_dimanche=?,min_nuit_dimanche=?,min_ferie_normal=?,min_ferie_nuit=?,calcul_ok=1
                         WHERE version_id=? AND agent_id=? AND date_travail=?")
@@ -252,6 +244,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                   $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                                   $minutes['ferie_normal'],$minutes['ferie_nuit'],
                                   $vId,$agentId,$dateStr]);
+                    logPlanningAudit($db, $vId, $agentId, $dateStr, 'modification',
+                        substr($exRow['heure_debut'],0,5), substr($exRow['heure_fin'],0,5), $hDebut, $hFin);
                 } else {
                     $db->prepare("INSERT INTO planning_lignes
                         (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
@@ -260,6 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                        ->execute([$vId,$agentId,$dateStr,$hDebut,$hFin,$depasse,$note,
                                   $minutes['normal'],$minutes['nuit'],$minutes['dimanche'],$minutes['nuit_dimanche'],
                                   $minutes['ferie_normal'],$minutes['ferie_nuit']]);
+                    logPlanningAudit($db, $vId, $agentId, $dateStr, 'creation', null, null, $hDebut, $hFin);
                 }
                 $saved++;
             }
@@ -306,8 +301,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if (in_array($dow, $joursOk)) {
                 $k = $d->format('Y').'-'.$d->format('m');
                 if (isset($vMap[$k])) {
+                    $dateStr = $d->format('Y-m-d');
+                    $old = $db->prepare("SELECT heure_debut, heure_fin FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?");
+                    $old->execute([$vMap[$k], $agentId, $dateStr]);
+                    $oldRow = $old->fetch();
                     $stmt = $db->prepare("DELETE FROM planning_lignes WHERE version_id=? AND agent_id=? AND date_travail=?");
-                    $stmt->execute([$vMap[$k], $agentId, $d->format('Y-m-d')]);
+                    $stmt->execute([$vMap[$k], $agentId, $dateStr]);
+                    if ($oldRow && $stmt->rowCount() > 0) {
+                        logPlanningAudit($db, $vMap[$k], $agentId, $dateStr, 'suppression',
+                            substr($oldRow['heure_debut'],0,5), substr($oldRow['heure_fin'],0,5), null, null);
+                    }
                     $deleted += $stmt->rowCount();
                 }
             }
@@ -625,6 +628,8 @@ if ($vue === 'semaine') {
     $annee = (int)($_GET['annee'] ?? date('Y'));
     if ($mois < 1 || $mois > 12) $mois = (int)date('n');
 
+    if ($canEdit) ensureSnapshotAutoDuJour($db, $mois, $annee);
+
     $stmtV = $db->prepare("SELECT * FROM planning_versions WHERE mois=? AND annee=? AND is_current=1 ORDER BY version DESC LIMIT 1");
     $stmtV->execute([$mois, $annee]);
     $version = $stmtV->fetch();
@@ -647,6 +652,26 @@ if ($vue === 'semaine') {
         $stmtL->execute([$version['id']]);
         foreach ($stmtL->fetchAll() as $l) {
             $planningData[$l['agent_id']][$l['date_travail']] = $l;
+        }
+    }
+
+    // Dernière modification par case (agent+date), pour l'info-bulle de traçabilité
+    $lastEditMap = [];
+    if ($version) {
+        $stmtAudit = $db->prepare("
+            SELECT pa.agent_id, pa.date_travail, pa.action, pa.created_at, u.nom, u.prenom
+            FROM planning_audit pa
+            LEFT JOIN utilisateurs u ON u.id = pa.user_id
+            INNER JOIN (
+                SELECT agent_id, date_travail, MAX(created_at) AS max_created
+                FROM planning_audit WHERE version_id=? GROUP BY agent_id, date_travail
+            ) latest ON pa.agent_id=latest.agent_id AND pa.date_travail=latest.date_travail AND pa.created_at=latest.max_created
+            WHERE pa.version_id=?
+        ");
+        $stmtAudit->execute([$version['id'], $version['id']]);
+        foreach ($stmtAudit->fetchAll() as $a) {
+            $qui = (!empty($a['nom']) || !empty($a['prenom'])) ? trim($a['prenom'].' '.$a['nom']) : 'Automatique';
+            $lastEditMap[$a['agent_id']][$a['date_travail']] = $qui . ' — ' . date('d/m à H:i', strtotime($a['created_at']));
         }
     }
 
@@ -696,6 +721,7 @@ if ($vue === 'semaine') {
         <button class="btn btn-sm btn-outline-danger" id="btnResetMonth" title="Supprimer toutes les affectations du mois"><i class="fa fa-eraser me-1"></i>Réinitialiser le mois</button>
         <?php endif; ?>
         <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
+        <a href="audit.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-magnifying-glass me-1"></i>Journal des modifications</a>
         <?php if ($version && canDo('planning','export')): ?>
         <button class="btn btn-ov-secondary btn-sm" id="btnExport"><i class="fa fa-file-export me-1"></i>Exporter</button>
         <?php endif; ?>
@@ -782,6 +808,8 @@ if ($vue === 'semaine') {
                 data-date="<?= $date ?>"
                 data-agent="<?= $agent['id'] ?>"
                 data-version="<?= $versionId ?? 0 ?>"
+                <?php $editInfo = $lastEditMap[$agent['id']][$date] ?? null; ?>
+                <?php if ($editInfo): ?>title="<?= h($editInfo) ?>"<?php endif; ?>
                 <?php if ($canEdit && $versionId): ?>onclick="openCell(this)"<?php endif; ?>>
               <?php if ($ligne): ?>
               <?php

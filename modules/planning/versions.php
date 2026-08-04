@@ -63,7 +63,7 @@ $versions = $versions->fetchAll();
       <tr>
         <td><strong>V<?= $v['version'] ?></strong></td>
         <td><?= date('d/m/Y H:i', strtotime($v['created_at'])) ?></td>
-        <td><?= h(($v['user_prenom']??'').' '.($v['user_nom']??'')) ?></td>
+        <td><?= (empty($v['user_prenom']) && empty($v['user_nom'])) ? '<span class="text-muted"><i class="fa fa-robot me-1"></i>Automatique</span>' : h(trim(($v['user_prenom']??'').' '.($v['user_nom']??''))) ?></td>
         <td><span class="badge-ov" style="background:rgba(99,102,241,0.1);color:#4f46e5;padding:2px 8px;border-radius:20px;font-size:0.72rem"><?= $v['nb_lignes'] ?> entrées</span></td>
         <td class="text-muted" style="font-size:0.85rem"><?= h($v['note'] ?: '—') ?></td>
         <td>

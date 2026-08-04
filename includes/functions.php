@@ -74,6 +74,107 @@ function countInscriptionsEnAttente(): int {
     }
 }
 
+/**
+ * Journal des modifications du planning — table séparée (et non des colonnes
+ * updated_by/updated_at sur planning_lignes) pour survivre aux suppressions :
+ * une case supprimée disparaît de planning_lignes, mais on veut savoir qui
+ * l'a supprimée et quand malgré tout.
+ */
+function ensurePlanningAuditSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db = getDB();
+        $db->exec("CREATE TABLE IF NOT EXISTS planning_audit (
+            id                 INT AUTO_INCREMENT PRIMARY KEY,
+            version_id         INT NOT NULL,
+            agent_id           INT NOT NULL,
+            date_travail       DATE NOT NULL,
+            action             ENUM('creation','modification','suppression') NOT NULL,
+            heure_debut_avant  VARCHAR(5) NULL,
+            heure_fin_avant    VARCHAR(5) NULL,
+            heure_debut_apres  VARCHAR(5) NULL,
+            heure_fin_apres    VARCHAR(5) NULL,
+            user_id            INT NULL,
+            created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_version (version_id),
+            INDEX idx_agent_date (agent_id, date_travail)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Exception $e) {}
+}
+
+function logPlanningAudit(PDO $db, int $versionId, int $agentId, string $dateTravail, string $action,
+                           ?string $hDebutAvant, ?string $hFinAvant, ?string $hDebutApres, ?string $hFinApres): void {
+    try {
+        $userId = null;
+        if (function_exists('getCurrentUser')) {
+            $u = getCurrentUser();
+            $userId = $u['id'] ?? null;
+        }
+        $db->prepare("INSERT INTO planning_audit
+            (version_id, agent_id, date_travail, action, heure_debut_avant, heure_fin_avant, heure_debut_apres, heure_fin_apres, user_id)
+            VALUES (?,?,?,?,?,?,?,?,?)")
+           ->execute([$versionId, $agentId, $dateTravail, $action, $hDebutAvant, $hFinAvant, $hDebutApres, $hFinApres, $userId]);
+    } catch (Exception $e) {}
+}
+
+/**
+ * Archive la version courante du mois et crée la suivante en copiant toutes
+ * les lignes — logique partagée entre "Nouvelle version" (manuelle) et
+ * l'instantané automatique quotidien.
+ */
+function creerVersionPlanningAvecCopie(PDO $db, int $mois, int $annee, string $note, ?int $userId): int {
+    $stmtCur = $db->prepare("SELECT * FROM planning_versions WHERE mois=? AND annee=? AND is_current=1 LIMIT 1");
+    $stmtCur->execute([$mois, $annee]);
+    $curV = $stmtCur->fetch();
+
+    $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mois=? AND annee=?")->execute([$mois, $annee]);
+    $stmtMax = $db->prepare("SELECT MAX(version) as mv FROM planning_versions WHERE mois=? AND annee=?");
+    $stmtMax->execute([$mois, $annee]);
+    $nextV = ((int)$stmtMax->fetch()['mv']) + 1;
+
+    $db->prepare("INSERT INTO planning_versions (mois,annee,version,note,is_current,created_by) VALUES (?,?,?,?,1,?)")
+       ->execute([$mois, $annee, $nextV, $note, $userId]);
+    $newVId = (int)$db->lastInsertId();
+
+    if ($curV) {
+        $oldL = $db->prepare("SELECT * FROM planning_lignes WHERE version_id=?");
+        $oldL->execute([$curV['id']]);
+        foreach ($oldL->fetchAll() as $ol) {
+            $db->prepare("INSERT INTO planning_lignes
+                (version_id,agent_id,date_travail,heure_debut,heure_fin,depasse_minuit,note,
+                 min_normal,min_nuit,min_dimanche,min_nuit_dimanche,min_ferie_normal,min_ferie_nuit,calcul_ok)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+               ->execute([$newVId,$ol['agent_id'],$ol['date_travail'],$ol['heure_debut'],$ol['heure_fin'],
+                          $ol['depasse_minuit'],$ol['note'],
+                          $ol['min_normal'],$ol['min_nuit'],$ol['min_dimanche'],$ol['min_nuit_dimanche'],
+                          $ol['min_ferie_normal'],$ol['min_ferie_nuit'],$ol['calcul_ok']]);
+        }
+    }
+    return $newVId;
+}
+
+/**
+ * Crée un instantané du planning une fois par jour, avant toute modification
+ * possible — filet de sécurité qui ne dépend plus de la mémoire de l'admin.
+ * Ne fait rien si un instantané existe déjà aujourd'hui, ou si aucune version
+ * n'existe encore pour ce mois (rien à sauvegarder).
+ */
+function ensureSnapshotAutoDuJour(PDO $db, int $mois, int $annee): void {
+    try {
+        $hasToday = $db->prepare("SELECT COUNT(*) FROM planning_versions WHERE mois=? AND annee=? AND DATE(created_at)=CURDATE()");
+        $hasToday->execute([$mois, $annee]);
+        if ((int)$hasToday->fetchColumn() > 0) return;
+
+        $hasAny = $db->prepare("SELECT COUNT(*) FROM planning_versions WHERE mois=? AND annee=?");
+        $hasAny->execute([$mois, $annee]);
+        if ((int)$hasAny->fetchColumn() === 0) return;
+
+        creerVersionPlanningAvecCopie($db, $mois, $annee, 'Instantané automatique quotidien', null);
+    } catch (Exception $e) {}
+}
+
 function ensureDevisSchema(): void {
     static $done = false;
     if ($done) return;
