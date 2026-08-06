@@ -147,7 +147,7 @@ $actifs  = $db->query("SELECT COUNT(*) FROM agents WHERE actif=1")->fetchColumn(
             </thead>
             <tbody>
             <?php foreach ($agents as $a): ?>
-            <tr>
+            <tr class="row-link" onclick="if(!event.target.closest('a,button,form')) window.location='view.php?id=<?= $a['id'] ?>'" style="cursor:pointer">
                 <td><code class="text-dark fw-bold"><?= h($a['matricule'] ?? '—') ?></code></td>
                 <td>
                     <div class="d-flex align-items-center gap-2">
