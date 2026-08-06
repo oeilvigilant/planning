@@ -77,20 +77,20 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
             <input type="text" name="prenom" class="form-control" value="<?= h($ro('prenom')) ?>" required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Date de naissance</label>
-            <input type="date" name="date_naissance" class="form-control" value="<?= h($ro('date_naissance')) ?>">
+            <label class="form-label">Date de naissance <span class="text-danger">*</span></label>
+            <input type="date" name="date_naissance" class="form-control" value="<?= h($ro('date_naissance')) ?>" required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Lieu de naissance</label>
-            <input type="text" name="lieu_naissance" class="form-control" value="<?= h($ro('lieu_naissance')) ?>">
+            <label class="form-label">Lieu de naissance <span class="text-danger">*</span></label>
+            <input type="text" name="lieu_naissance" class="form-control" value="<?= h($ro('lieu_naissance')) ?>" required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Nationalité</label>
-            <input type="text" name="nationalite" class="form-control" value="<?= h($ro('nationalite')) ?>">
+            <label class="form-label">Nationalité <span class="text-danger">*</span></label>
+            <input type="text" name="nationalite" class="form-control" value="<?= h($ro('nationalite')) ?>" required>
           </div>
           <div class="col-md-6">
-            <label class="form-label">N° Sécurité Sociale</label>
-            <input type="text" name="num_secu" class="form-control" data-format="secu" value="<?= h($ro('num_secu')) ?>" maxlength="21">
+            <label class="form-label">N° Sécurité Sociale <span class="text-danger">*</span></label>
+            <input type="text" name="num_secu" class="form-control" data-format="secu" value="<?= h($ro('num_secu')) ?>" maxlength="21" required>
           </div>
           <div class="col-md-3">
             <label class="form-label">Situation familiale</label>
@@ -110,16 +110,16 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
         <div class="section-title">Coordonnées</div>
         <div class="row g-3">
           <div class="col-12">
-            <label class="form-label">Adresse</label>
-            <input type="text" name="adresse" class="form-control" value="<?= h($ro('adresse')) ?>">
+            <label class="form-label">Adresse <span class="text-danger">*</span></label>
+            <input type="text" name="adresse" class="form-control" value="<?= h($ro('adresse')) ?>" required>
           </div>
           <div class="col-md-3">
-            <label class="form-label">Code postal</label>
-            <input type="text" name="cp" class="form-control" value="<?= h($ro('cp')) ?>">
+            <label class="form-label">Code postal <span class="text-danger">*</span></label>
+            <input type="text" name="cp" class="form-control" value="<?= h($ro('cp')) ?>" required>
           </div>
           <div class="col-md-5">
-            <label class="form-label">Ville</label>
-            <input type="text" name="ville" class="form-control" value="<?= h($ro('ville')) ?>">
+            <label class="form-label">Ville <span class="text-danger">*</span></label>
+            <input type="text" name="ville" class="form-control" value="<?= h($ro('ville')) ?>" required>
           </div>
           <div class="col-md-4">
             <label class="form-label">Téléphone</label>
@@ -152,15 +152,15 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
           </div>
         </div>
 
-        <div class="section-title">Photo & Documents <span style="color:#9ca3af;font-weight:400;text-transform:none;letter-spacing:0">(optionnel à ce stade)</span></div>
+        <div class="section-title">Photo & Documents</div>
         <div class="row g-3">
           <div class="col-12">
-            <label class="form-label">Photo</label>
+            <label class="form-label">Photo <span style="color:#9ca3af;font-weight:400">(optionnel)</span></label>
             <input type="file" name="photo" class="form-control" accept="image/*">
           </div>
           <div class="col-md-6">
-            <label class="form-label"><i class="fa fa-id-card me-1 text-muted"></i>Pièce d'identité <span style="color:#6b7280;font-weight:400">ou</span> titre de séjour</label>
-            <input type="file" name="piece_identite" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+            <label class="form-label"><i class="fa fa-id-card me-1 text-muted"></i>Pièce d'identité <span style="color:#6b7280;font-weight:400">ou</span> titre de séjour <span class="text-danger">*</span></label>
+            <input type="file" name="piece_identite" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required>
           </div>
           <?php
           $docsLabels = [
@@ -171,8 +171,8 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
           ];
           foreach ($docsLabels as $k => [$label, $icon]): ?>
           <div class="col-md-6">
-            <label class="form-label"><i class="fa <?= $icon ?> me-1 text-muted"></i><?= h($label) ?></label>
-            <input type="file" name="<?= $k ?>" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+            <label class="form-label"><i class="fa <?= $icon ?> me-1 text-muted"></i><?= h($label) ?> <span class="text-danger">*</span></label>
+            <input type="file" name="<?= $k ?>" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required>
           </div>
           <?php endforeach; ?>
         </div>
@@ -317,9 +317,42 @@ function handleInscriptionSubmit(PDO $db, array $post, array $files, ?array $inv
     } elseif ($email !== $emailConfirm) {
         $errors[] = 'Les deux adresses email ne correspondent pas.';
     }
+
+    $champsTexte = [
+        'date_naissance' => 'La date de naissance est obligatoire.',
+        'lieu_naissance' => 'Le lieu de naissance est obligatoire.',
+        'nationalite'    => 'La nationalité est obligatoire.',
+        'num_secu'       => 'Le numéro de sécurité sociale est obligatoire.',
+        'adresse'        => 'L\'adresse est obligatoire.',
+        'cp'             => 'Le code postal est obligatoire.',
+        'ville'          => 'La ville est obligatoire.',
+    ];
+    foreach ($champsTexte as $champ => $msg) {
+        if (empty(trim($post[$champ] ?? ''))) $errors[] = $msg;
+    }
+
     if (empty(trim($post['num_autorisation_cnaps'] ?? '')))   $errors[] = 'Le numéro d\'autorisation CNAPS est obligatoire.';
     if (empty(trim($post['date_autorisation_cnaps'] ?? '')))  $errors[] = 'La date d\'autorisation CNAPS est obligatoire.';
     if (empty(trim($post['date_expiration_cnaps'] ?? '')))    $errors[] = 'La date d\'expiration CNAPS est obligatoire.';
+
+    $documentsObligatoires = [
+        'piece_identite'        => 'la pièce d\'identité ou le titre de séjour',
+        'attestation_cnaps'     => 'l\'attestation CNAPS',
+        'attestation_domicile'  => 'le justificatif de domicile',
+        'carte_vitale'          => 'la carte vitale',
+        'rib'                   => 'le RIB',
+    ];
+    $extDocsAutorisees = ['pdf','jpg','jpeg','png'];
+    foreach ($documentsObligatoires as $champ => $label) {
+        if (empty($files[$champ]['name'])) {
+            $errors[] = ucfirst($label) . ' est obligatoire.';
+        } else {
+            $ext = strtolower(pathinfo($files[$champ]['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, $extDocsAutorisees)) {
+                $errors[] = 'Format invalide pour ' . $label . ' (pdf, jpg, png acceptés).';
+            }
+        }
+    }
 
     $photo = null;
     if (!empty($files['photo']['name'])) {

@@ -38,11 +38,59 @@ $typesDoc = ['piece_identite','carte_vitale','attestation_domicile','attestation
 
 $errors  = [];
 $success = false;
+$data    = $agent;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Les valeurs de l'agent servent de fallback pour les champs désactivés (selects)
     $data = array_merge($agent, $_POST);
 
+    $champsTexte = [
+        'date_naissance' => 'La date de naissance est obligatoire.',
+        'lieu_naissance' => 'Le lieu de naissance est obligatoire.',
+        'nationalite'    => 'La nationalité est obligatoire.',
+        'num_secu'       => 'Le numéro de sécurité sociale est obligatoire.',
+        'adresse'        => 'L\'adresse est obligatoire.',
+        'cp'             => 'Le code postal est obligatoire.',
+        'ville'          => 'La ville est obligatoire.',
+        'num_autorisation_cnaps'  => 'Le numéro d\'autorisation CNAPS est obligatoire.',
+        'date_autorisation_cnaps' => 'La date d\'autorisation CNAPS est obligatoire.',
+        'date_expiration_cnaps'   => 'La date d\'expiration CNAPS est obligatoire.',
+    ];
+    foreach ($champsTexte as $champ => $msg) {
+        if (empty(trim($data[$champ] ?? ''))) $errors[] = $msg;
+    }
+
+    $documentsObligatoires = [
+        'attestation_cnaps'     => 'l\'attestation CNAPS',
+        'attestation_domicile'  => 'le justificatif de domicile',
+        'carte_vitale'          => 'la carte vitale',
+        'rib'                   => 'le RIB',
+    ];
+    $extDocsAutorisees = ['pdf','jpg','jpeg','png'];
+    foreach ($documentsObligatoires as $champ => $label) {
+        $dejaFourni = isset($existingDocs[$champ]);
+        if (!$dejaFourni && empty($_FILES[$champ]['name'])) {
+            $errors[] = ucfirst($label) . ' est obligatoire.';
+        } elseif (!$dejaFourni) {
+            $ext = strtolower(pathinfo($_FILES[$champ]['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, $extDocsAutorisees)) {
+                $errors[] = 'Format invalide pour ' . $label . ' (pdf, jpg, png acceptés).';
+            }
+        }
+    }
+    $hasIdentite = isset($existingDocs['piece_identite']) || isset($existingDocs['titre_sejour']);
+    if (!$hasIdentite) {
+        if (empty($_FILES['piece_identite']['name'])) {
+            $errors[] = 'La pièce d\'identité ou le titre de séjour est obligatoire.';
+        } else {
+            $ext = strtolower(pathinfo($_FILES['piece_identite']['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, $extDocsAutorisees)) {
+                $errors[] = 'Format invalide pour la pièce d\'identité ou le titre de séjour (pdf, jpg, png acceptés).';
+            }
+        }
+    }
+
+    if (!$errors) {
     $db->prepare("
         UPDATE agents SET
         date_naissance=?,lieu_naissance=?,nationalite=?,num_secu=?,
@@ -80,7 +128,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Pièce d'identité OU titre de séjour (champ fusionné)
-    $hasIdentite = isset($existingDocs['piece_identite']) || isset($existingDocs['titre_sejour']);
     if (!$hasIdentite && !empty($_FILES['piece_identite']['name'])) {
         $chemin = uploadFichier($_FILES['piece_identite'], 'documents', ['pdf','jpg','jpeg','png']);
         if ($chemin) {
@@ -102,6 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $success = true;
+    }
 }
 
 $params = getAllParams();
@@ -157,25 +205,29 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
         Les champs <span style="background:#f3f4f6;color:#6b7280;padding:1px 6px;border-radius:4px;font-size:0.8rem">grisés</span> sont déjà renseignés. Ce lien est à usage unique.
       </div>
 
-      <form method="POST" enctype="multipart/form-data">
+      <div class="alert alert-danger py-2" id="formErrorSummary" style="font-size:0.85rem<?= $errors ? '' : ';display:none' ?>">
+        <ul class="mb-0" id="formErrorList"><?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?></ul>
+      </div>
+
+      <form method="POST" enctype="multipart/form-data" id="agentForm" novalidate>
 
         <div class="section-title">Informations personnelles</div>
         <div class="row g-3">
           <div class="col-md-6">
-            <label class="form-label">Date de naissance<?= !empty($agent['date_naissance']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
-            <input type="date" name="date_naissance" class="form-control" value="<?= h($agent['date_naissance']??'') ?>"<?= $ro($agent['date_naissance']??'') ?>>
+            <label class="form-label">Date de naissance <span class="text-danger">*</span><?= !empty($agent['date_naissance']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="date" name="date_naissance" class="form-control" value="<?= h($data['date_naissance']??'') ?>"<?= $ro($agent['date_naissance']??'') ?> required>
           </div>
           <div class="col-md-6">
-            <label class="form-label">Lieu de naissance<?= !empty($agent['lieu_naissance']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
-            <input type="text" name="lieu_naissance" class="form-control" value="<?= h($agent['lieu_naissance']??'') ?>"<?= $ro($agent['lieu_naissance']??'') ?>>
+            <label class="form-label">Lieu de naissance <span class="text-danger">*</span><?= !empty($agent['lieu_naissance']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="text" name="lieu_naissance" class="form-control" value="<?= h($data['lieu_naissance']??'') ?>"<?= $ro($agent['lieu_naissance']??'') ?> required>
           </div>
           <div class="col-md-6">
-            <label class="form-label">Nationalité<?= !empty($agent['nationalite']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
-            <input type="text" name="nationalite" class="form-control" value="<?= h($agent['nationalite']??'') ?>"<?= $ro($agent['nationalite']??'') ?>>
+            <label class="form-label">Nationalité <span class="text-danger">*</span><?= !empty($agent['nationalite']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="text" name="nationalite" class="form-control" value="<?= h($data['nationalite']??'') ?>"<?= $ro($agent['nationalite']??'') ?> required>
           </div>
           <div class="col-md-6">
-            <label class="form-label">N° Sécurité Sociale<?= !empty($agent['num_secu']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
-            <input type="text" name="num_secu" class="form-control" data-format="secu" value="<?= h($agent['num_secu']??'') ?>"<?= $ro($agent['num_secu']??'') ?>>
+            <label class="form-label">N° Sécurité Sociale <span class="text-danger">*</span><?= !empty($agent['num_secu']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="text" name="num_secu" class="form-control" data-format="secu" value="<?= h($data['num_secu']??'') ?>"<?= $ro($agent['num_secu']??'') ?> required>
           </div>
           <div class="col-md-6">
             <label class="form-label">Situation familiale<?= !empty($agent['situation_familiale']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
@@ -196,16 +248,16 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
         <div class="section-title">Coordonnées</div>
         <div class="row g-3">
           <div class="col-12">
-            <label class="form-label">Adresse<?= !empty($agent['adresse']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
-            <input type="text" name="adresse" class="form-control" value="<?= h($agent['adresse']??'') ?>"<?= $ro($agent['adresse']??'') ?>>
+            <label class="form-label">Adresse <span class="text-danger">*</span><?= !empty($agent['adresse']) ? '<span class="field-done"><i class="fa fa-check"></i> Déjà renseigné</span>' : '' ?></label>
+            <input type="text" name="adresse" class="form-control" value="<?= h($data['adresse']??'') ?>"<?= $ro($agent['adresse']??'') ?> required>
           </div>
           <div class="col-md-3">
-            <label class="form-label">Code postal<?= !empty($agent['cp']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
-            <input type="text" name="cp" class="form-control" value="<?= h($agent['cp']??'') ?>"<?= $ro($agent['cp']??'') ?>>
+            <label class="form-label">Code postal <span class="text-danger">*</span><?= !empty($agent['cp']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="text" name="cp" class="form-control" value="<?= h($data['cp']??'') ?>"<?= $ro($agent['cp']??'') ?> required>
           </div>
           <div class="col-md-5">
-            <label class="form-label">Ville<?= !empty($agent['ville']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
-            <input type="text" name="ville" class="form-control" value="<?= h($agent['ville']??'') ?>"<?= $ro($agent['ville']??'') ?>>
+            <label class="form-label">Ville <span class="text-danger">*</span><?= !empty($agent['ville']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="text" name="ville" class="form-control" value="<?= h($data['ville']??'') ?>"<?= $ro($agent['ville']??'') ?> required>
           </div>
           <div class="col-md-4">
             <label class="form-label">Téléphone<?= !empty($agent['telephone']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
@@ -220,16 +272,16 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
         <div class="section-title">Autorisation CNAPS</div>
         <div class="row g-3">
           <div class="col-md-4">
-            <label class="form-label">N° Autorisation CNAPS<?= !empty($agent['num_autorisation_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
-            <input type="text" name="num_autorisation_cnaps" class="form-control" value="<?= h($agent['num_autorisation_cnaps']??'') ?>"<?= $ro($agent['num_autorisation_cnaps']??'') ?>>
+            <label class="form-label">N° Autorisation CNAPS <span class="text-danger">*</span><?= !empty($agent['num_autorisation_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="text" name="num_autorisation_cnaps" class="form-control" value="<?= h($data['num_autorisation_cnaps']??'') ?>"<?= $ro($agent['num_autorisation_cnaps']??'') ?> required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Date d'autorisation<?= !empty($agent['date_autorisation_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
-            <input type="date" name="date_autorisation_cnaps" class="form-control" value="<?= h($agent['date_autorisation_cnaps']??'') ?>"<?= $ro($agent['date_autorisation_cnaps']??'') ?>>
+            <label class="form-label">Date d'autorisation <span class="text-danger">*</span><?= !empty($agent['date_autorisation_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="date" name="date_autorisation_cnaps" class="form-control" value="<?= h($data['date_autorisation_cnaps']??'') ?>"<?= $ro($agent['date_autorisation_cnaps']??'') ?> required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Date d'expiration<?= !empty($agent['date_expiration_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
-            <input type="date" name="date_expiration_cnaps" class="form-control" value="<?= h($agent['date_expiration_cnaps']??'') ?>"<?= $ro($agent['date_expiration_cnaps']??'') ?>>
+            <label class="form-label">Date d'expiration <span class="text-danger">*</span><?= !empty($agent['date_expiration_cnaps']) ? '<span class="field-done"><i class="fa fa-check"></i></span>' : '' ?></label>
+            <input type="date" name="date_expiration_cnaps" class="form-control" value="<?= h($data['date_expiration_cnaps']??'') ?>"<?= $ro($agent['date_expiration_cnaps']??'') ?> required>
           </div>
         </div>
 
@@ -254,7 +306,7 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
           $existIdentite = $existingDocs['piece_identite'] ?? $existingDocs['titre_sejour'] ?? null;
           ?>
           <div class="col-md-6">
-            <label class="form-label"><i class="fa fa-id-card me-1 text-muted"></i>Pièce d'identité <span style="color:#6b7280;font-weight:400">ou</span> titre de séjour</label>
+            <label class="form-label"><i class="fa fa-id-card me-1 text-muted"></i>Pièce d'identité <span style="color:#6b7280;font-weight:400">ou</span> titre de séjour <?= $existIdentite ? '' : '<span class="text-danger">*</span>' ?></label>
             <?php if ($existIdentite): ?>
               <div class="doc-done">
                 <i class="fa fa-check-circle text-success"></i>
@@ -262,7 +314,7 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
                 <a href="<?= UPLOAD_URL ?>/<?= h($existIdentite['chemin']) ?>" target="_blank" class="ms-auto" style="font-size:0.75rem;color:#2563eb"><i class="fa fa-eye me-1"></i><?= h($existIdentite['nom_fichier']) ?></a>
               </div>
             <?php else: ?>
-              <input type="file" name="piece_identite" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+              <input type="file" name="piece_identite" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required>
             <?php endif; ?>
           </div>
 
@@ -278,7 +330,7 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
             $existing = $existingDocs[$k] ?? null;
           ?>
           <div class="col-md-6">
-            <label class="form-label"><i class="fa <?= $icon ?> me-1 text-muted"></i><?= h($label) ?></label>
+            <label class="form-label"><i class="fa <?= $icon ?> me-1 text-muted"></i><?= h($label) ?> <?= $existing ? '' : '<span class="text-danger">*</span>' ?></label>
             <?php if ($existing): ?>
               <div class="doc-done">
                 <i class="fa fa-check-circle text-success"></i>
@@ -286,7 +338,7 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
                 <a href="<?= UPLOAD_URL ?>/<?= h($existing['chemin']) ?>" target="_blank" class="ms-auto" style="font-size:0.75rem;color:#2563eb"><i class="fa fa-eye me-1"></i><?= h($existing['nom_fichier']) ?></a>
               </div>
             <?php else: ?>
-              <input type="file" name="<?= $k ?>" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+              <input type="file" name="<?= $k ?>" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required>
             <?php endif; ?>
           </div>
           <?php endforeach; ?>
@@ -324,6 +376,42 @@ body { background:#f0f2f5; font-family:'Segoe UI',sans-serif; }
   </div>
 <?php endif; ?>
 </div>
+<?php if (!$success): ?>
+<script>
+(function() {
+    var form    = document.getElementById('agentForm');
+    var summary = document.getElementById('formErrorSummary');
+    var listEl  = document.getElementById('formErrorList');
+
+    function fieldLabel(field) {
+        var wrapper = field.closest('[class*="col-"]');
+        var label = wrapper ? wrapper.querySelector('.form-label') : null;
+        return label ? label.textContent.replace('*', '').replace('Déjà renseigné', '').trim() : (field.name || 'Champ');
+    }
+
+    form.addEventListener('submit', function(e) {
+        var missing = [];
+        var firstInvalid = null;
+        form.querySelectorAll('[required]').forEach(function(f) {
+            f.classList.remove('is-invalid');
+            if (!f.value || !f.value.trim()) {
+                missing.push(fieldLabel(f));
+                f.classList.add('is-invalid');
+                if (!firstInvalid) firstInvalid = f;
+            }
+        });
+
+        if (missing.length > 0) {
+            e.preventDefault();
+            listEl.innerHTML = missing.map(function(m) { return '<li>Le champ « ' + m + ' » est obligatoire.</li>'; }).join('');
+            summary.style.display = 'block';
+            summary.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (firstInvalid) firstInvalid.focus();
+        }
+    });
+})();
+</script>
+<?php endif; ?>
 <script src="<?= APP_URL ?>/assets/js/app.js"></script>
 </body>
 </html>
