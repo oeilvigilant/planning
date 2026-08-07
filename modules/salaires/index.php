@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('salaires', 'view');
+ensureMissionsSchema();
 
 $pageTitle    = 'Calcul des salaires';
 $currentModule = 'salaires';
@@ -12,10 +13,18 @@ $db    = getDB();
 $mois  = (int)($_GET['mois']  ?? date('n'));
 $annee = (int)($_GET['annee'] ?? date('Y'));
 
-// Version active du planning
-$stmtV = $db->prepare("SELECT * FROM planning_versions WHERE mois=? AND annee=? AND is_current=1 LIMIT 1");
-$stmtV->execute([$mois, $annee]);
-$version = $stmtV->fetch();
+// Missions ayant un planning ce mois-ci (pour le sélecteur d'export)
+$stmtMV = $db->prepare("
+    SELECT v.id AS version_id, v.mission_id, m.nom AS mission_nom
+    FROM planning_versions v
+    JOIN missions m ON m.id = v.mission_id
+    WHERE v.mois=? AND v.annee=? AND v.is_current=1
+    ORDER BY m.nom
+");
+$stmtMV->execute([$mois, $annee]);
+$missionsAvecPlanning = $stmtMV->fetchAll();
+$nbMissionsPlanifiees = count($missionsAvecPlanning);
+$hasPlanning = $nbMissionsPlanifiees > 0;
 
 $taux   = getTauxHoraires();
 $agents = $db->query("SELECT id,nom,prenom,matricule,poste,remuneration,type_remuneration FROM agents WHERE actif=1 ORDER BY nom,prenom")->fetchAll();
@@ -32,60 +41,61 @@ if ($agentIdsAll) {
     }
 }
 
-// Calculer les totaux par agent
+// Calculer les totaux par agent — agrégés sur toutes les missions du mois
+// (un agent peut travailler plusieurs missions en parallèle, sa paie doit les additionner)
 $resultats = [];
-if ($version) {
-    foreach ($agents as $ag) {
-        $stmtL = $db->prepare("
-            SELECT SUM(min_normal) as n, SUM(min_nuit) as nu, SUM(min_dimanche) as d,
-                   SUM(min_nuit_dimanche) as nd,
-                   SUM(min_ferie_normal) as fn, SUM(min_ferie_nuit) as fnu,
-                   SUM(CASE WHEN (min_normal+min_nuit+min_dimanche+min_nuit_dimanche+min_ferie_normal+min_ferie_nuit) >= ? THEN 1 ELSE 0 END) AS nb_vacations_panier
-            FROM planning_lignes WHERE version_id=? AND agent_id=?
-        ");
-        $primesCfg = getPrimesConfig();
-        $minPanier = (int)round($primesCfg['panier_min_heures'] * 60);
-        $stmtL->execute([$minPanier, $version['id'], $ag['id']]);
-        $mins = $stmtL->fetch();
+$primesCfg = getPrimesConfig();
+$minPanier = (int)round($primesCfg['panier_min_heures'] * 60);
+foreach ($agents as $ag) {
+    $stmtL = $db->prepare("
+        SELECT SUM(pl.min_normal) as n, SUM(pl.min_nuit) as nu, SUM(pl.min_dimanche) as d,
+               SUM(pl.min_nuit_dimanche) as nd,
+               SUM(pl.min_ferie_normal) as fn, SUM(pl.min_ferie_nuit) as fnu,
+               SUM(CASE WHEN (pl.min_normal+pl.min_nuit+pl.min_dimanche+pl.min_nuit_dimanche+pl.min_ferie_normal+pl.min_ferie_nuit) >= ? THEN 1 ELSE 0 END) AS nb_vacations_panier
+        FROM planning_lignes pl
+        JOIN planning_versions pv ON pv.id = pl.version_id
+        WHERE pv.mois=? AND pv.annee=? AND pv.is_current=1 AND pl.agent_id=?
+    ");
+    $stmtL->execute([$minPanier, $mois, $annee, $ag['id']]);
+    $mins = $stmtL->fetch();
 
-        $heures = [
-            'normal'        => minutesToHeures((int)$mins['n']),
-            'nuit'          => minutesToHeures((int)$mins['nu']),
-            'dimanche'      => minutesToHeures((int)$mins['d']),
-            'nuit_dimanche' => minutesToHeures((int)$mins['nd']),
-            'ferie_normal'  => minutesToHeures((int)$mins['fn']),
-            'ferie_nuit'    => minutesToHeures((int)$mins['fnu']),
-        ];
+    $heures = [
+        'normal'        => minutesToHeures((int)$mins['n']),
+        'nuit'          => minutesToHeures((int)$mins['nu']),
+        'dimanche'      => minutesToHeures((int)$mins['d']),
+        'nuit_dimanche' => minutesToHeures((int)$mins['nd']),
+        'ferie_normal'  => minutesToHeures((int)$mins['fn']),
+        'ferie_nuit'    => minutesToHeures((int)$mins['fnu']),
+    ];
 
-        $totalHeures  = array_sum($heures);
-        $salaireCalc  = 0;
-        foreach ($heures as $type => $h) {
-            $salaireCalc += $h * ($taux[$type] ?? 0);
-        }
-        $brut = round($salaireCalc, 2);
+    $totalHeures  = array_sum($heures);
+    $salaireCalc  = 0;
+    foreach ($heures as $type => $h) {
+        $salaireCalc += $h * ($taux[$type] ?? 0);
+    }
+    $brut = round($salaireCalc, 2);
 
-        if ($totalHeures > 0) {
-            $paie = calculerPaie($brut, (int)$mins['nb_vacations_panier']);
+    if ($totalHeures > 0) {
+        $paie = calculerPaie($brut, (int)$mins['nb_vacations_panier']);
 
-            $contratInfo = null;
-            if (isset($contratsMap[$ag['id']])) {
-                $cv = calculerHeuresContratMois($contratsMap[$ag['id']], $mois, $annee);
-                $contratInfo = [
-                    'mois_prorata' => $cv['mois_prorata'],
-                    'mois_complet' => $cv['mois_complet'],
-                    'heures_unite' => $contratsMap[$ag['id']]['heures_unite'] ?? 'periode',
-                ];
-            }
-
-            $resultats[$ag['id']] = [
-                'agent'       => $ag,
-                'heures'      => $heures,
-                'total_heures'=> $totalHeures,
-                'salaire'     => $brut,
-                'paie'        => $paie,
-                'contrat'     => $contratInfo,
+        $contratInfo = null;
+        if (isset($contratsMap[$ag['id']])) {
+            $cv = calculerHeuresContratMois($contratsMap[$ag['id']], $mois, $annee);
+            $contratInfo = [
+                'mois_prorata' => $cv['mois_prorata'],
+                'mois_complet' => $cv['mois_complet'],
+                'heures_unite' => $contratsMap[$ag['id']]['heures_unite'] ?? 'periode',
             ];
         }
+
+        $resultats[$ag['id']] = [
+            'agent'       => $ag,
+            'heures'      => $heures,
+            'total_heures'=> $totalHeures,
+            'salaire'     => $brut,
+            'paie'        => $paie,
+            'contrat'     => $contratInfo,
+        ];
     }
 }
 
@@ -116,7 +126,7 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
     <h2 style="font-size:1.1rem;font-weight:700;margin:0"><?= formatMois($mois,$annee) ?></h2>
     <a href="?mois=<?= $nextMois ?>&annee=<?= $nextAnnee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
 
-    <?php if ($version): ?>
+    <?php if ($hasPlanning): ?>
     <div class="ms-auto">
         <button type="button" class="btn btn-sm" data-bs-toggle="modal" data-bs-target="#modalExport"
                 style="background:rgba(99,102,241,0.1);color:#6366f1;border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:0.35rem 0.9rem;font-size:0.8rem">
@@ -126,7 +136,7 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
     <?php endif; ?>
 </div>
 
-<?php if (!$version || empty($resultats)): ?>
+<?php if (!$hasPlanning || empty($resultats)): ?>
 <div class="alert alert-info"><i class="fa fa-info-circle me-2"></i>Aucun planning trouvé pour <?= formatMois($mois,$annee) ?>. <a href="../planning/index.php?mois=<?= $mois ?>&annee=<?= $annee ?>">Créer le planning →</a></div>
 <?php else: ?>
 
@@ -145,8 +155,8 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
     <div><div class="stat-value"><?= number_format($totalSalaires,2,'.',' ') ?></div><div class="stat-label">Total salaires (€)</div></div></div>
   </div>
   <div class="col-md-3">
-    <div class="stat-card"><div class="stat-icon gold"><i class="fa fa-code-branch"></i></div>
-    <div><div class="stat-value">V<?= $version['version'] ?></div><div class="stat-label">Version planning</div></div></div>
+    <div class="stat-card"><div class="stat-icon gold"><i class="fa fa-map-location-dot"></i></div>
+    <div><div class="stat-value"><?= $nbMissionsPlanifiees ?></div><div class="stat-label">Mission<?= $nbMissionsPlanifiees>1?'s':'' ?> planifiée<?= $nbMissionsPlanifiees>1?'s':'' ?></div></div></div>
   </div>
 </div>
 
@@ -211,8 +221,8 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
         <td class="text-center fw-700" style="color:#16a34a;font-size:1rem"><?= number_format($r['paie']['net_total'],2) ?> €</td>
         <td>
           <div class="d-flex gap-1">
-            <a href="detail.php?agent_id=<?= $rid ?>&version_id=<?= $version['id'] ?>" class="btn-sm-icon view" title="Détail"><i class="fa fa-eye"></i></a>
-            <a href="../agents/export_pdf.php?id=<?= $rid ?>&version_id=<?= $version['id'] ?>" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="PDF comptable"><i class="fa fa-file-pdf"></i></a>
+            <a href="detail.php?agent_id=<?= $rid ?>&mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn-sm-icon view" title="Détail"><i class="fa fa-eye"></i></a>
+            <a href="../agents/export_pdf.php?id=<?= $rid ?>" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="PDF comptable"><i class="fa fa-file-pdf"></i></a>
           </div>
         </td>
       </tr>
@@ -245,13 +255,12 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
 </div>
 <?php endif; ?>
 
-<?php if ($version): ?>
+<?php if ($hasPlanning): ?>
 <!-- Modal export colonnes -->
 <div class="modal fade" id="modalExport" tabindex="-1" aria-labelledby="modalExportLabel">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form id="formExport" method="GET" action="../rapports/export_salaires.php" target="_blank">
-        <input type="hidden" name="version_id" value="<?= $version['id'] ?>">
         <input type="hidden" name="format" id="exportFormat" value="pdf">
 
         <div class="modal-header" style="background:var(--ov-dark);color:white">
@@ -262,6 +271,17 @@ $totalSalaires = array_sum(array_column($resultats,'salaire'));
         </div>
 
         <div class="modal-body">
+          <!-- Mission -->
+          <div class="mb-3">
+            <label class="form-label fw-600" style="font-size:0.85rem">Mission</label>
+            <select name="version_id" class="form-select form-select-sm" required>
+              <?php foreach ($missionsAvecPlanning as $mv): ?>
+              <option value="<?= $mv['version_id'] ?>"><?= h($mv['mission_nom']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <div class="form-text" style="font-size:0.72rem">L'export porte sur une mission à la fois (facturation/pôle social par site).</div>
+          </div>
+
           <!-- Presets -->
           <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
             <small class="text-muted me-1">Sélection rapide :</small>

@@ -4,10 +4,18 @@ require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('planning', 'view');
 ensurePlanningAuditSchema();
+ensureMissionsSchema();
 
 $db    = getDB();
 $mois  = (int)($_GET['mois']  ?? date('n'));
 $annee = (int)($_GET['annee'] ?? date('Y'));
+
+$missions         = $db->query("SELECT id, nom FROM missions WHERE actif = 1 ORDER BY nom")->fetchAll();
+$defaultMissionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+$missionId        = (int)($_GET['mission'] ?? 0);
+if (!$missionId || !in_array($missionId, array_column($missions, 'id'))) {
+    $missionId = $defaultMissionId;
+}
 
 $pageTitle    = 'Journal des modifications';
 $currentModule = 'planning-audit';
@@ -21,11 +29,11 @@ $entries = $db->prepare("
     JOIN planning_versions v ON v.id = pa.version_id
     LEFT JOIN utilisateurs u ON u.id = pa.user_id
     LEFT JOIN agents a ON a.id = pa.agent_id
-    WHERE v.mois=? AND v.annee=?
+    WHERE v.mission_id=? AND v.mois=? AND v.annee=?
     ORDER BY pa.created_at DESC
     LIMIT 500
 ");
-$entries->execute([$mois, $annee]);
+$entries->execute([$missionId, $mois, $annee]);
 $entries = $entries->fetchAll();
 
 $actionBadges = [
@@ -36,7 +44,7 @@ $actionBadges = [
 ?>
 
 <div class="d-flex align-items-center gap-2 mb-3">
-    <a href="index.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i>Retour au planning</a>
+    <a href="index.php?mois=<?= $mois ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i>Retour au planning</a>
     <h2 style="font-size:1rem;margin:0;font-weight:600"><?= formatMois($mois,$annee) ?> — Journal des modifications</h2>
 </div>
 

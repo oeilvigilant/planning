@@ -3,19 +3,27 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('planning', 'view');
+ensureMissionsSchema();
 
 $db    = getDB();
 $mois  = (int)($_GET['mois']  ?? date('n'));
 $annee = (int)($_GET['annee'] ?? date('Y'));
 
+$missions         = $db->query("SELECT id, nom FROM missions WHERE actif = 1 ORDER BY nom")->fetchAll();
+$defaultMissionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+$missionId        = (int)($_GET['mission'] ?? 0);
+if (!$missionId || !in_array($missionId, array_column($missions, 'id'))) {
+    $missionId = $defaultMissionId;
+}
+
 // Restaurer une version — redirect AVANT header.php
 if ($_GET['restore'] ?? false) {
     requirePerm('planning','edit');
     $vid = (int)$_GET['restore'];
-    $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mois=? AND annee=?")->execute([$mois,$annee]);
+    $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mission_id=? AND mois=? AND annee=?")->execute([$missionId,$mois,$annee]);
     $db->prepare("UPDATE planning_versions SET is_current=1 WHERE id=?")->execute([$vid]);
     flash('success','Version restaurée avec succès.');
-    header("Location: index.php?mois=$mois&annee=$annee");
+    header("Location: index.php?mois=$mois&annee=$annee&mission=$missionId");
     exit;
 }
 
@@ -28,15 +36,15 @@ $versions = $db->prepare("
            (SELECT COUNT(*) FROM planning_lignes l WHERE l.version_id = v.id) as nb_lignes
     FROM planning_versions v
     LEFT JOIN utilisateurs u ON u.id = v.created_by
-    WHERE v.mois=? AND v.annee=?
+    WHERE v.mission_id=? AND v.mois=? AND v.annee=?
     ORDER BY v.version DESC
 ");
-$versions->execute([$mois, $annee]);
+$versions->execute([$missionId, $mois, $annee]);
 $versions = $versions->fetchAll();
 ?>
 
 <div class="d-flex align-items-center gap-2 mb-3">
-    <a href="index.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i>Retour au planning</a>
+    <a href="index.php?mois=<?= $mois ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i>Retour au planning</a>
     <h2 style="font-size:1rem;margin:0;font-weight:600"><?= formatMois($mois,$annee) ?> — Versions</h2>
 </div>
 
@@ -77,14 +85,14 @@ $versions = $versions->fetchAll();
           <div class="d-flex gap-1">
             <a href="view_version.php?id=<?= $v['id'] ?>" class="btn-sm-icon view" title="Voir"><i class="fa fa-eye"></i></a>
             <?php if (!$v['is_current'] && canDo('planning','edit')): ?>
-            <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>&restore=<?= $v['id'] ?>"
+            <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>&restore=<?= $v['id'] ?>"
                class="btn-sm-icon edit" title="Restaurer cette version"
                data-confirm="Restaurer la version V<?= $v['version'] ?> ? La version active sera archivée.">
                <i class="fa fa-rotate-left"></i>
             </a>
             <?php endif; ?>
-            <a href="export.php?version_id=<?= $v['id'] ?>&format=pdf" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="PDF"><i class="fa fa-file-pdf"></i></a>
-            <a href="export.php?version_id=<?= $v['id'] ?>&format=excel" class="btn-sm-icon" style="background:rgba(34,197,94,0.1);color:#16a34a" title="Excel"><i class="fa fa-file-excel"></i></a>
+            <a href="export.php?version_id=<?= $v['id'] ?>&mission=<?= $missionId ?>&format=pdf" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="PDF"><i class="fa fa-file-pdf"></i></a>
+            <a href="export.php?version_id=<?= $v['id'] ?>&mission=<?= $missionId ?>&format=excel" class="btn-sm-icon" style="background:rgba(34,197,94,0.1);color:#16a34a" title="Excel"><i class="fa fa-file-excel"></i></a>
           </div>
         </td>
       </tr>

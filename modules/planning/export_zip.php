@@ -4,6 +4,7 @@ require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../includes/pdf.php';
 requireLogin();
 requirePerm('planning', 'export');
+ensureMissionsSchema();
 
 if (!class_exists('ZipArchive')) {
     die('L\'extension PHP ZipArchive est requise.');
@@ -16,6 +17,11 @@ require_once DOMPDF_AUTOLOAD;
 $db    = getDB();
 $type  = $_GET['type'] ?? 'month';
 $params = getAllParams();
+
+$missionId = (int)($_GET['mission'] ?? 0);
+if (!$missionId) {
+    $missionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+}
 
 $dateDebutFilter = $_GET['date_debut'] ?? '';
 $dateFinFilter   = $_GET['date_fin']   ?? '';
@@ -58,9 +64,9 @@ if ($type === 'week') {
 
     $stmt = $db->prepare("
         SELECT pl.* FROM planning_lignes pl
-        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1 AND pv.mission_id = ?
         WHERE pl.date_travail BETWEEN ? AND ?");
-    $stmt->execute([$lundi->format('Y-m-d'), $dimanche->format('Y-m-d')]);
+    $stmt->execute([$missionId, $lundi->format('Y-m-d'), $dimanche->format('Y-m-d')]);
     foreach ($stmt->fetchAll() as $l) {
         $planningData[$l['agent_id']][$l['date_travail']] = $l;
     }
@@ -129,14 +135,26 @@ if ($agentIds !== '') {
     $ids = array_values(array_filter(array_map('intval', explode(',', $agentIds))));
     if ($ids) {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmtA = $db->prepare("SELECT id, nom, prenom, matricule, poste FROM agents WHERE actif=1 AND id IN ($placeholders) ORDER BY nom, prenom");
-        $stmtA->execute($ids);
+        $stmtA = $db->prepare("
+            SELECT a.id, a.nom, a.prenom, a.matricule, a.poste
+            FROM agents a
+            JOIN mission_agents ma ON ma.agent_id = a.id AND ma.mission_id = ?
+            WHERE a.actif=1 AND a.id IN ($placeholders) ORDER BY a.nom, a.prenom
+        ");
+        $stmtA->execute(array_merge([$missionId], $ids));
         $agents = $stmtA->fetchAll();
     } else {
         $agents = [];
     }
 } else {
-    $agents = $db->query("SELECT id, nom, prenom, matricule, poste FROM agents WHERE actif=1 ORDER BY nom, prenom")->fetchAll();
+    $stmtA = $db->prepare("
+        SELECT a.id, a.nom, a.prenom, a.matricule, a.poste
+        FROM agents a
+        JOIN mission_agents ma ON ma.agent_id = a.id AND ma.mission_id = ?
+        WHERE a.actif=1 ORDER BY a.nom, a.prenom
+    ");
+    $stmtA->execute([$missionId]);
+    $agents = $stmtA->fetchAll();
 }
 
 $showFooter   = !empty($_GET['footer']);

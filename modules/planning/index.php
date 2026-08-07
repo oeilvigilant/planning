@@ -4,8 +4,18 @@ require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('planning', 'view');
 ensurePlanningAuditSchema();
+ensureMissionsSchema();
 
-$db  = getDB();
+$db = getDB();
+
+// ── Mission active (GET pour l'affichage, POST pour les actions AJAX) ─────────
+$missions          = $db->query("SELECT id, nom FROM missions WHERE actif = 1 ORDER BY nom")->fetchAll();
+$defaultMissionId  = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+$missionId         = (int)($_GET['mission'] ?? $_POST['mission_id'] ?? 0);
+if (!$missionId || !in_array($missionId, array_column($missions, 'id'))) {
+    $missionId = $defaultMissionId;
+}
+
 $vue = $_GET['vue'] ?? 'mois';
 
 // ── Postes prédéfinis sécurité ────────────────────────────────────────────────
@@ -130,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $reqMois  = (int)($_POST['mois']  ?? date('n'));
         $reqAnnee = (int)($_POST['annee'] ?? date('Y'));
         $note     =      ($_POST['note']  ?? '');
-        $newVId   = creerVersionPlanningAvecCopie($db, $reqMois, $reqAnnee, $note, getCurrentUser()['id']);
+        $newVId   = creerVersionPlanningAvecCopie($db, $missionId, $reqMois, $reqAnnee, $note, getCurrentUser()['id']);
         $stmtNv   = $db->prepare("SELECT version FROM planning_versions WHERE id=?");
         $stmtNv->execute([$newVId]);
         $nextV    = (int)$stmtNv->fetchColumn();
@@ -162,17 +172,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         requirePerm('planning', 'delete');
         $versionId = (int)($_POST['version_id'] ?? 0);
         if ($versionId) {
-            // Récupérer mois/année de la version courante
-            $curV = $db->prepare("SELECT mois, annee, version FROM planning_versions WHERE id=?");
+            // Récupérer mission/mois/année de la version courante
+            $curV = $db->prepare("SELECT mission_id, mois, annee, version FROM planning_versions WHERE id=?");
             $curV->execute([$versionId]);
             $cv = $curV->fetch();
             if (!$cv) { echo json_encode(['ok' => false, 'error' => 'Version introuvable']); exit; }
             // Archiver la version courante
-            $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mois=? AND annee=?")->execute([$cv['mois'], $cv['annee']]);
+            $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mission_id=? AND mois=? AND annee=?")->execute([$cv['mission_id'], $cv['mois'], $cv['annee']]);
             // Créer une nouvelle version vide
             $nextV = ((int)$cv['version']) + 1;
-            $db->prepare("INSERT INTO planning_versions (mois, annee, version, note, is_current, created_by) VALUES (?,?,?,?,1,?)")
-               ->execute([$cv['mois'], $cv['annee'], $nextV, 'Réinitialisation', getCurrentUser()['id']]);
+            $db->prepare("INSERT INTO planning_versions (mission_id, mois, annee, version, note, is_current, created_by) VALUES (?,?,?,?,?,1,?)")
+               ->execute([$cv['mission_id'], $cv['mois'], $cv['annee'], $nextV, 'Réinitialisation', getCurrentUser()['id']]);
             echo json_encode(['ok' => true, 'new_version' => $nextV]);
         } else {
             echo json_encode(['ok' => false, 'error' => 'Version introuvable']);
@@ -201,7 +211,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         $vMap = [];
-        foreach ($db->query("SELECT id,mois,annee FROM planning_versions WHERE is_current=1")->fetchAll() as $v) {
+        $stmtVm = $db->prepare("SELECT id,mois,annee FROM planning_versions WHERE mission_id=? AND is_current=1");
+        $stmtVm->execute([$missionId]);
+        foreach ($stmtVm->fetchAll() as $v) {
             $vMap[$v['annee'].'-'.sprintf('%02d',$v['mois'])] = (int)$v['id'];
         }
 
@@ -224,8 +236,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $k = $y.'-'.sprintf('%02d',$m);
 
                 if (!isset($vMap[$k])) {
-                    $db->prepare("INSERT INTO planning_versions (mois,annee,version,is_current,created_by) VALUES (?,?,1,1,?)")
-                       ->execute([$m, $y, $userId]);
+                    $db->prepare("INSERT INTO planning_versions (mission_id,mois,annee,version,is_current,created_by) VALUES (?,?,?,1,1,?)")
+                       ->execute([$missionId, $m, $y, $userId]);
                     $vMap[$k] = (int)$db->lastInsertId();
                 }
 
@@ -293,7 +305,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
 
         $vMap = [];
-        foreach ($db->query("SELECT id,mois,annee FROM planning_versions WHERE is_current=1")->fetchAll() as $v) {
+        $stmtVm = $db->prepare("SELECT id,mois,annee FROM planning_versions WHERE mission_id=? AND is_current=1");
+        $stmtVm->execute([$missionId]);
+        foreach ($stmtVm->fetchAll() as $v) {
             $vMap[$v['annee'].'-'.sprintf('%02d',$v['mois'])] = (int)$v['id'];
         }
 
@@ -328,19 +342,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 }
 
 // ── Données communes ──────────────────────────────────────────────────────────
+
+// Aucune mission active : cas dégradé (ne devrait pas arriver après migration)
+if (!$missionId) {
+    $pageTitle    = 'Planning';
+    $currentModule = 'planning';
+    require_once __DIR__ . '/../../includes/header.php';
+    echo '<div class="alert alert-danger"><i class="fa fa-triangle-exclamation me-2"></i>Aucune mission active. '
+        . (canDo('missions','view') ? '<a href="' . APP_URL . '/modules/missions/index.php">Gérer les missions</a>' : 'Contactez un administrateur.') . '</div>';
+    include __DIR__ . '/../../includes/footer.php';
+    exit;
+}
+
 $hiddenAgents = $_SESSION['planning_hidden'] ?? [];
 
-$allAgents = $db->query("
+$stmtAg = $db->prepare("
     SELECT a.id, a.nom, a.prenom, a.matricule, a.poste, a.sexe
     FROM agents a
+    JOIN mission_agents ma ON ma.agent_id = a.id AND ma.mission_id = ?
     WHERE a.actif = 1
     ORDER BY CASE WHEN a.sexe='F' THEN 0 ELSE 1 END, a.nom, a.prenom
-")->fetchAll();
+");
+$stmtAg->execute([$missionId]);
+$allAgents = $stmtAg->fetchAll();
 
 $agents = array_values(array_filter($allAgents, fn($ag) => !in_array($ag['id'], $hiddenAgents)));
 
 $versionsMap = [];
-foreach ($db->query("SELECT id,mois,annee FROM planning_versions WHERE is_current=1 ORDER BY annee DESC, mois DESC LIMIT 24")->fetchAll() as $v) {
+$stmtVMap = $db->prepare("SELECT id,mois,annee FROM planning_versions WHERE mission_id=? AND is_current=1 ORDER BY annee DESC, mois DESC LIMIT 24");
+$stmtVMap->execute([$missionId]);
+foreach ($stmtVMap->fetchAll() as $v) {
     $versionsMap[$v['annee'].'-'.sprintf('%02d',$v['mois'])] = (int)$v['id'];
 }
 
@@ -403,8 +434,8 @@ if ($vue === 'semaine') {
     }
     foreach ($moisCouverts as $k => [$m, $y]) {
         if (!isset($versionsMap[$k]) && $canEdit) {
-            $db->prepare("INSERT INTO planning_versions (mois,annee,version,is_current,created_by) VALUES (?,?,1,1,?)")
-               ->execute([$m, $y, getCurrentUser()['id']]);
+            $db->prepare("INSERT INTO planning_versions (mission_id,mois,annee,version,is_current,created_by) VALUES (?,?,?,1,1,?)")
+               ->execute([$missionId, $m, $y, getCurrentUser()['id']]);
             $versionsMap[$k] = (int)$db->lastInsertId();
         }
     }
@@ -415,9 +446,9 @@ if ($vue === 'semaine') {
     $planningData = [];
     $stmtWeek = $db->prepare("
         SELECT pl.* FROM planning_lignes pl
-        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1 AND pv.mission_id = ?
         WHERE pl.date_travail BETWEEN ? AND ?");
-    $stmtWeek->execute([$dateDebutW, $dateFinW]);
+    $stmtWeek->execute([$missionId, $dateDebutW, $dateFinW]);
     foreach ($stmtWeek->fetchAll() as $l) {
         $planningData[$l['agent_id']][$l['date_travail']] = $l;
     }
@@ -446,16 +477,23 @@ if ($vue === 'semaine') {
     <!-- TOOLBAR semaine -->
     <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
       <div class="btn-group btn-group-sm me-1">
-        <a href="?vue=mois&mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar me-1"></i>Mensuel</a>
+        <a href="?vue=mois&mois=<?= $mois ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar me-1"></i>Mensuel</a>
         <button class="btn btn-dark" disabled><i class="fa fa-calendar-week me-1"></i>Hebdo</button>
-        <a href="mission.php?date_debut=<?= $lundi->format('Y-m-d') ?>&date_fin=<?= $dimanche->format('Y-m-d') ?>" class="btn btn-ov-secondary"><i class="fa fa-map-marker-alt me-1"></i>Mission</a>
+        <a href="mission.php?date_debut=<?= $lundi->format('Y-m-d') ?>&date_fin=<?= $dimanche->format('Y-m-d') ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary"><i class="fa fa-map-marker-alt me-1"></i>Mission</a>
       </div>
-      <a href="?vue=semaine&semaine=<?= $prevSem ?>&annee=<?= $prevAnnSem ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
+      <div class="ms-1 me-1">
+        <select class="form-select form-select-sm" style="width:auto" onchange="location.href='?vue=semaine&semaine=<?= $semaine ?>&annee=<?= $annee ?>&mission='+this.value">
+          <?php foreach ($missions as $m): ?>
+          <option value="<?= $m['id'] ?>" <?= $m['id']==$missionId?'selected':'' ?>><?= h($m['nom']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <a href="?vue=semaine&semaine=<?= $prevSem ?>&annee=<?= $prevAnnSem ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
       <span style="font-weight:700;font-size:0.95rem;color:var(--ov-navy)">
         Sem.<?= $semaine ?> — <?= $lundi->format('d') ?> <?= $moisNom ?> <?= $lundi->format('Y') ?><?= $moisFinNom ?>
       </span>
-      <a href="?vue=semaine&semaine=<?= $nextSem ?>&annee=<?= $nextAnnSem ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
-      <a href="?vue=semaine&semaine=<?= date('W') ?>&annee=<?= date('Y') ?>" class="btn btn-ov-secondary btn-sm">Cette sem.</a>
+      <a href="?vue=semaine&semaine=<?= $nextSem ?>&annee=<?= $nextAnnSem ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
+      <a href="?vue=semaine&semaine=<?= date('W') ?>&annee=<?= date('Y') ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm">Cette sem.</a>
       <div class="ms-auto d-flex gap-2 flex-wrap">
         <?php if ($canEdit): ?>
         <button class="btn btn-ov-primary btn-sm" id="btnBulkAssign"><i class="fa fa-bolt me-1"></i>Affecter</button>
@@ -467,12 +505,19 @@ if ($vue === 'semaine') {
         <button class="btn btn-ov-secondary btn-sm" id="btnNewVersion"><i class="fa fa-code-branch me-1"></i>Nouvelle version</button>
         <button class="btn btn-sm btn-outline-danger" id="btnResetMonth" title="Supprimer toutes les affectations du mois"><i class="fa fa-eraser me-1"></i>Réinitialiser le mois</button>
         <?php endif; ?>
-        <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
+        <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
         <?php if (canDo('planning','export')): ?>
         <button class="btn btn-ov-secondary btn-sm" id="btnExport"><i class="fa fa-file-export me-1"></i>Exporter</button>
         <?php endif; ?>
       </div>
     </div>
+
+    <?php if (empty($allAgents)): ?>
+    <div class="alert alert-warning py-2 mb-2" style="font-size:0.85rem">
+      <i class="fa fa-triangle-exclamation me-2"></i>Aucun agent affecté à cette mission —
+      <a href="<?= APP_URL ?>/modules/missions/agents.php?id=<?= $missionId ?>">Affecter des agents</a>
+    </div>
+    <?php endif; ?>
 
     <!-- LÉGENDE shifts -->
     <div class="d-flex gap-2 mb-2 flex-wrap" style="font-size:0.72rem">
@@ -630,16 +675,16 @@ if ($vue === 'semaine') {
     $annee = (int)($_GET['annee'] ?? date('Y'));
     if ($mois < 1 || $mois > 12) $mois = (int)date('n');
 
-    if ($canEdit) ensureSnapshotAutoDuJour($db, $mois, $annee);
+    if ($canEdit) ensureSnapshotAutoDuJour($db, $missionId, $mois, $annee);
 
-    $stmtV = $db->prepare("SELECT * FROM planning_versions WHERE mois=? AND annee=? AND is_current=1 ORDER BY version DESC LIMIT 1");
-    $stmtV->execute([$mois, $annee]);
+    $stmtV = $db->prepare("SELECT * FROM planning_versions WHERE mission_id=? AND mois=? AND annee=? AND is_current=1 ORDER BY version DESC LIMIT 1");
+    $stmtV->execute([$missionId, $mois, $annee]);
     $version = $stmtV->fetch();
 
     if (!$version && $canEdit) {
-        $db->prepare("INSERT INTO planning_versions (mois,annee,version,is_current,created_by) VALUES (?,?,1,1,?)")
-           ->execute([$mois, $annee, getCurrentUser()['id']]);
-        $stmtV->execute([$mois, $annee]);
+        $db->prepare("INSERT INTO planning_versions (mission_id,mois,annee,version,is_current,created_by) VALUES (?,?,?,1,1,?)")
+           ->execute([$missionId, $mois, $annee, getCurrentUser()['id']]);
+        $stmtV->execute([$missionId, $mois, $annee]);
         $version = $stmtV->fetch();
         $versionsMap[$annee.'-'.sprintf('%02d',$mois)] = $version ? (int)$version['id'] : null;
     }
@@ -699,13 +744,20 @@ if ($vue === 'semaine') {
     <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
       <div class="btn-group btn-group-sm me-1">
         <button class="btn btn-dark" disabled><i class="fa fa-calendar me-1"></i>Mensuel</button>
-        <a href="?vue=semaine&semaine=<?= $semaineCourante ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar-week me-1"></i>Hebdo</a>
-        <a href="mission.php?date_debut=<?= sprintf('%04d-%02d-01',$annee,$mois) ?>&date_fin=<?= sprintf('%04d-%02d-%02d',$annee,$mois,$nbJours) ?>" class="btn btn-ov-secondary"><i class="fa fa-map-marker-alt me-1"></i>Mission</a>
+        <a href="?vue=semaine&semaine=<?= $semaineCourante ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar-week me-1"></i>Hebdo</a>
+        <a href="mission.php?date_debut=<?= sprintf('%04d-%02d-01',$annee,$mois) ?>&date_fin=<?= sprintf('%04d-%02d-%02d',$annee,$mois,$nbJours) ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary"><i class="fa fa-map-marker-alt me-1"></i>Mission</a>
       </div>
-      <a href="?vue=mois&mois=<?= $prevMois ?>&annee=<?= $prevAnnee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
+      <div class="ms-1 me-1">
+        <select class="form-select form-select-sm" style="width:auto" onchange="location.href='?vue=mois&mois=<?= $mois ?>&annee=<?= $annee ?>&mission='+this.value">
+          <?php foreach ($missions as $m): ?>
+          <option value="<?= $m['id'] ?>" <?= $m['id']==$missionId?'selected':'' ?>><?= h($m['nom']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <a href="?vue=mois&mois=<?= $prevMois ?>&annee=<?= $prevAnnee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
       <h2 style="font-size:1.05rem;font-weight:700;color:var(--ov-navy);margin:0"><?= formatMois($mois,$annee) ?></h2>
-      <a href="?vue=mois&mois=<?= $nextMois ?>&annee=<?= $nextAnnee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
-      <a href="?vue=mois&mois=<?= date('n') ?>&annee=<?= date('Y') ?>" class="btn btn-ov-secondary btn-sm">Ce mois</a>
+      <a href="?vue=mois&mois=<?= $nextMois ?>&annee=<?= $nextAnnee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
+      <a href="?vue=mois&mois=<?= date('n') ?>&annee=<?= date('Y') ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm">Ce mois</a>
       <?php if ($version): ?>
       <span class="badge" style="background:rgba(34,197,94,0.1);color:#16a34a;border-radius:20px;padding:4px 12px;font-size:0.78rem">
         <i class="fa fa-code-branch me-1"></i>V<?= $version['version'] ?>
@@ -722,13 +774,20 @@ if ($vue === 'semaine') {
         <button class="btn btn-ov-secondary btn-sm" id="btnNewVersion"><i class="fa fa-code-branch me-1"></i>Nouvelle version</button>
         <button class="btn btn-sm btn-outline-danger" id="btnResetMonth" title="Supprimer toutes les affectations du mois"><i class="fa fa-eraser me-1"></i>Réinitialiser le mois</button>
         <?php endif; ?>
-        <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
-        <a href="audit.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-magnifying-glass me-1"></i>Journal des modifications</a>
+        <a href="versions.php?mois=<?= $mois ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-clock-rotate-left me-1"></i>Historique</a>
+        <a href="audit.php?mois=<?= $mois ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-magnifying-glass me-1"></i>Journal des modifications</a>
         <?php if ($version && canDo('planning','export')): ?>
         <button class="btn btn-ov-secondary btn-sm" id="btnExport"><i class="fa fa-file-export me-1"></i>Exporter</button>
         <?php endif; ?>
       </div>
     </div>
+
+    <?php if (empty($allAgents)): ?>
+    <div class="alert alert-warning py-2 mb-2" style="font-size:0.85rem">
+      <i class="fa fa-triangle-exclamation me-2"></i>Aucun agent affecté à cette mission —
+      <a href="<?= APP_URL ?>/modules/missions/agents.php?id=<?= $missionId ?>">Affecter des agents</a>
+    </div>
+    <?php endif; ?>
 
     <!-- LÉGENDE shifts -->
     <div class="d-flex gap-2 mb-2 flex-wrap" style="font-size:0.72rem">
@@ -1254,6 +1313,7 @@ var versionsMap     = {$versionsMapJson};
 var shifts          = {$shiftsJson};
 var currentMois     = {$jsMois};
 var currentAnnee    = {$jsAnnee};
+var currentMissionId = {$missionId};
 var exportVersionId = {$jsVersionId};
 var currentVersionId = {$jsVersionId};
 var exportSemaine   = {$jsSemaine};
@@ -1500,7 +1560,7 @@ window.resetMonth = function() {
 // ── createVersion ─────────────────────────────────────────────────────────────
 window.createVersion = function() {
     var note = document.getElementById('versionNote').value;
-    var body = new URLSearchParams({action:'new_version', mois:currentMois, annee:currentAnnee, note:note});
+    var body = new URLSearchParams({action:'new_version', mois:currentMois, annee:currentAnnee, note:note, mission_id:currentMissionId});
     fetch('index.php', {method:'POST', body:body})
         .then(function(r) { return r.json(); })
         .then(function(d) { if (d.ok) { versionModal.hide(); location.reload(); } });
@@ -1570,7 +1630,8 @@ window.saveBulk = function() {
             agent_id:   agentId,
             date_debut: dateDebut,
             date_fin:   dateFin,
-            jours:      jours.join(',')
+            jours:      jours.join(','),
+            mission_id: currentMissionId
         });
     } else {
         body = new URLSearchParams({
@@ -1581,7 +1642,8 @@ window.saveBulk = function() {
             heure_debut: debut,
             heure_fin:   fin,
             jours:       jours.join(','),
-            note:        note
+            note:        note,
+            mission_id:  currentMissionId
         });
     }
 
@@ -1688,10 +1750,10 @@ window.doExport = function() {
     var isZip = format === 'zip';
     var script = isZip ? 'export_zip.php' : 'export.php';
     if (exportVue === 'semaine') {
-        url = script + '?type=week&semaine=' + exportSemaine + '&annee=' + currentAnnee;
+        url = script + '?type=week&semaine=' + exportSemaine + '&annee=' + currentAnnee + '&mission=' + currentMissionId;
         if (!isZip) url += '&format=' + format;
     } else {
-        url = script + '?version_id=' + exportVersionId;
+        url = script + '?version_id=' + exportVersionId + '&mission=' + currentMissionId;
         if (!isZip) url += '&format=' + format;
     }
     if (agentIds)  url += '&agent_ids='   + encodeURIComponent(agentIds);

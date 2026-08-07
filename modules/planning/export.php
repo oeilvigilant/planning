@@ -4,25 +4,43 @@ require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../includes/pdf.php';
 requireLogin();
 requirePerm('planning', 'export');
+ensureMissionsSchema();
 
 $db       = getDB();
 $format   = $_GET['format']    ?? 'pdf';
 $type     = $_GET['type']      ?? 'month';
 $agentIds = trim($_GET['agent_ids'] ?? '');
 
+$missionId = (int)($_GET['mission'] ?? 0);
+if (!$missionId) {
+    $missionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+}
+
 // ── Filtre agents ─────────────────────────────────────────────────────────────
 if ($agentIds !== '') {
     $ids = array_values(array_filter(array_map('intval', explode(',', $agentIds))));
     if ($ids) {
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $db->prepare("SELECT id, nom, prenom, matricule, poste, sexe FROM agents WHERE actif=1 AND id IN ($placeholders) ORDER BY CASE WHEN sexe='F' THEN 0 ELSE 1 END, nom, prenom");
-        $stmt->execute($ids);
+        $stmt = $db->prepare("
+            SELECT a.id, a.nom, a.prenom, a.matricule, a.poste, a.sexe
+            FROM agents a
+            JOIN mission_agents ma ON ma.agent_id = a.id AND ma.mission_id = ?
+            WHERE a.actif=1 AND a.id IN ($placeholders) ORDER BY CASE WHEN a.sexe='F' THEN 0 ELSE 1 END, a.nom, a.prenom
+        ");
+        $stmt->execute(array_merge([$missionId], $ids));
         $agents = $stmt->fetchAll();
     } else {
         $agents = [];
     }
 } else {
-    $agents = $db->query("SELECT id, nom, prenom, matricule, poste, sexe FROM agents WHERE actif=1 ORDER BY CASE WHEN sexe='F' THEN 0 ELSE 1 END, nom, prenom")->fetchAll();
+    $stmt = $db->prepare("
+        SELECT a.id, a.nom, a.prenom, a.matricule, a.poste, a.sexe
+        FROM agents a
+        JOIN mission_agents ma ON ma.agent_id = a.id AND ma.mission_id = ?
+        WHERE a.actif=1 ORDER BY CASE WHEN a.sexe='F' THEN 0 ELSE 1 END, a.nom, a.prenom
+    ");
+    $stmt->execute([$missionId]);
+    $agents = $stmt->fetchAll();
 }
 
 $nomsJs = ['','Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
@@ -83,9 +101,9 @@ if ($type === 'week') {
 
     $stmt = $db->prepare("
         SELECT pl.* FROM planning_lignes pl
-        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1 AND pv.mission_id = ?
         WHERE pl.date_travail BETWEEN ? AND ?");
-    $stmt->execute([$dateDebut, $dateFin]);
+    $stmt->execute([$missionId, $dateDebut, $dateFin]);
     foreach ($stmt->fetchAll() as $l) {
         $planningData[$l['agent_id']][$l['date_travail']] = $l;
     }
@@ -120,9 +138,9 @@ if ($type === 'week') {
 
     $stmtM = $db->prepare("
         SELECT pl.* FROM planning_lignes pl
-        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+        JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1 AND pv.mission_id = ?
         WHERE pl.date_travail BETWEEN ? AND ?");
-    $stmtM->execute([$dateDebut, $dateFin]);
+    $stmtM->execute([$missionId, $dateDebut, $dateFin]);
     foreach ($stmtM->fetchAll() as $l) {
         $planningData[$l['agent_id']][$l['date_travail']] = $l;
     }

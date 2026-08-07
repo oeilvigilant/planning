@@ -154,18 +154,18 @@ function logPlanningAudit(PDO $db, int $versionId, int $agentId, string $dateTra
  * les lignes — logique partagée entre "Nouvelle version" (manuelle) et
  * l'instantané automatique quotidien.
  */
-function creerVersionPlanningAvecCopie(PDO $db, int $mois, int $annee, string $note, ?int $userId): int {
-    $stmtCur = $db->prepare("SELECT * FROM planning_versions WHERE mois=? AND annee=? AND is_current=1 LIMIT 1");
-    $stmtCur->execute([$mois, $annee]);
+function creerVersionPlanningAvecCopie(PDO $db, int $missionId, int $mois, int $annee, string $note, ?int $userId): int {
+    $stmtCur = $db->prepare("SELECT * FROM planning_versions WHERE mission_id=? AND mois=? AND annee=? AND is_current=1 LIMIT 1");
+    $stmtCur->execute([$missionId, $mois, $annee]);
     $curV = $stmtCur->fetch();
 
-    $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mois=? AND annee=?")->execute([$mois, $annee]);
-    $stmtMax = $db->prepare("SELECT MAX(version) as mv FROM planning_versions WHERE mois=? AND annee=?");
-    $stmtMax->execute([$mois, $annee]);
+    $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mission_id=? AND mois=? AND annee=?")->execute([$missionId, $mois, $annee]);
+    $stmtMax = $db->prepare("SELECT MAX(version) as mv FROM planning_versions WHERE mission_id=? AND mois=? AND annee=?");
+    $stmtMax->execute([$missionId, $mois, $annee]);
     $nextV = ((int)$stmtMax->fetch()['mv']) + 1;
 
-    $db->prepare("INSERT INTO planning_versions (mois,annee,version,note,is_current,created_by) VALUES (?,?,?,?,1,?)")
-       ->execute([$mois, $annee, $nextV, $note, $userId]);
+    $db->prepare("INSERT INTO planning_versions (mission_id,mois,annee,version,note,is_current,created_by) VALUES (?,?,?,?,?,1,?)")
+       ->execute([$missionId, $mois, $annee, $nextV, $note, $userId]);
     $newVId = (int)$db->lastInsertId();
 
     if ($curV) {
@@ -191,17 +191,17 @@ function creerVersionPlanningAvecCopie(PDO $db, int $mois, int $annee, string $n
  * Ne fait rien si un instantané existe déjà aujourd'hui, ou si aucune version
  * n'existe encore pour ce mois (rien à sauvegarder).
  */
-function ensureSnapshotAutoDuJour(PDO $db, int $mois, int $annee): void {
+function ensureSnapshotAutoDuJour(PDO $db, int $missionId, int $mois, int $annee): void {
     try {
-        $hasToday = $db->prepare("SELECT COUNT(*) FROM planning_versions WHERE mois=? AND annee=? AND DATE(created_at)=CURDATE()");
-        $hasToday->execute([$mois, $annee]);
+        $hasToday = $db->prepare("SELECT COUNT(*) FROM planning_versions WHERE mission_id=? AND mois=? AND annee=? AND DATE(created_at)=CURDATE()");
+        $hasToday->execute([$missionId, $mois, $annee]);
         if ((int)$hasToday->fetchColumn() > 0) return;
 
-        $hasAny = $db->prepare("SELECT COUNT(*) FROM planning_versions WHERE mois=? AND annee=?");
-        $hasAny->execute([$mois, $annee]);
+        $hasAny = $db->prepare("SELECT COUNT(*) FROM planning_versions WHERE mission_id=? AND mois=? AND annee=?");
+        $hasAny->execute([$missionId, $mois, $annee]);
         if ((int)$hasAny->fetchColumn() === 0) return;
 
-        creerVersionPlanningAvecCopie($db, $mois, $annee, 'Instantané automatique quotidien', null);
+        creerVersionPlanningAvecCopie($db, $missionId, $mois, $annee, 'Instantané automatique quotidien', null);
     } catch (Exception $e) {}
 }
 
@@ -388,6 +388,83 @@ function ensureClientsSchema(): void {
             if (!$hasClientId) {
                 $db->exec("ALTER TABLE devis ADD COLUMN client_id INT DEFAULT NULL AFTER id");
             }
+        }
+    } catch (Exception $e) {}
+}
+
+/**
+ * Schéma pour les missions (plannings multiples avec affectation d'agents) :
+ * table missions, table d'affectation mission_agents, colonne mission_id sur
+ * planning_versions. Migre l'historique existant vers une mission par défaut
+ * ("Planning général") et y affecte automatiquement tous les agents actifs,
+ * pour que rien ne disparaisse du planning actuel après déploiement.
+ */
+function ensureMissionsSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db = getDB();
+
+        $existsM = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missions'")->fetchColumn();
+        if (!$existsM) {
+            $db->exec("CREATE TABLE missions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nom VARCHAR(255) NOT NULL,
+                client_id INT DEFAULT NULL,
+                lieu VARCHAR(255) DEFAULT NULL,
+                description TEXT,
+                actif TINYINT(1) DEFAULT 1,
+                is_default TINYINT(1) DEFAULT 0,
+                created_by INT DEFAULT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+
+        $existsMA = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mission_agents'")->fetchColumn();
+        if (!$existsMA) {
+            $db->exec("CREATE TABLE mission_agents (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                mission_id INT NOT NULL,
+                agent_id INT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY mission_agent (mission_id, agent_id),
+                INDEX idx_agent (agent_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+
+        $hasCol = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'planning_versions' AND COLUMN_NAME = 'mission_id'")->fetchColumn();
+        if (!$hasCol) {
+            $db->exec("ALTER TABLE planning_versions ADD COLUMN mission_id INT DEFAULT NULL AFTER annee");
+        }
+
+        $defaultId = (int)$db->query("SELECT id FROM missions WHERE is_default=1 LIMIT 1")->fetchColumn();
+        if (!$defaultId) {
+            $anyMission = (int)$db->query("SELECT COUNT(*) FROM missions")->fetchColumn();
+            if ($anyMission === 0) {
+                $db->exec("INSERT INTO missions (nom, is_default, actif) VALUES ('Planning général', 1, 1)");
+                $defaultId = (int)$db->lastInsertId();
+            }
+        }
+        if ($defaultId) {
+            $db->exec("UPDATE planning_versions SET mission_id = $defaultId WHERE mission_id IS NULL");
+            $db->exec("INSERT IGNORE INTO mission_agents (mission_id, agent_id)
+                       SELECT $defaultId, id FROM agents WHERE actif = 1");
+        }
+
+        // Accorder au rôle Manager les mêmes droits que sur 'planning', sans écraser un réglage déjà fait par un admin
+        $hasPerm = (int)$db->query("SELECT COUNT(*) FROM role_permissions rp
+            JOIN roles r ON r.id = rp.role_id
+            WHERE r.slug = 'manager' AND rp.module = 'missions'")->fetchColumn();
+        if (!$hasPerm) {
+            $db->exec("INSERT INTO role_permissions (role_id, module, can_view, can_create, can_edit, can_delete, can_export)
+                SELECT rp.role_id, 'missions', rp.can_view, rp.can_create, rp.can_edit, rp.can_delete, rp.can_export
+                FROM role_permissions rp
+                JOIN roles r ON r.id = rp.role_id
+                WHERE r.slug = 'manager' AND rp.module = 'planning'");
         }
     } catch (Exception $e) {}
 }

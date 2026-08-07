@@ -3,8 +3,16 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('planning', 'view');
+ensureMissionsSchema();
 
 $db = getDB();
+
+$missions     = $db->query("SELECT id, nom FROM missions WHERE actif = 1 ORDER BY nom")->fetchAll();
+$defaultMissionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+$missionId        = (int)($_GET['mission'] ?? 0);
+if (!$missionId || !in_array($missionId, array_column($missions, 'id'))) {
+    $missionId = $defaultMissionId;
+}
 
 // ── AJAX POST (filtrage agents — session partagée avec index.php) ─────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -81,7 +89,14 @@ for ($i = 0; $i < $nbJours; $i++) {
 
 // ── Agents ────────────────────────────────────────────────────────────────────
 $hiddenAgents = $_SESSION['planning_hidden'] ?? [];
-$allAgents    = $db->query("SELECT id, nom, prenom, poste, sexe FROM agents WHERE actif=1 ORDER BY CASE WHEN sexe='F' THEN 0 ELSE 1 END, nom, prenom")->fetchAll();
+$stmtAgM = $db->prepare("
+    SELECT a.id, a.nom, a.prenom, a.poste, a.sexe
+    FROM agents a
+    JOIN mission_agents ma ON ma.agent_id = a.id AND ma.mission_id = ?
+    WHERE a.actif=1 ORDER BY CASE WHEN a.sexe='F' THEN 0 ELSE 1 END, a.nom, a.prenom
+");
+$stmtAgM->execute([$missionId]);
+$allAgents    = $stmtAgM->fetchAll();
 $agents       = array_values(array_filter($allAgents, fn($ag) => !in_array($ag['id'], $hiddenAgents)));
 
 // ── Jours fériés ──────────────────────────────────────────────────────────────
@@ -93,7 +108,9 @@ if ($anneeFin !== $anneeDebut) $feries = array_merge($feries, getJoursFeries($an
 // ── Versions (versions courantes par mois) ────────────────────────────────────
 $canEdit = canDo('planning', 'create');
 $versionsMap = [];
-foreach ($db->query("SELECT id,mois,annee FROM planning_versions WHERE is_current=1")->fetchAll() as $v) {
+$stmtVmM = $db->prepare("SELECT id,mois,annee FROM planning_versions WHERE mission_id=? AND is_current=1");
+$stmtVmM->execute([$missionId]);
+foreach ($stmtVmM->fetchAll() as $v) {
     $versionsMap[$v['annee'].'-'.sprintf('%02d',$v['mois'])] = (int)$v['id'];
 }
 
@@ -106,8 +123,8 @@ if ($canEdit) {
     }
     foreach ($moisCouverts as $k => [$m, $y]) {
         if (!isset($versionsMap[$k])) {
-            $db->prepare("INSERT INTO planning_versions (mois,annee,version,is_current,created_by) VALUES (?,?,1,1,?)")
-               ->execute([$m, $y, getCurrentUser()['id']]);
+            $db->prepare("INSERT INTO planning_versions (mission_id,mois,annee,version,is_current,created_by) VALUES (?,?,?,1,1,?)")
+               ->execute([$missionId, $m, $y, getCurrentUser()['id']]);
             $versionsMap[$k] = (int)$db->lastInsertId();
         }
     }
@@ -117,10 +134,10 @@ if ($canEdit) {
 $planningData = [];
 $stmtP = $db->prepare("
     SELECT pl.* FROM planning_lignes pl
-    JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
+    JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1 AND pv.mission_id = ?
     WHERE pl.date_travail BETWEEN ? AND ?
 ");
-$stmtP->execute([$dateDebut, $dateFin]);
+$stmtP->execute([$missionId, $dateDebut, $dateFin]);
 foreach ($stmtP->fetchAll() as $l) {
     $planningData[$l['agent_id']][$l['date_travail']] = $l;
 }
@@ -150,7 +167,7 @@ $dfFin     = date('d/m/Y', strtotime($dateFin));
 
 // ── Export & JS data ──────────────────────────────────────────────────────────
 $agentIdsStr    = implode(',', array_column($agents, 'id'));
-$exportBase     = "export.php?type=mission&date_debut=$dateDebut&date_fin=$dateFin&agent_ids=$agentIdsStr";
+$exportBase     = "export.php?type=mission&date_debut=$dateDebut&date_fin=$dateFin&agent_ids=$agentIdsStr&mission=$missionId";
 $versionsMapJson = json_encode($versionsMap);
 $shiftsJson      = json_encode($shifts);
 
@@ -167,20 +184,27 @@ require_once __DIR__ . '/../../includes/header.php';
       $anneeActuelle = (int)date('Y');
       $semActuelle   = (int)date('W');
     ?>
-    <a href="index.php?vue=mois&mois=<?= $moisActuel ?>&annee=<?= $anneeActuelle ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar me-1"></i>Mensuel</a>
-    <a href="index.php?vue=semaine&semaine=<?= $semActuelle ?>&annee=<?= $anneeActuelle ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar-week me-1"></i>Hebdo</a>
+    <a href="index.php?vue=mois&mois=<?= $moisActuel ?>&annee=<?= $anneeActuelle ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar me-1"></i>Mensuel</a>
+    <a href="index.php?vue=semaine&semaine=<?= $semActuelle ?>&annee=<?= $anneeActuelle ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary"><i class="fa fa-calendar-week me-1"></i>Hebdo</a>
     <button class="btn btn-dark" disabled><i class="fa fa-map-marker-alt me-1"></i>Mission</button>
   </div>
 
-  <a href="?date_debut=<?= $prevDebut ?>&date_fin=<?= $prevFin ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
+  <select class="form-select form-select-sm" style="width:auto" onchange="location.href='?date_debut=<?= $dateDebut ?>&date_fin=<?= $dateFin ?>&mission='+this.value">
+    <?php foreach ($missions as $m): ?>
+    <option value="<?= $m['id'] ?>" <?= $m['id']==$missionId?'selected':'' ?>><?= h($m['nom']) ?></option>
+    <?php endforeach; ?>
+  </select>
+
+  <a href="?date_debut=<?= $prevDebut ?>&date_fin=<?= $prevFin ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
   <span style="font-weight:700;font-size:0.92rem;color:var(--ov-navy);white-space:nowrap">
     <i class="fa fa-map-marker-alt me-1" style="color:var(--ov-gold)"></i>
     <?= $dfDebut ?> → <?= $dfFin ?>
     <span style="font-size:0.72rem;font-weight:400;color:#9ca3af;margin-left:4px">(<?= $nbJours ?> j)</span>
   </span>
-  <a href="?date_debut=<?= $nextDebut ?>&date_fin=<?= $nextFin ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
+  <a href="?date_debut=<?= $nextDebut ?>&date_fin=<?= $nextFin ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
 
   <form method="get" class="d-flex align-items-center gap-1" style="flex-wrap:nowrap">
+    <input type="hidden" name="mission" value="<?= $missionId ?>">
     <input type="date" name="date_debut" class="form-control form-control-sm" value="<?= $dateDebut ?>" style="width:140px" required>
     <span style="color:#9ca3af;font-size:0.8rem">→</span>
     <input type="date" name="date_fin"   class="form-control form-control-sm" value="<?= $dateFin   ?>" style="width:140px" required>
@@ -545,6 +569,7 @@ var bulkModal         = new bootstrap.Modal(document.getElementById('bulkModal')
 var agentFilterModalInst = new bootstrap.Modal(document.getElementById('agentFilterModalM'));
 var versionsMap       = $versionsMapJson;
 var shifts            = $shiftsJson;
+var currentMissionId  = $missionId;
 var activeBulkDebut   = '07:00';
 var activeBulkFin     = '19:00';
 
@@ -702,8 +727,8 @@ window.saveBulk = function() {
     document.getElementById('btnSaveBulk').disabled = true;
     document.getElementById('btnSaveBulk').innerHTML = '<i class="fa fa-spinner fa-spin me-1"></i>En cours...';
     var body = isVide
-        ? new URLSearchParams({action:'bulk_delete',agent_id:agentId,date_debut:dateD,date_fin:dateF,jours:jours.join(',')})
-        : new URLSearchParams({action:'bulk_save',agent_id:agentId,date_debut:dateD,date_fin:dateF,heure_debut:debut,heure_fin:fin,jours:jours.join(','),note:note});
+        ? new URLSearchParams({action:'bulk_delete',agent_id:agentId,date_debut:dateD,date_fin:dateF,jours:jours.join(','),mission_id:currentMissionId})
+        : new URLSearchParams({action:'bulk_save',agent_id:agentId,date_debut:dateD,date_fin:dateF,heure_debut:debut,heure_fin:fin,jours:jours.join(','),note:note,mission_id:currentMissionId});
     fetch('index.php',{method:'POST',body:body}).then(function(r){return r.json();}).then(function(d){
         if(d.ok){
             var count=isVide?d.deleted:d.saved;

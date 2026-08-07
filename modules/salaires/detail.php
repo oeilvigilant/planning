@@ -4,28 +4,35 @@ require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../includes/pdf.php';
 requireLogin();
 requirePerm('salaires', 'view');
+ensureMissionsSchema();
 
-$db        = getDB();
-$agentId   = (int)($_GET['agent_id']   ?? 0);
-$versionId = (int)($_GET['version_id'] ?? 0);
-if (!$agentId || !$versionId) { header('Location: index.php'); exit; }
+$db      = getDB();
+$agentId = (int)($_GET['agent_id'] ?? 0);
+$mois    = (int)($_GET['mois']     ?? 0);
+$annee   = (int)($_GET['annee']    ?? 0);
+if (!$agentId || !$mois || !$annee) { header('Location: index.php'); exit; }
 
 $stmtA = $db->prepare("SELECT * FROM agents WHERE id=?");
 $stmtA->execute([$agentId]);
 $agent = $stmtA->fetch();
-
-$stmtV = $db->prepare("SELECT * FROM planning_versions WHERE id=?");
-$stmtV->execute([$versionId]);
-$version = $stmtV->fetch();
-if (!$agent || !$version) { flash('danger','Données introuvables.'); header('Location: index.php'); exit; }
+if (!$agent) { flash('danger','Données introuvables.'); header('Location: index.php'); exit; }
 
 $taux    = getTauxHoraires();
 $params  = getAllParams();
-$feries  = getJoursFeries($version['annee']);
+$feries  = getJoursFeries($annee);
 
-$stmtL = $db->prepare("SELECT * FROM planning_lignes WHERE version_id=? AND agent_id=? ORDER BY date_travail");
-$stmtL->execute([$versionId, $agentId]);
+// Agrégé sur toutes les missions du mois pour cet agent (un agent peut travailler plusieurs missions en parallèle)
+$stmtL = $db->prepare("
+    SELECT pl.*, m.nom AS mission_nom
+    FROM planning_lignes pl
+    JOIN planning_versions pv ON pv.id = pl.version_id
+    LEFT JOIN missions m ON m.id = pv.mission_id
+    WHERE pv.mois=? AND pv.annee=? AND pv.is_current=1 AND pl.agent_id=?
+    ORDER BY pl.date_travail
+");
+$stmtL->execute([$mois, $annee, $agentId]);
 $lignes = $stmtL->fetchAll();
+$missionsCouvertes = array_values(array_unique(array_filter(array_column($lignes, 'mission_nom'))));
 
 $totaux = ['normal'=>0,'nuit'=>0,'dimanche'=>0,'nuit_dimanche'=>0,'ferie_normal'=>0,'ferie_nuit'=>0];
 foreach ($lignes as $l) {
@@ -72,7 +79,7 @@ if (($_GET['export'] ?? '') === 'pdf') {
     <div class="pdf-header">
         <div>
             <h1>Détail salaire — <?= htmlspecialchars($agent['prenom'].' '.$agent['nom']) ?></h1>
-            <p>Matricule : <?= htmlspecialchars($agent['matricule'] ?? '—') ?> · <?= htmlspecialchars(formatMois($version['mois'], $version['annee'])) ?> · V<?= $version['version'] ?></p>
+            <p>Matricule : <?= htmlspecialchars($agent['matricule'] ?? '—') ?> · <?= htmlspecialchars(formatMois($mois, $annee)) ?><?= $missionsCouvertes ? ' · ' . htmlspecialchars(implode(', ', $missionsCouvertes)) : '' ?></p>
             <p><?= htmlspecialchars($params['entreprise_nom'] ?? '') ?> · Généré le <?= date('d/m/Y à H:i') ?></p>
         </div>
         <div style="background:#1a2332;color:#c9a84c;padding:10px 14px;border-radius:6px;text-align:center">
@@ -105,7 +112,7 @@ if (($_GET['export'] ?? '') === 'pdf') {
     </table>
     <div class="section-title" style="margin-top:14px">Détail journalier</div>
     <table>
-        <thead><tr><th>Date</th><th>Jour</th><th>Horaires</th><th>Normal</th><th>Nuit</th><th>Dim.</th><th>Fér.</th><th>Total</th></tr></thead>
+        <thead><tr><th>Date</th><th>Jour</th><th>Mission</th><th>Horaires</th><th>Normal</th><th>Nuit</th><th>Dim.</th><th>Fér.</th><th>Total</th></tr></thead>
         <tbody>
         <?php foreach ($lignes as $l):
             $dt   = strtotime($l['date_travail']);
@@ -114,6 +121,7 @@ if (($_GET['export'] ?? '') === 'pdf') {
         <tr>
             <td><?= date('d/m', $dt) ?></td>
             <td><?= $nomsJours[date('N', $dt)] ?></td>
+            <td><?= htmlspecialchars($l['mission_nom'] ?? '—') ?></td>
             <td><?= substr($l['heure_debut'],0,5) ?>→<?= substr($l['heure_fin'],0,5) ?><?= $l['depasse_minuit']?'+1':'' ?></td>
             <td><?= $l['min_normal']   >0 ? number_format($l['min_normal']  /60,2).'h' : '—' ?></td>
             <td><?= ($l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit'])>0 ? number_format(($l['min_nuit']+$l['min_nuit_dimanche']+$l['min_ferie_nuit'])/60,2).'h' : '—' ?></td>
@@ -131,7 +139,7 @@ if (($_GET['export'] ?? '') === 'pdf') {
     </div></body></html>
     <?php
     $html = ob_get_clean();
-    renderPdf($html, 'detail_salaire_' . ($agent['matricule'] ?? $agentId) . '_' . sprintf('%02d', $version['mois']) . '_' . $version['annee'] . '.pdf');
+    renderPdf($html, 'detail_salaire_' . ($agent['matricule'] ?? $agentId) . '_' . sprintf('%02d', $mois) . '_' . $annee . '.pdf');
 }
 
 $pageTitle    = 'Détail salaire agent';
@@ -141,8 +149,8 @@ require_once __DIR__ . '/../../includes/header.php';
 
 <!-- Actions -->
 <div class="d-flex gap-2 mb-3 flex-wrap">
-    <a href="index.php?mois=<?= $version['mois'] ?>&annee=<?= $version['annee'] ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i>Retour</a>
-    <a href="?agent_id=<?= $agentId ?>&version_id=<?= $versionId ?>&export=pdf" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.8rem"><i class="fa fa-file-pdf me-1"></i>Exporter PDF</a>
+    <a href="index.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-arrow-left me-1"></i>Retour</a>
+    <a href="?agent_id=<?= $agentId ?>&mois=<?= $mois ?>&annee=<?= $annee ?>&export=pdf" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.8rem"><i class="fa fa-file-pdf me-1"></i>Exporter PDF</a>
     <a href="../agents/view.php?id=<?= $agentId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-user me-1"></i>Fiche agent</a>
 </div>
 
@@ -162,8 +170,8 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="ov-card">
             <div class="ov-card-body text-center">
                 <div style="font-size:0.75rem;color:#9ca3af;text-transform:uppercase;letter-spacing:1px">Période</div>
-                <div style="font-size:1.1rem;font-weight:700;margin:4px 0"><?= formatMois($version['mois'], $version['annee']) ?></div>
-                <div style="font-size:0.82rem;color:#6b7280"><?= count($lignes) ?> jours travaillés · V<?= $version['version'] ?></div>
+                <div style="font-size:1.1rem;font-weight:700;margin:4px 0"><?= formatMois($mois, $annee) ?></div>
+                <div style="font-size:0.82rem;color:#6b7280"><?= count($lignes) ?> jours travaillés<?= $missionsCouvertes ? ' · ' . h(implode(', ', $missionsCouvertes)) : '' ?></div>
                 <div style="font-size:1.1rem;font-weight:700;color:var(--ov-navy)"><?= number_format($totalMin/60, 2) ?>h</div>
             </div>
         </div>
@@ -223,6 +231,7 @@ require_once __DIR__ . '/../../includes/header.php';
                 <thead>
                     <tr>
                         <th>Date</th>
+                        <th>Mission</th>
                         <th>Horaires</th>
                         <th>Normal</th>
                         <th><span style="color:#4f46e5">Nuit</span></th>
@@ -246,6 +255,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <span style="font-size:0.72rem;color:#9ca3af;margin-left:3px"><?= $nomsJours[$jourSem] ?></span>
                         <?php if ($isFer): ?><span style="font-size:0.6rem;background:#fde68a;color:#92400e;padding:1px 4px;border-radius:3px;margin-left:2px">F</span><?php endif; ?>
                     </td>
+                    <td style="font-size:0.78rem;color:#6b7280"><?= h($l['mission_nom'] ?? '—') ?></td>
                     <td style="font-size:0.82rem;font-weight:600">
                         <?= substr($l['heure_debut'],0,5) ?>→<?= substr($l['heure_fin'],0,5) ?><?= $l['depasse_minuit']?'<sup>+1</sup>':'' ?>
                         <?php if (!empty($l['note'])): ?><br><span style="font-size:0.7rem;color:#9ca3af"><?= h($l['note']) ?></span><?php endif; ?>

@@ -3,6 +3,7 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('rapports', 'view');
+ensureMissionsSchema();
 
 $pageTitle    = 'Exports & Rapports';
 $currentModule = 'rapports';
@@ -13,9 +14,10 @@ $mois  = (int)($_GET['mois']  ?? date('n'));
 $annee = (int)($_GET['annee'] ?? date('Y'));
 
 $versions = $db->query("
-    SELECT v.*, u.nom as user_nom
+    SELECT v.*, u.nom as user_nom, m.nom as mission_nom
     FROM planning_versions v
     LEFT JOIN utilisateurs u ON u.id = v.created_by
+    LEFT JOIN missions m ON m.id = v.mission_id
     ORDER BY v.annee DESC, v.mois DESC, v.version DESC
     LIMIT 20
 ")->fetchAll();
@@ -34,16 +36,17 @@ $agents = $db->query("SELECT id, nom, prenom, matricule FROM agents WHERE actif=
       <p class="text-muted">Aucun planning disponible.</p>
       <?php else: ?>
       <table class="ov-table">
-        <thead><tr><th>Période</th><th>Version</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Période</th><th>Mission</th><th>Version</th><th>Actions</th></tr></thead>
         <tbody>
         <?php foreach ($versions as $v): ?>
         <tr>
           <td><?= formatMois($v['mois'], $v['annee']) ?></td>
+          <td><?= h($v['mission_nom'] ?? '—') ?></td>
           <td>V<?= $v['version'] ?> <?= $v['is_current']?'<span style="color:#16a34a;font-size:0.72rem">(active)</span>':'' ?></td>
           <td>
             <div class="d-flex gap-1">
-              <a href="../planning/export.php?version_id=<?= $v['id'] ?>&format=pdf" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="PDF"><i class="fa fa-file-pdf"></i></a>
-              <a href="../planning/export.php?version_id=<?= $v['id'] ?>&format=excel" class="btn-sm-icon" style="background:rgba(34,197,94,0.1);color:#16a34a" title="Excel"><i class="fa fa-file-excel"></i></a>
+              <a href="../planning/export.php?version_id=<?= $v['id'] ?>&mission=<?= $v['mission_id'] ?>&format=pdf" class="btn-sm-icon" style="background:rgba(239,68,68,0.1);color:#dc2626" title="PDF"><i class="fa fa-file-pdf"></i></a>
+              <a href="../planning/export.php?version_id=<?= $v['id'] ?>&mission=<?= $v['mission_id'] ?>&format=excel" class="btn-sm-icon" style="background:rgba(34,197,94,0.1);color:#16a34a" title="Excel"><i class="fa fa-file-excel"></i></a>
             </div>
           </td>
         </tr>
@@ -66,7 +69,7 @@ $agents = $db->query("SELECT id, nom, prenom, matricule FROM agents WHERE actif=
       <div class="d-flex justify-content-between align-items-center p-3 rounded mb-2" style="background:#f8f9fa">
         <div>
           <div class="fw-600"><?= formatMois($v['mois'], $v['annee']) ?> — V<?= $v['version'] ?></div>
-          <div style="font-size:0.75rem;color:#9ca3af">Planning actif</div>
+          <div style="font-size:0.75rem;color:#9ca3af"><?= h($v['mission_nom'] ?? 'Mission') ?></div>
         </div>
         <div class="d-flex gap-2">
           <a href="export_salaires.php?version_id=<?= $v['id'] ?>&format=pdf" class="btn btn-sm" style="background:rgba(239,68,68,0.1);color:#dc2626;border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.3rem 0.7rem;font-size:0.8rem"><i class="fa fa-file-pdf me-1"></i>PDF</a>

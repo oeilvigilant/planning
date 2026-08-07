@@ -3,12 +3,20 @@ require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/functions.php';
 requireLogin();
 requirePerm('planning', 'view');
+ensureMissionsSchema();
 
 $pageTitle    = 'Planning hebdomadaire';
 $currentModule = 'planning';
 require_once __DIR__ . '/../../includes/header.php';
 
 $db = getDB();
+
+$missions         = $db->query("SELECT id, nom FROM missions WHERE actif = 1 ORDER BY nom")->fetchAll();
+$defaultMissionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+$missionId        = (int)($_GET['mission'] ?? 0);
+if (!$missionId || !in_array($missionId, array_column($missions, 'id'))) {
+    $missionId = $defaultMissionId;
+}
 
 // Semaine courante ou choisie
 $today     = new DateTime();
@@ -24,18 +32,25 @@ $dimanche->modify('+6 days');
 $mois = (int)$lundi->format('n');
 
 // Version planning du mois
-$stmtV = $db->prepare("SELECT * FROM planning_versions WHERE mois=? AND annee=? AND is_current=1 LIMIT 1");
-$stmtV->execute([$mois, $annee]);
+$stmtV = $db->prepare("SELECT * FROM planning_versions WHERE mission_id=? AND mois=? AND annee=? AND is_current=1 LIMIT 1");
+$stmtV->execute([$missionId, $mois, $annee]);
 $version = $stmtV->fetch();
 
 // Si la semaine chevauche deux mois, prendre la version du mois du lundi
 if (!$version) {
-    $stmtV = $db->prepare("SELECT * FROM planning_versions WHERE mois=? AND annee=? AND is_current=1 LIMIT 1");
-    $stmtV->execute([(int)$dimanche->format('n'), (int)$dimanche->format('Y')]);
+    $stmtV = $db->prepare("SELECT * FROM planning_versions WHERE mission_id=? AND mois=? AND annee=? AND is_current=1 LIMIT 1");
+    $stmtV->execute([$missionId, (int)$dimanche->format('n'), (int)$dimanche->format('Y')]);
     $version = $stmtV->fetch();
 }
 
-$agents = $db->query("SELECT id, nom, prenom, matricule, poste, sexe FROM agents WHERE actif=1 ORDER BY CASE WHEN sexe='F' THEN 0 ELSE 1 END, nom, prenom")->fetchAll();
+$stmtAg = $db->prepare("
+    SELECT a.id, a.nom, a.prenom, a.matricule, a.poste, a.sexe
+    FROM agents a
+    JOIN mission_agents ma ON ma.agent_id = a.id AND ma.mission_id = ?
+    WHERE a.actif=1 ORDER BY CASE WHEN a.sexe='F' THEN 0 ELSE 1 END, a.nom, a.prenom
+");
+$stmtAg->execute([$missionId]);
+$agents = $stmtAg->fetchAll();
 $feries = getJoursFeries($annee);
 
 // Charger les lignes de la semaine
@@ -89,7 +104,12 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
 ?>
 
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-    <a href="?semaine=<?= $prevLundi->format('W') ?>&annee=<?= $prevLundi->format('Y') ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
+    <select class="form-select form-select-sm" style="width:auto" onchange="location.href='?semaine=<?= $semaine ?>&annee=<?= $annee ?>&mission='+this.value">
+        <?php foreach ($missions as $m): ?>
+        <option value="<?= $m['id'] ?>" <?= $m['id']==$missionId?'selected':'' ?>><?= h($m['nom']) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <a href="?semaine=<?= $prevLundi->format('W') ?>&annee=<?= $prevLundi->format('Y') ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-left"></i></a>
     <div>
         <span style="font-size:1rem;font-weight:700;color:var(--ov-navy)">
             Semaine <?= $semaine ?> — du <?= $lundi->format('d/m') ?> au <?= $dimanche->format('d/m/Y') ?>
@@ -98,9 +118,9 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
         <span class="ms-2 badge" style="background:rgba(34,197,94,0.1);color:#16a34a;border-radius:20px;padding:3px 10px;font-size:0.72rem">V<?= $version['version'] ?></span>
         <?php endif; ?>
     </div>
-    <a href="?semaine=<?= $nextLundi->format('W') ?>&annee=<?= $nextLundi->format('Y') ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
-    <a href="?semaine=<?= $today->format('W') ?>&annee=<?= $today->format('Y') ?>" class="btn btn-ov-secondary btn-sm">Cette semaine</a>
-    <a href="index.php?mois=<?= $mois ?>&annee=<?= $annee ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-calendar me-1"></i>Vue mensuelle</a>
+    <a href="?semaine=<?= $nextLundi->format('W') ?>&annee=<?= $nextLundi->format('Y') ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-chevron-right"></i></a>
+    <a href="?semaine=<?= $today->format('W') ?>&annee=<?= $today->format('Y') ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm">Cette semaine</a>
+    <a href="index.php?mois=<?= $mois ?>&annee=<?= $annee ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary btn-sm"><i class="fa fa-calendar me-1"></i>Vue mensuelle</a>
 </div>
 
 <!-- Vue hebdomadaire en cartes -->

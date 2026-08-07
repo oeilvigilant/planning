@@ -61,6 +61,15 @@ $currentModule = $currentModule ?? '';
         <?php endif; ?>
         <?php endif; ?>
 
+        <?php if (canDo('missions','view')): ?>
+        <div class="sidebar-section">Missions</div>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/modules/missions/index.php" class="nav-link <?= (strncmp($currentModule,'missions',8)===0)?'active':'' ?>">
+                <span class="nav-icon"><i class="fa fa-map-location-dot"></i></span> Missions
+            </a>
+        </li>
+        <?php endif; ?>
+
         <?php if (canDo('planning','view')): ?>
         <div class="sidebar-section">Planning</div>
         <li class="nav-item">

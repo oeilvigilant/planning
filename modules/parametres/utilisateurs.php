@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('utilisateurs','create')) {
     if ($action === 'save_perms') {
         requirePerm('utilisateurs','edit');
         $roleId  = (int)($_POST['role_id'] ?? 0);
-        $modules = ['dashboard','agents','planning','salaires','clients','devis','parametres','rapports','utilisateurs'];
+        $modules = ['dashboard','agents','missions','planning','salaires','clients','devis','parametres','rapports','utilisateurs'];
         foreach ($modules as $module) {
             $perms = $_POST['perms'][$module] ?? [];
             $db->prepare("INSERT INTO role_permissions (role_id,module,can_view,can_create,can_edit,can_delete,can_export)
@@ -90,7 +90,7 @@ require_once __DIR__ . '/../../includes/header.php';
 
 $users = $db->query("SELECT u.*, r.nom as role_nom FROM utilisateurs u JOIN roles r ON r.id=u.role_id ORDER BY u.nom")->fetchAll();
 $roles = $db->query("SELECT * FROM roles WHERE slug != 'agent' ORDER BY id")->fetchAll();
-$modules = ['dashboard','agents','planning','salaires','clients','devis','parametres','rapports','utilisateurs'];
+$modules = ['dashboard','agents','missions','planning','salaires','clients','devis','parametres','rapports','utilisateurs'];
 $actions = ['view'=>'Voir','create'=>'Créer','edit'=>'Modifier','delete'=>'Supprimer','export'=>'Exporter'];
 
 // Permissions par rôle
