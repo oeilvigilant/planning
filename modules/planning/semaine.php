@@ -12,7 +12,8 @@ require_once __DIR__ . '/../../includes/header.php';
 $db = getDB();
 
 $missions         = $db->query("SELECT id, nom FROM missions WHERE actif = 1 ORDER BY nom")->fetchAll();
-$defaultMissionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+$defaultMissionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 AND actif = 1 LIMIT 1")->fetchColumn();
+if (!$defaultMissionId && $missions) $defaultMissionId = (int)$missions[0]['id'];
 $missionId        = (int)($_GET['mission'] ?? 0);
 if (!$missionId || !in_array($missionId, array_column($missions, 'id'))) {
     $missionId = $defaultMissionId;
@@ -104,7 +105,7 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
 ?>
 
 <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
-    <select class="form-select form-select-sm" style="width:auto" onchange="location.href='?semaine=<?= $semaine ?>&annee=<?= $annee ?>&mission='+this.value">
+    <select id="missionSelect" class="form-select form-select-sm" style="width:auto" onchange="location.href='?semaine=<?= $semaine ?>&annee=<?= $annee ?>&mission='+this.value">
         <?php foreach ($missions as $m): ?>
         <option value="<?= $m['id'] ?>" <?= $m['id']==$missionId?'selected':'' ?>><?= h($m['nom']) ?></option>
         <?php endforeach; ?>
@@ -258,5 +259,15 @@ function totalSemaineAgent(array $planningData, int $agentId, array $jours): arr
     </div>
     </div>
 </div>
+
+<script>
+// Le navigateur restaure parfois la valeur du <select> mission telle qu'elle
+// était juste avant un retour arrière, même sur une page rechargée fraîchement —
+// on resynchronise explicitement avec la mission résolue côté serveur.
+document.addEventListener('DOMContentLoaded', function() {
+    var missionSelect = document.getElementById('missionSelect');
+    if (missionSelect) missionSelect.value = '<?= $missionId ?>';
+});
+</script>
 
 <?php include __DIR__ . '/../../includes/footer.php'; ?>

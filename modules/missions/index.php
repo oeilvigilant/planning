@@ -89,11 +89,11 @@ require_once __DIR__ . '/../../includes/header.php';
                         <?php if (canDo('missions','edit')): ?>
                         <a href="add.php?id=<?= $m['id'] ?>" class="btn-sm-icon edit" title="Modifier"><i class="fa fa-pen"></i></a>
                         <?php endif; ?>
-                        <?php if (canDo('missions','delete') && !$m['is_default']): ?>
-                        <form method="POST" action="delete.php" style="display:inline" onsubmit="return confirm('Désactiver la mission <?= h(addslashes($m['nom'])) ?> ?')">
+                        <?php if (canDo('missions','delete')): ?>
+                        <form method="POST" action="delete.php" style="display:inline" onsubmit="return confirm('<?= $m['actif'] ? 'Désactiver' : 'Réactiver' ?> la mission <?= h(addslashes($m['nom'])) ?> ?')">
                             <input type="hidden" name="id" value="<?= $m['id'] ?>">
-                            <input type="hidden" name="action" value="deactivate">
-                            <button type="submit" class="btn-sm-icon delete" title="Désactiver"><i class="fa fa-trash"></i></button>
+                            <input type="hidden" name="action" value="<?= $m['actif'] ? 'deactivate' : 'reactivate' ?>">
+                            <button type="submit" class="btn-sm-icon <?= $m['actif'] ? 'delete' : '' ?>" style="<?= $m['actif'] ? '' : 'background:rgba(34,197,94,0.1);color:#16a34a' ?>" title="<?= $m['actif'] ? 'Désactiver' : 'Réactiver' ?>"><i class="fa <?= $m['actif'] ? 'fa-trash' : 'fa-rotate-left' ?>"></i></button>
                         </form>
                         <?php endif; ?>
                     </div>

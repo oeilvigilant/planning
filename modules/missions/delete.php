@@ -14,7 +14,7 @@ $db     = getDB();
 $id     = (int)($_POST['id'] ?? 0);
 $action = $_POST['action'] ?? '';
 
-if (!$id || !in_array($action, ['deactivate', 'hard_delete'])) {
+if (!$id || !in_array($action, ['deactivate', 'reactivate', 'hard_delete'])) {
     header('Location: index.php'); exit;
 }
 
@@ -26,14 +26,21 @@ if (!$mission) {
     header('Location: index.php'); exit;
 }
 
-if ($mission['is_default']) {
-    flash('danger', 'La mission par défaut ne peut pas être supprimée ni désactivée.');
-    header('Location: index.php'); exit;
-}
-
 if ($action === 'deactivate') {
     $db->prepare("UPDATE missions SET actif = 0 WHERE id = ?")->execute([$id]);
     flash('success', 'Mission <strong>' . h($mission['nom']) . '</strong> désactivée.');
+    header('Location: index.php'); exit;
+}
+
+if ($action === 'reactivate') {
+    $db->prepare("UPDATE missions SET actif = 1 WHERE id = ?")->execute([$id]);
+    flash('success', 'Mission <strong>' . h($mission['nom']) . '</strong> réactivée.');
+    header('Location: index.php'); exit;
+}
+
+// hard_delete — la mission par défaut ne peut jamais être supprimée définitivement
+if ($mission['is_default']) {
+    flash('danger', 'La mission par défaut ne peut pas être supprimée définitivement.');
     header('Location: index.php'); exit;
 }
 

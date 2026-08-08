@@ -13,7 +13,8 @@ $agentIds = trim($_GET['agent_ids'] ?? '');
 
 $missionId = (int)($_GET['mission'] ?? 0);
 if (!$missionId) {
-    $missionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+    $missionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 AND actif = 1 LIMIT 1")->fetchColumn();
+    if (!$missionId) $missionId = (int)$db->query("SELECT id FROM missions WHERE actif = 1 ORDER BY nom LIMIT 1")->fetchColumn();
 }
 
 // ── Filtre agents ─────────────────────────────────────────────────────────────

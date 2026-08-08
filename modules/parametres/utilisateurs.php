@@ -27,6 +27,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && canDo('utilisateurs','create')) {
         header('Location: utilisateurs.php'); exit;
     }
 
+    if ($action === 'edit_user') {
+        requirePerm('utilisateurs','edit');
+        $uid    = (int)($_POST['user_id'] ?? 0);
+        $nom    = trim($_POST['nom'] ?? '');
+        $prenom = trim($_POST['prenom'] ?? '');
+        $email  = trim($_POST['email'] ?? '');
+        $roleId = (int)($_POST['role_id'] ?? 0);
+        $pass   = $_POST['new_password'] ?? '';
+        if ($uid && $nom && $email && $roleId) {
+            if ($pass !== '' && strlen($pass) < 6) {
+                flash('danger','Le mot de passe doit contenir au moins 6 caractères.');
+                header('Location: utilisateurs.php'); exit;
+            }
+            try {
+                if ($pass !== '') {
+                    $db->prepare("UPDATE utilisateurs SET nom=?, prenom=?, email=?, role_id=?, password=? WHERE id=?")
+                       ->execute([$nom,$prenom,$email,$roleId,password_hash($pass,PASSWORD_DEFAULT),$uid]);
+                } else {
+                    $db->prepare("UPDATE utilisateurs SET nom=?, prenom=?, email=?, role_id=? WHERE id=?")
+                       ->execute([$nom,$prenom,$email,$roleId,$uid]);
+                }
+                flash('success','Utilisateur mis à jour.');
+            } catch (Exception $e) { flash('danger','Cet email existe déjà.'); }
+        } else {
+            flash('danger','Champs invalides.');
+        }
+        header('Location: utilisateurs.php'); exit;
+    }
+
     if ($action === 'toggle_user') {
         $uid = (int)($_POST['user_id'] ?? 0);
         if ($uid && $uid !== getCurrentUser()['id']) {
@@ -142,6 +171,14 @@ foreach ($roles as $r) {
           <div style="font-size:0.875rem;font-weight:600"><?= h($u['prenom'].' '.$u['nom']) ?></div>
           <div style="font-size:0.72rem;color:#9ca3af"><?= h($u['email']) ?> · <?= h($u['role_nom']) ?></div>
         </div>
+        <?php if (canDo('utilisateurs','edit')): ?>
+        <button type="button" class="btn-sm-icon edit" title="Modifier"
+                data-bs-toggle="modal" data-bs-target="#modalEditUser"
+                data-id="<?= $u['id'] ?>" data-nom="<?= h($u['nom']) ?>" data-prenom="<?= h($u['prenom']) ?>"
+                data-email="<?= h($u['email']) ?>" data-role-id="<?= $u['role_id'] ?>">
+          <i class="fa fa-pen"></i>
+        </button>
+        <?php endif; ?>
         <form method="POST" class="d-inline">
           <input type="hidden" name="action" value="toggle_user">
           <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
@@ -213,5 +250,55 @@ foreach ($roles as $r) {
   </div>
 </div>
 </div>
+
+<?php if (canDo('utilisateurs','edit')): ?>
+<!-- Modal édition utilisateur -->
+<div class="modal fade" id="modalEditUser" tabindex="-1" aria-labelledby="modalEditUserLabel">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST">
+        <input type="hidden" name="action" value="edit_user">
+        <input type="hidden" name="user_id" id="editUserId">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalEditUserLabel"><i class="fa fa-pen me-2" style="color:var(--ov-gold)"></i>Modifier l'utilisateur</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-6"><label class="form-label">Nom</label><input type="text" name="nom" id="editUserNom" class="form-control form-control-sm" required></div>
+            <div class="col-6"><label class="form-label">Prénom</label><input type="text" name="prenom" id="editUserPrenom" class="form-control form-control-sm"></div>
+            <div class="col-12"><label class="form-label">Email</label><input type="email" name="email" id="editUserEmail" class="form-control form-control-sm" required></div>
+            <div class="col-12"><label class="form-label">Rôle</label>
+              <select name="role_id" id="editUserRole" class="form-select form-select-sm">
+                <?php foreach ($roles as $r): ?>
+                <option value="<?= $r['id'] ?>"><?= h($r['nom']) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Nouveau mot de passe <small class="text-muted">(laisser vide pour ne pas changer)</small></label>
+              <input type="password" name="new_password" class="form-control form-control-sm" minlength="6">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-ov-primary btn-sm"><i class="fa fa-save me-1"></i>Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById('modalEditUser').addEventListener('show.bs.modal', function(e) {
+    var btn = e.relatedTarget;
+    document.getElementById('editUserId').value     = btn.dataset.id;
+    document.getElementById('editUserNom').value     = btn.dataset.nom;
+    document.getElementById('editUserPrenom').value  = btn.dataset.prenom;
+    document.getElementById('editUserEmail').value   = btn.dataset.email;
+    document.getElementById('editUserRole').value    = btn.dataset.roleId;
+});
+</script>
+<?php endif; ?>
 
 <?php include __DIR__ . '/../../includes/footer.php'; ?>

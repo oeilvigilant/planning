@@ -10,7 +10,8 @@ $mois  = (int)($_GET['mois']  ?? date('n'));
 $annee = (int)($_GET['annee'] ?? date('Y'));
 
 $missions         = $db->query("SELECT id, nom FROM missions WHERE actif = 1 ORDER BY nom")->fetchAll();
-$defaultMissionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+$defaultMissionId = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 AND actif = 1 LIMIT 1")->fetchColumn();
+if (!$defaultMissionId && $missions) $defaultMissionId = (int)$missions[0]['id'];
 $missionId        = (int)($_GET['mission'] ?? 0);
 if (!$missionId || !in_array($missionId, array_column($missions, 'id'))) {
     $missionId = $defaultMissionId;

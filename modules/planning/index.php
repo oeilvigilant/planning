@@ -10,7 +10,8 @@ $db = getDB();
 
 // ── Mission active (GET pour l'affichage, POST pour les actions AJAX) ─────────
 $missions          = $db->query("SELECT id, nom FROM missions WHERE actif = 1 ORDER BY nom")->fetchAll();
-$defaultMissionId  = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 LIMIT 1")->fetchColumn();
+$defaultMissionId  = (int)$db->query("SELECT id FROM missions WHERE is_default = 1 AND actif = 1 LIMIT 1")->fetchColumn();
+if (!$defaultMissionId && $missions) $defaultMissionId = (int)$missions[0]['id'];
 $missionId         = (int)($_GET['mission'] ?? $_POST['mission_id'] ?? 0);
 if (!$missionId || !in_array($missionId, array_column($missions, 'id'))) {
     $missionId = $defaultMissionId;
@@ -482,7 +483,7 @@ if ($vue === 'semaine') {
         <a href="mission.php?date_debut=<?= $lundi->format('Y-m-d') ?>&date_fin=<?= $dimanche->format('Y-m-d') ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary"><i class="fa fa-map-marker-alt me-1"></i>Mission</a>
       </div>
       <div class="ms-1 me-1">
-        <select class="form-select form-select-sm" style="width:auto" onchange="location.href='?vue=semaine&semaine=<?= $semaine ?>&annee=<?= $annee ?>&mission='+this.value">
+        <select id="missionSelect" class="form-select form-select-sm" style="width:auto" onchange="location.href='?vue=semaine&semaine=<?= $semaine ?>&annee=<?= $annee ?>&mission='+this.value">
           <?php foreach ($missions as $m): ?>
           <option value="<?= $m['id'] ?>" <?= $m['id']==$missionId?'selected':'' ?>><?= h($m['nom']) ?></option>
           <?php endforeach; ?>
@@ -748,7 +749,7 @@ if ($vue === 'semaine') {
         <a href="mission.php?date_debut=<?= sprintf('%04d-%02d-01',$annee,$mois) ?>&date_fin=<?= sprintf('%04d-%02d-%02d',$annee,$mois,$nbJours) ?>&mission=<?= $missionId ?>" class="btn btn-ov-secondary"><i class="fa fa-map-marker-alt me-1"></i>Mission</a>
       </div>
       <div class="ms-1 me-1">
-        <select class="form-select form-select-sm" style="width:auto" onchange="location.href='?vue=mois&mois=<?= $mois ?>&annee=<?= $annee ?>&mission='+this.value">
+        <select id="missionSelect" class="form-select form-select-sm" style="width:auto" onchange="location.href='?vue=mois&mois=<?= $mois ?>&annee=<?= $annee ?>&mission='+this.value">
           <?php foreach ($missions as $m): ?>
           <option value="<?= $m['id'] ?>" <?= $m['id']==$missionId?'selected':'' ?>><?= h($m['nom']) ?></option>
           <?php endforeach; ?>
@@ -1300,7 +1301,13 @@ if ($vue === 'semaine') {
 $versionsMapJson = json_encode($versionsMap);
 $extraJs = <<<ENDJS
 <script>
+// Le navigateur restaure parfois la valeur d'un <select> telle qu'elle était
+// juste avant de quitter la page (retour arrière), y compris sur un rechargement
+// frais du serveur — indépendamment du cache — désynchronisant l'affichage de
+// l'URL réelle. On resynchronise explicitement avec la mission résolue côté serveur.
 document.addEventListener('DOMContentLoaded', function() {
+    var missionSelect = document.getElementById('missionSelect');
+    if (missionSelect) missionSelect.value = '{$missionId}';
 
 // ── Modaux ────────────────────────────────────────────────────────────────────
 var cellModal        = new bootstrap.Modal(document.getElementById('cellModal'));

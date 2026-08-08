@@ -100,12 +100,17 @@ require_once __DIR__ . '/../../includes/header.php';
                     <label class="form-label">Description</label>
                     <textarea name="description" class="form-control" rows="3"><?= h($mission['description']) ?></textarea>
                 </div>
-                <?php if ($isEdit && !$mission['is_default']): ?>
+                <?php if ($isEdit): ?>
                 <div class="col-12">
                     <div class="form-check">
                         <input type="checkbox" name="actif" id="actif" class="form-check-input" <?= $mission['actif'] ? 'checked' : '' ?>>
                         <label for="actif" class="form-check-label">Mission active</label>
                     </div>
+                    <?php if ($mission['is_default']): ?>
+                    <div class="form-text" style="font-size:0.75rem">
+                        <i class="fa fa-circle-info me-1"></i>Mission par défaut : si vous la désactivez et qu'aucune autre mission n'est active, le planning affichera un message bloquant tant qu'une mission active n'existe pas.
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
                 <div class="col-12 d-flex gap-2">
