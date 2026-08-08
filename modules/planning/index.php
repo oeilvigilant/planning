@@ -141,11 +141,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $reqMois  = (int)($_POST['mois']  ?? date('n'));
         $reqAnnee = (int)($_POST['annee'] ?? date('Y'));
         $note     =      ($_POST['note']  ?? '');
-        $newVId   = creerVersionPlanningAvecCopie($db, $missionId, $reqMois, $reqAnnee, $note, getCurrentUser()['id']);
+        $result   = creerVersionPlanningAvecCopie($db, $missionId, $reqMois, $reqAnnee, $note, getCurrentUser()['id']);
         $stmtNv   = $db->prepare("SELECT version FROM planning_versions WHERE id=?");
-        $stmtNv->execute([$newVId]);
+        $stmtNv->execute([$result['version_id']]);
         $nextV    = (int)$stmtNv->fetchColumn();
-        echo json_encode(['ok' => true, 'version' => $nextV, 'version_id' => $newVId]);
+        echo json_encode(['ok' => true, 'version' => $nextV, 'version_id' => $result['version_id'], 'created' => $result['created']]);
         exit;
     }
 
@@ -1570,7 +1570,10 @@ window.createVersion = function() {
     var body = new URLSearchParams({action:'new_version', mois:currentMois, annee:currentAnnee, note:note, mission_id:currentMissionId});
     fetch('index.php', {method:'POST', body:body})
         .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.ok) { versionModal.hide(); location.reload(); } });
+        .then(function(d) {
+            if (d.ok && !d.created) { versionModal.hide(); alert('Aucune modification depuis la dernière version — rien à archiver.'); }
+            else if (d.ok) { versionModal.hide(); location.reload(); }
+        });
 };
 
 // ── toggleAgent / showAllAgents / applyAgentFilter ────────────────────────────

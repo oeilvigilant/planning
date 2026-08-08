@@ -154,10 +154,21 @@ function logPlanningAudit(PDO $db, int $versionId, int $agentId, string $dateTra
  * les lignes — logique partagée entre "Nouvelle version" (manuelle) et
  * l'instantané automatique quotidien.
  */
-function creerVersionPlanningAvecCopie(PDO $db, int $missionId, int $mois, int $annee, string $note, ?int $userId): int {
+function creerVersionPlanningAvecCopie(PDO $db, int $missionId, int $mois, int $annee, string $note, ?int $userId): array {
     $stmtCur = $db->prepare("SELECT * FROM planning_versions WHERE mission_id=? AND mois=? AND annee=? AND is_current=1 LIMIT 1");
     $stmtCur->execute([$missionId, $mois, $annee]);
     $curV = $stmtCur->fetch();
+
+    // Rien à archiver si le contenu n'a pas changé depuis la dernière version archivée —
+    // évite de dupliquer indéfiniment le même planning (instantané auto quotidien notamment).
+    if ($curV) {
+        $stmtPrev = $db->prepare("SELECT id FROM planning_versions WHERE mission_id=? AND mois=? AND annee=? AND is_current=0 ORDER BY version DESC LIMIT 1");
+        $stmtPrev->execute([$missionId, $mois, $annee]);
+        $prevId = (int)$stmtPrev->fetchColumn();
+        if ($prevId && planningLignesIdentiques($db, $prevId, (int)$curV['id'])) {
+            return ['version_id' => (int)$curV['id'], 'created' => false];
+        }
+    }
 
     $db->prepare("UPDATE planning_versions SET is_current=0 WHERE mission_id=? AND mois=? AND annee=?")->execute([$missionId, $mois, $annee]);
     $stmtMax = $db->prepare("SELECT MAX(version) as mv FROM planning_versions WHERE mission_id=? AND mois=? AND annee=?");
@@ -182,7 +193,20 @@ function creerVersionPlanningAvecCopie(PDO $db, int $missionId, int $mois, int $
                           $ol['min_ferie_normal'],$ol['min_ferie_nuit'],$ol['calcul_ok']]);
         }
     }
-    return $newVId;
+    return ['version_id' => $newVId, 'created' => true];
+}
+
+/**
+ * Compare le contenu de deux versions de planning (agent/date/horaires/note),
+ * indépendamment de l'id des lignes — sert à éviter d'archiver un doublon exact.
+ */
+function planningLignesIdentiques(PDO $db, int $versionIdA, int $versionIdB): bool {
+    $sql = "SELECT agent_id, date_travail, heure_debut, heure_fin, depasse_minuit, IFNULL(note,'') AS note
+            FROM planning_lignes WHERE version_id = ?
+            ORDER BY agent_id, date_travail";
+    $stmtA = $db->prepare($sql); $stmtA->execute([$versionIdA]);
+    $stmtB = $db->prepare($sql); $stmtB->execute([$versionIdB]);
+    return $stmtA->fetchAll(PDO::FETCH_ASSOC) === $stmtB->fetchAll(PDO::FETCH_ASSOC);
 }
 
 /**
@@ -447,12 +471,16 @@ function ensureMissionsSchema(): void {
             if ($anyMission === 0) {
                 $db->exec("INSERT INTO missions (nom, is_default, actif) VALUES ('Planning général', 1, 1)");
                 $defaultId = (int)$db->lastInsertId();
+                // Migration unique, au moment de la création de la mission par défaut :
+                // affecter tous les agents actuellement actifs, pour ne rien perdre de l'existant.
+                // Ne JAMAIS refaire cet INSERT à chaque exécution — sinon un agent désaffecté
+                // manuellement de la mission par défaut serait ré-affecté au chargement de page suivant.
+                $db->exec("INSERT IGNORE INTO mission_agents (mission_id, agent_id)
+                           SELECT $defaultId, id FROM agents WHERE actif = 1");
             }
         }
         if ($defaultId) {
             $db->exec("UPDATE planning_versions SET mission_id = $defaultId WHERE mission_id IS NULL");
-            $db->exec("INSERT IGNORE INTO mission_agents (mission_id, agent_id)
-                       SELECT $defaultId, id FROM agents WHERE actif = 1");
         }
 
         // Accorder au rôle Manager les mêmes droits que sur 'planning', sans écraser un réglage déjà fait par un admin
