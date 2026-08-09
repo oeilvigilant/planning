@@ -713,7 +713,10 @@ window.deleteLigne = function() {
     fetch('index.php', {method:'POST', body: new URLSearchParams({
         action:'delete_ligne', agent_id:document.getElementById('modalAgentId').value,
         date:document.getElementById('modalDate').value, version_id:document.getElementById('modalVersionId').value
-    })}).then(function(r){return r.json();}).then(function(d){ if(d.ok){ cellModal.hide(); location.reload(); } });
+    })}).then(function(r){return r.json();}).then(function(d){
+        if(d.ok){ cellModal.hide(); location.reload(); }
+        else { alert('Erreur : ' + (d.error || 'Effacement échoué')); }
+    }).catch(function(){ alert('Erreur réseau ou droits insuffisants — le créneau n\'a pas été effacé.'); });
 };
 
 // ── saveBulk ──────────────────────────────────────────────────────────────────

@@ -118,7 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 
     if ($action === 'delete_ligne') {
-        requirePerm('planning', 'delete');
+        // Effacer un seul créneau = corriger une saisie, même niveau de droit que la modifier
+        // (pas 'delete', réservé aux actions plus lourdes : réinitialiser le mois, suppression en masse)
         $agentId   = (int)($_POST['agent_id']  ?? 0);
         $date      =      ($_POST['date']       ?? '');
         $versionId = (int)($_POST['version_id'] ?? 0);
@@ -1535,7 +1536,10 @@ window.deleteLigne = function() {
     });
     fetch('index.php', {method:'POST', body:body})
         .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.ok) { cellModal.hide(); location.reload(); } });
+        .then(function(d) {
+            if (d.ok) { cellModal.hide(); location.reload(); }
+            else { alert('Erreur : ' + (d.error || 'Effacement échoué')); }
+        }).catch(function() { alert('Erreur réseau ou droits insuffisants — le créneau n\'a pas été effacé.'); });
 };
 
 // ── viderCreneau — efface directement sans confirmation ───────────────────────
