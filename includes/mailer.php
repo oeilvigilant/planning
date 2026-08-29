@@ -36,25 +36,26 @@ function sendMail(string $to, string $toName, string $subject, string $htmlBody)
     }
 }
 
-function buildSignatureEmailHtml(array $a, array $p, string $link, string $expiry): string {
+function buildSignatureEmailHtml(array $a, array $p, string $link, string $expiry, string $docLabel = 'contrat de travail'): string {
     $nom       = htmlspecialchars(($a['civilite'] ?? 'M./Mme') . ' ' . ($a['prenom'] ?? '') . ' ' . strtoupper($a['nom'] ?? ''));
     $entreprise = htmlspecialchars($p['entreprise_nom'] ?? 'Oeil Vigilant');
     $contact   = htmlspecialchars($p['smtp_from'] ?? $p['entreprise_email'] ?? 'contact@oeilvigilant.fr');
     $adresse   = htmlspecialchars($p['entreprise_adresse'] ?? '') . ', ' . htmlspecialchars($p['entreprise_cp'] ?? '') . ' ' . htmlspecialchars($p['entreprise_ville'] ?? '');
+    $label     = htmlspecialchars($docLabel);
     return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
 <body style="font-family:Arial,sans-serif;background:#f3f4f6;margin:0;padding:24px">
 <div style="max-width:580px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.10)">
   <div style="background:#1a2332;padding:24px;text-align:center">
     <div style="color:#c9a84c;font-size:22px;font-weight:bold;letter-spacing:2px">' . $entreprise . '</div>
-    <div style="color:#9ca3af;font-size:12px;margin-top:4px">Signature de contrat de travail</div>
+    <div style="color:#9ca3af;font-size:12px;margin-top:4px">Signature de ' . $label . '</div>
   </div>
   <div style="padding:32px">
     <p style="margin:0 0 16px">Bonjour <strong>' . $nom . '</strong>,</p>
-    <p style="margin:0 0 16px;color:#374151">La société <strong>' . $entreprise . '</strong> vous invite à signer votre contrat de travail en ligne, de façon sécurisée.</p>
-    <p style="margin:0 0 8px;color:#374151">Cliquez sur le bouton ci-dessous pour consulter votre contrat et apposer votre signature :</p>
+    <p style="margin:0 0 16px;color:#374151">La société <strong>' . $entreprise . '</strong> vous invite à signer votre ' . $label . ' en ligne, de façon sécurisée.</p>
+    <p style="margin:0 0 8px;color:#374151">Cliquez sur le bouton ci-dessous pour consulter le document et apposer votre signature :</p>
     <div style="text-align:center;margin:28px 0">
       <a href="' . $link . '" style="background:#c9a84c;color:#1a2332;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;display:inline-block">
-        ✍&nbsp; Signer mon contrat
+        ✍&nbsp; Signer le document
       </a>
     </div>
     <div style="background:#fef9e7;border:1px solid #fde68a;border-radius:6px;padding:12px 16px;font-size:13px;color:#92400e;margin-bottom:20px">

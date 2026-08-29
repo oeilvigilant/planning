@@ -18,6 +18,7 @@ $stmt = $db->prepare("
     SELECT st.id          AS token_id,
            st.agent_id,
            st.contrat_id,
+           st.avenant_id,
            st.contrat_data,
            st.expires_at,
            st.signed_at,
@@ -42,8 +43,8 @@ if (!$row) {
 <div class="text-center p-4">
   <?php if ($old && $old['signed_at']): ?>
     <i class="fa fa-check-circle fa-3x text-success mb-3"></i>
-    <h4>Contrat déjà signé</h4>
-    <p class="text-muted">Ce contrat a été signé le <?= date('d/m/Y à H:i', strtotime($old['signed_at'])) ?>. Contactez votre employeur si vous avez des questions.</p>
+    <h4>Document déjà signé</h4>
+    <p class="text-muted">Ce document a été signé le <?= date('d/m/Y à H:i', strtotime($old['signed_at'])) ?>. Contactez votre employeur si vous avez des questions.</p>
   <?php else: ?>
     <i class="fa fa-triangle-exclamation fa-3x text-warning mb-3"></i>
     <h4>Lien expiré ou invalide</h4>
@@ -54,8 +55,10 @@ if (!$row) {
 $params        = getAllParams();
 $agentId       = (int)$row['agent_id'];
 $tokenId       = (int)$row['token_id']; // alias explicite — évite collision avec a.id
+$isAvenant     = empty($row['contrat_id']) && !empty($row['avenant_id']);
 $contractData = json_decode($row['contrat_data'] ?? '{}', true) ?: [];
 $alreadySigned = !empty($row['signed_at']);
+$docLabel      = $isAvenant ? strtolower(avenantTypeLabel($contractData['type_document'] ?? 'avenant', $contractData['numero'] ?? '1')) : 'contrat de travail';
 
 // ─── POST : enregistrer la signature ─────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['sign_submit'])) {
@@ -63,20 +66,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['sign_submit'])) {
     if (!preg_match('/^data:image\/png;base64,[A-Za-z0-9+\/=]+$/', $sigData)) {
         $errorMsg = 'Données de signature invalides. Veuillez réessayer.';
     } elseif ($alreadySigned) {
-        $errorMsg = 'Ce contrat a déjà été signé.';
+        $errorMsg = 'Ce document a déjà été signé.';
     } else {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';
         $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 500);
-        // Sauvegarder la signature dans la fiche agent
-        $db->prepare("UPDATE agents SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=?")
-           ->execute([$sigData, $ip, $agentId]);
         // Marquer le token comme utilisé
         $db->prepare("UPDATE signature_tokens SET signed_at=NOW(), ip_signed=?, ua_signed=? WHERE id=?")
            ->execute([$ip, $ua, $tokenId]);
-        // Propager la signature sur le contrat lié (si contrat_id présent dans le token)
-        if (!empty($row['contrat_id'])) {
-            $db->prepare("UPDATE contrats SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=? AND agent_id=?")
-               ->execute([$sigData, $ip, $row['contrat_id'], $agentId]);
+        if ($isAvenant) {
+            // Signature propre au document (avenant / convention) — ne touche pas la fiche agent
+            $db->prepare("UPDATE avenants SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=? AND agent_id=?")
+               ->execute([$sigData, $ip, $row['avenant_id'], $agentId]);
+            $db->prepare("INSERT INTO signatures_log (agent_id, avenant_id, contrat_hash, ip_address, user_agent) VALUES (?,?,?,?,?)")
+               ->execute([$agentId, $row['avenant_id'], hash('sha256', $sigData . $agentId . date('Y-m-d')), $ip, $ua]);
+        } else {
+            // Sauvegarder la signature dans la fiche agent
+            $db->prepare("UPDATE agents SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=?")
+               ->execute([$sigData, $ip, $agentId]);
+            // Propager la signature sur le contrat lié (si contrat_id présent dans le token)
+            if (!empty($row['contrat_id'])) {
+                $db->prepare("UPDATE contrats SET signature=?, signature_date=NOW(), signature_ip=? WHERE id=? AND agent_id=?")
+                   ->execute([$sigData, $ip, $row['contrat_id'], $agentId]);
+            }
         }
         // Notifier l'admin par email
         $notifEmail = $params['notification_signature_email'] ?? $params['smtp_from'] ?? $params['entreprise_email'] ?? '';
@@ -99,12 +110,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['sign_submit'])) {
 <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
   <div style="background:#1a2332;padding:18px 24px;display:flex;align-items:center;gap:12px">
     <span style="color:#c9a84c;font-size:1.4rem">✍</span>
-    <span style="color:#fff;font-weight:700;font-size:1rem">Contrat signé électroniquement</span>
+    <span style="color:#fff;font-weight:700;font-size:1rem">Document signé électroniquement</span>
   </div>
   <div style="padding:24px">
     <p style="margin:0 0 16px;font-size:0.95rem;color:#374151">
       <strong>' . htmlspecialchars($nom) . '</strong> (matricule <code>' . htmlspecialchars($matricule) . '</code>)
-      a signé son contrat électroniquement.
+      a signé électroniquement : ' . htmlspecialchars($docLabel) . '.
     </p>
     <table style="width:100%;border-collapse:collapse;font-size:0.85rem;color:#6b7280;margin-bottom:20px">
       <tr><td style="padding:5px 0;border-bottom:1px solid #f3f4f6;width:40%">Date de signature</td><td style="padding:5px 0;border-bottom:1px solid #f3f4f6;font-weight:600;color:#1a2332">' . date('d/m/Y à H:i') . '</td></tr>
@@ -121,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['sign_submit'])) {
   </div>
 </div>';
             sendMail($notifEmail, $params['entreprise_nom'] ?? 'OV-Gestion',
-                '✍ Contrat signé — ' . $nom . ' (' . date('d/m/Y') . ')',
+                '✍ Document signé — ' . $nom . ' (' . date('d/m/Y') . ')',
                 $html
             );
         }
@@ -129,13 +140,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['sign_submit'])) {
     }
 }
 
-// ─── Générer l'aperçu HTML du contrat ────────────────────────────────────────
+// ─── Générer l'aperçu HTML du document ───────────────────────────────────────
 $contractHtml = '';
 if (!empty($contractData)) {
     // Recharger $a depuis DB pour avoir les données fraîches
-    $aFresh = $db->prepare("SELECT * FROM agents WHERE id=?")->execute([$agentId]) ? null : null;
-    $stA = $db->prepare("SELECT * FROM agents WHERE id=?"); $stA->execute([$agentId]); $aFresh = $stA->fetch();
-    $contractHtml = buildContratHtml($contractData, $params, $aFresh ?: []);
+    $stA = $db->prepare("SELECT * FROM agents WHERE id=?"); $stA->execute([$agentId]); $aFresh = $stA->fetch() ?: [];
+    if ($isAvenant) {
+        // La signature affichée est celle du document courant, pas la signature legacy du contrat principal
+        $aFresh['signature'] = null;
+        $contractHtml = buildAvenantHtml($contractData, $params, $aFresh);
+    } else {
+        $contractHtml = buildContratHtml($contractData, $params, $aFresh);
+    }
     // Supprimer les balises html/head/body pour l'intégration inline
     $contractHtml = preg_replace('/<\/?(?:html|head|body)[^>]*>/i', '', $contractHtml);
 }
@@ -144,7 +160,7 @@ if (!empty($contractData)) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Signature de contrat — <?= htmlspecialchars($params['entreprise_nom'] ?? 'Oeil Vigilant') ?></title>
+<title>Signature — <?= htmlspecialchars($params['entreprise_nom'] ?? 'Oeil Vigilant') ?></title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 <style>
@@ -170,7 +186,7 @@ body { background:#f3f4f6; }
 <!-- ── Confirmation de signature ──────────────────────────────────────────── -->
 <div class="text-center py-5">
   <div class="mb-4" style="font-size:64px;color:#10b981">✓</div>
-  <h3 class="fw-bold">Contrat signé avec succès !</h3>
+  <h3 class="fw-bold">Document signé avec succès !</h3>
   <p class="text-muted">Votre signature a été enregistrée le <strong><?= date('d/m/Y à H:i') ?></strong>.</p>
   <p class="text-muted small">Un exemplaire signé vous sera transmis par votre employeur. Conservez cet email comme preuve de signature.</p>
   <div class="alert alert-light border mt-4 d-inline-block text-start" style="font-size:12px;max-width:400px">
@@ -184,7 +200,7 @@ body { background:#f3f4f6; }
 <!-- ── Déjà signé ─────────────────────────────────────────────────────────── -->
 <div class="text-center py-5">
   <i class="fa fa-check-circle fa-4x text-success mb-3"></i>
-  <h4>Ce contrat a déjà été signé</h4>
+  <h4>Ce document a déjà été signé</h4>
   <p class="text-muted">Signé le <?= date('d/m/Y à H:i', strtotime($row['signed_at'])) ?>. Contactez votre employeur si vous souhaitez un exemplaire.</p>
 </div>
 
@@ -196,7 +212,7 @@ body { background:#f3f4f6; }
 
 <div class="contract-box mb-4">
   <div class="p-3 border-bottom" style="background:#f8f9fa">
-    <h5 class="mb-0"><i class="fa fa-file-contract me-2 text-warning"></i>Votre contrat de travail</h5>
+    <h5 class="mb-0"><i class="fa fa-file-contract me-2 text-warning"></i>Votre <?= htmlspecialchars($docLabel) ?></h5>
     <div class="text-muted small">Lisez attentivement le document avant de signer.</div>
   </div>
   <div style="max-height:55vh;overflow-y:auto;padding:0 8px">
@@ -221,7 +237,7 @@ body { background:#f3f4f6; }
   <div class="form-check mb-3">
     <input class="form-check-input" type="checkbox" id="chkLu" required>
     <label class="form-check-label" for="chkLu">
-      J'ai lu et j'accepte l'intégralité du contrat de travail ci-dessus.
+      J'ai lu et j'accepte l'intégralité du document ci-dessus (<?= htmlspecialchars($docLabel) ?>).
     </label>
   </div>
 
@@ -231,7 +247,7 @@ body { background:#f3f4f6; }
     <input type="hidden" name="sign_submit" value="1">
     <input type="hidden" name="signature_data" id="sigData">
     <button type="button" onclick="submitSig()" class="btn btn-sign w-100 py-3" style="font-size:17px">
-      <i class="fa fa-check me-2"></i>Signer et valider mon contrat
+      <i class="fa fa-check me-2"></i>Signer et valider le document
     </button>
   </form>
 

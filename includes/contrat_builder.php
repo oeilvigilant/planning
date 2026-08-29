@@ -580,6 +580,69 @@ Conformément aux dispositions du Règlement Général sur la Protection des Don
 // AVENANT
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Libellé par défaut du document selon son type (avenant / rupture / libre).
+ */
+function avenantTypeLabel(string $type, string $numero = '1'): string {
+    switch ($type) {
+        case 'rupture': return 'Convention de Rupture Conventionnelle';
+        case 'libre':   return 'Document';
+        default:        return 'Avenant n°' . $numero . ' au Contrat de Travail';
+    }
+}
+
+/**
+ * Contenu de départ (HTML simple : p / strong / ul) inséré dans la zone
+ * éditable lorsqu'on choisit un modèle. L'utilisateur peut ensuite tout
+ * modifier librement avant signature.
+ */
+function avenantTemplateCorps(string $type): string {
+    switch ($type) {
+        case 'rupture':
+            return '<p><strong>Article 1 — Principe de la rupture conventionnelle</strong></p>'
+                . '<p>Les parties conviennent, d’un commun accord et en dehors de tout litige, de rompre le contrat de travail à durée indéterminée les liant, dans le cadre des dispositions des articles L1237-11 et suivants du Code du travail relatives à la rupture conventionnelle individuelle.</p>'
+                . '<p><strong>Article 2 — Date de fin du contrat de travail</strong></p>'
+                . '<p>Le contrat de travail prendra fin le <u>[date]</u>, au lendemain du jour de l’homologation de la présente convention par l’autorité administrative (DREETS).</p>'
+                . '<p><strong>Article 3 — Indemnité spécifique de rupture conventionnelle</strong></p>'
+                . '<p>Le salarié percevra une indemnité spécifique de rupture conventionnelle d’un montant de <u>[montant]</u> €, versée avec le solde de tout compte. Ce montant est au moins égal au montant de l’indemnité légale de licenciement.</p>'
+                . '<p><strong>Article 4 — Délai de rétractation</strong></p>'
+                . '<p>À compter de la date de signature de la présente convention, chacune des parties dispose d’un délai de 15 jours calendaires pour exercer son droit de rétractation, par lettre adressée à l’autre partie.</p>'
+                . '<p><strong>Article 5 — Homologation</strong></p>'
+                . '<p>À l’expiration du délai de rétractation, la partie la plus diligente adressera une demande d’homologation à la DREETS, qui dispose d’un délai d’instruction de 15 jours ouvrables à compter de la réception de la demande.</p>';
+        case 'libre':
+            return '<p></p>';
+        default: // avenant
+            return '<p><strong>Article 1 — Objet</strong></p>'
+                . '<p>Le présent avenant a pour objet de modifier les dispositions suivantes du contrat de travail conclu entre les parties : <u>[préciser la modification]</u>.</p>'
+                . '<p><strong>Article 2 — Autres dispositions</strong></p>'
+                . '<p>Toutes les autres clauses et conditions du contrat de travail initial demeurent inchangées et continuent à produire leurs effets.</p>';
+    }
+}
+
+/**
+ * Construit le tableau $defaults pour buildAvenantHtml() à partir d'un agent
+ * et (éventuellement) d'une ligne de la table `avenants`.
+ */
+function buildAvenantDefaults(array $a, array $v, array $params): array {
+    $typeDoc = $v['type_document'] ?? 'avenant';
+    $numero  = $v['numero'] ?? '1';
+    return [
+        'type_document'          => $typeDoc,
+        'numero'                 => $numero,
+        'titre_document'         => $v['titre_document'] ?? avenantTypeLabel($typeDoc, $numero),
+        'civilite'               => $v['civilite'] ?? 'M.',
+        'nom_prenom'             => $v['nom_prenom'] ?? (strtoupper($a['nom'] ?? '') . ' ' . ($a['prenom'] ?? '')),
+        'adresse'                => $v['adresse'] ?? trim(($a['adresse'] ?? '') . ', ' . ($a['cp'] ?? '') . ' ' . ($a['ville'] ?? ''), ', '),
+        'poste'                  => $v['poste'] ?? ($a['poste'] ?? 'Agent de sécurité'),
+        'type_contrat'           => $v['type_contrat'] ?? ($a['type_contrat'] ?? 'CDD'),
+        'date_contrat_reference' => $v['date_contrat_reference'] ?? ($a['date_debut_contrat'] ? date('d/m/Y', strtotime($a['date_debut_contrat'])) : ''),
+        'date_effet'             => $v['date_effet'] ?? date('d/m/Y'),
+        'corps_html'             => $v['corps_html'] ?? avenantTemplateCorps($typeDoc),
+        'lieu_signature'         => $v['lieu_signature'] ?? ($params['entreprise_ville'] ?? 'Paris'),
+        'date_signature'         => $v['date_signature'] ?? date('d/m/Y'),
+    ];
+}
+
 function buildAvenantHtml(array $d, array $p, array $a): string {
     $logoB64 = '';
     $logoFile = APP_ROOT . '/assets/img/' . ($p['logo_principal'] ?? 'logo.png');
@@ -598,9 +661,13 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
     }
 
     $e       = fn($v) => htmlspecialchars($v ?? '', ENT_QUOTES, 'UTF-8');
-    $types   = $d['types_modification'] ?? [];
-    $numAv   = trim($d['avenant_numero'] ?? '1');
+    $typeDoc = $d['type_document'] ?? 'avenant';
+    $numero  = trim($d['numero'] ?? '1');
     $dateRef = trim($d['date_contrat_reference'] ?? '');
+    $titre   = trim($d['titre_document'] ?? '') ?: avenantTypeLabel($typeDoc, $numero);
+    // Le corps est du HTML produit par une zone éditable interne (managers authentifiés
+    // uniquement) — pas une saisie publique, donc conservé tel quel sans échappement.
+    $corps   = $d['corps_html'] ?? '';
 
     ob_start(); ?>
 <!DOCTYPE html>
@@ -610,9 +677,10 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
 <?= _contratCss() ?>
 <style>
 .avenant-ref { background:#f0f2f5; border-left:4px solid #c9a84c; padding:8px 12px; font-size:8.5pt; margin:12px 0; border-radius:0 4px 4px 0; }
-.mod-block { margin:12px 0; padding:10px; border:1px solid #e5e7eb; border-radius:6px; }
-.mod-block-title { font-weight:700; font-size:9pt; color:#1a2332; margin-bottom:6px; border-bottom:1px solid #f0f2f5; padding-bottom:4px; }
-.inchange { margin-top:14px; padding:8px 12px; background:#f8f9fa; font-size:8.5pt; font-style:italic; color:#555; border-radius:4px; text-align:center; }
+.corps-libre { font-size:9pt; margin:14px 0; }
+.corps-libre p { margin:8px 0; }
+.corps-libre ul, .corps-libre ol { margin:6px 0; padding-left:20px; }
+.corps-libre u { text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -620,7 +688,7 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
 
 <div class="header">
   <?php if ($logoB64): ?><img src="<?= $logoB64 ?>"><br><?php endif; ?>
-  <h1>Avenant n°<?= $e($numAv) ?> au Contrat de Travail</h1>
+  <h1><?= $e($titre) ?></h1>
   <div class="sous-titre"><?= $e($d['poste'] ?? ($a['poste'] ?? 'Agent de sécurité')) ?></div>
   <div class="infos">
     <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — SIRET <?= $e($p['entreprise_siret'] ?? '92855270200013') ?><br>
@@ -638,81 +706,20 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
   Ci-après dénommé <em>« le Salarié »</em>.
 </div>
 
+<?php if ($typeDoc === 'avenant'): ?>
 <div class="avenant-ref">
   Le présent avenant modifie et complète le contrat de travail à durée <?= (($d['type_contrat']??'CDD')==='CDI')?'indéterminée':'déterminée' ?>
   conclu entre les parties<?= $dateRef ? ' en date du <strong>'.$e($dateRef).'</strong>' : '' ?>.
   Il prend effet à compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>.
   Toutes les dispositions du contrat initial non modifiées par le présent avenant demeurent pleinement applicables.
 </div>
-
-<p style="text-align:center;font-weight:bold;font-size:9.5pt;margin:12px 0">Les parties conviennent des modifications suivantes :</p>
-
-<?php if (in_array('site', $types) && !empty($d['nouveau_site'])): ?>
-<div class="mod-block">
-  <div class="mod-block-title">Modification du site d'affectation</div>
-  <p style="font-size:9pt">À compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>, le salarié est affecté sur le site : <strong><?= $e($d['nouveau_site']) ?></strong>.</p>
-  <?php if (!empty($d['ancien_site'])): ?>
-  <p style="font-size:8.5pt;color:#666">Site précédent : <?= $e($d['ancien_site']) ?></p>
-  <?php endif; ?>
-  <p style="font-size:8.5pt">Cette modification est effectuée dans le cadre du pouvoir de direction de l'Employeur (Art L1121-1 CT), le salarié restant rattaché au même établissement. Le salarié reconnaît que cette affectation entre dans les limites de sa zone géographique habituelle de travail.</p>
+<?php elseif ($typeDoc === 'rupture'): ?>
+<div class="avenant-ref">
+  La présente convention est conclue dans le cadre de la rupture conventionnelle individuelle du contrat de travail à durée indéterminée liant les parties<?= $dateRef ? ' depuis le <strong>'.$e($dateRef).'</strong>' : '' ?>, conformément aux articles L1237-11 et suivants du Code du travail.
 </div>
 <?php endif; ?>
 
-<?php if (in_array('salaire', $types) && !empty($d['nouveau_salaire'])): ?>
-<div class="mod-block">
-  <div class="mod-block-title">Modification de la rémunération</div>
-  <p style="font-size:9pt">À compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>, le salaire horaire <?= $e(strtolower($d['type_remuneration']??'brut')) ?> du salarié est fixé à <strong class="highlight"><?= $e($d['nouveau_salaire']) ?> € / heure</strong>.</p>
-  <?php if (!empty($d['ancien_salaire'])): ?>
-  <p style="font-size:8.5pt;color:#666">Salaire précédent : <?= $e($d['ancien_salaire']) ?> € / heure</p>
-  <?php endif; ?>
-  <p style="font-size:8.5pt">Ce nouveau taux est supérieur au minimum conventionnel applicable à la catégorie du salarié (CCN n°1351). Toutes les autres dispositions relatives à la rémunération (majorations, primes) restent inchangées.</p>
-</div>
-<?php endif; ?>
-
-<?php if (in_array('prolongation', $types) && !empty($d['nouvelle_date_fin'])): ?>
-<div class="mod-block">
-  <div class="mod-block-title">Prolongation du contrat à durée déterminée</div>
-  <p style="font-size:9pt">Le terme du contrat initialement prévu est reporté au <strong><?= $e($d['nouvelle_date_fin']) ?></strong>.</p>
-  <?php if (!empty($d['ancienne_date_fin'])): ?>
-  <p style="font-size:8.5pt;color:#666">Terme précédent : <?= $e($d['ancienne_date_fin']) ?></p>
-  <?php endif; ?>
-  <?php if (!empty($d['total_heures_nouveau'])): ?>
-  <p style="font-size:9pt">La durée totale de travail pour l'ensemble de la période est portée à <strong><?= $e($d['total_heures_nouveau']) ?> heures</strong>.</p>
-  <?php endif; ?>
-  <p style="font-size:8.5pt">Cette prolongation intervient conformément aux dispositions de l'article L1243-13 du Code du travail. La durée totale du contrat, renouvellements inclus, reste dans les limites légales.</p>
-</div>
-<?php endif; ?>
-
-<?php if (in_array('poste', $types) && !empty($d['nouveau_poste'])): ?>
-<div class="mod-block">
-  <div class="mod-block-title">Modification du poste et des fonctions</div>
-  <p style="font-size:9pt">À compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>, le salarié exerce les fonctions de <strong><?= $e($d['nouveau_poste']) ?></strong><?= !empty($d['nouvelle_categorie']) ? ', relevant de la catégorie « '.$e($d['nouvelle_categorie']).' »' : '' ?>.</p>
-  <?php if (!empty($d['poste_precedent'])): ?>
-  <p style="font-size:8.5pt;color:#666">Poste précédent : <?= $e($d['poste_precedent']) ?></p>
-  <?php endif; ?>
-</div>
-<?php endif; ?>
-
-<?php if (in_array('horaires', $types) && !empty($d['nouveau_total_heures'])): ?>
-<div class="mod-block">
-  <div class="mod-block-title">Modification de la durée du travail</div>
-  <p style="font-size:9pt">À compter du <strong><?= $e($d['date_effet'] ?? $d['date_signature']) ?></strong>, la durée globale de travail est modifiée et fixée à <strong class="highlight"><?= $e($d['nouveau_total_heures']) ?> heures</strong> pour la durée restante du contrat, réparties selon le planning communiqué.</p>
-  <?php if (!empty($d['ancien_total_heures'])): ?>
-  <p style="font-size:8.5pt;color:#666">Durée précédente : <?= $e($d['ancien_total_heures']) ?> heures</p>
-  <?php endif; ?>
-</div>
-<?php endif; ?>
-
-<?php if (in_array('autre', $types) && !empty($d['contenu_autre'])): ?>
-<div class="mod-block">
-  <div class="mod-block-title"><?= $e($d['titre_autre'] ?? 'Modification diverse') ?></div>
-  <div style="font-size:9pt"><?= nl2br($e($d['contenu_autre'])) ?></div>
-</div>
-<?php endif; ?>
-
-<div class="inchange">
-  Toutes les autres clauses et conditions du contrat de travail initial demeurent inchangées et continuent à produire leurs effets.
-</div>
+<div class="corps-libre"><?= $corps ?></div>
 
 <div style="margin:20px 0;font-size:8.5pt">
   Fait à <strong><?= $e($d['lieu_signature'] ?? ($p['entreprise_ville']??'Paris')) ?></strong>, le <strong><?= $e($d['date_signature']) ?></strong>
@@ -733,9 +740,13 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
       Président — S.A.S <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?>
     </div>
   </div>
-  <div class="sig-block">
+  <div class="sig-block <?= !empty($a['signature']) ? 'has-sig' : '' ?>">
     <div class="sig-title">Le Salarié</div>
+    <?php if (!empty($a['signature'])): ?>
+    <div class="sig-img-box"><img src="<?= $e($a['signature']) ?>"></div>
+    <?php else: ?>
     <div style="height:60px"></div>
+    <?php endif; ?>
     <div class="sig-line">
       <?= $e($d['civilite'] ?? '') ?> <?= $e($d['nom_prenom']) ?>
     </div>
@@ -743,7 +754,7 @@ function buildAvenantHtml(array $d, array $p, array $a): string {
 </div>
 
 <div class="footer">
-  Avenant n°<?= $e($numAv) ?> — Fait à <?= $e($d['lieu_signature'] ?? ($p['entreprise_ville']??'Paris')) ?>, le <?= $e($d['date_signature'] ?: date('d/m/Y')) ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Confidentiel
+  <?= $e($titre) ?> — Fait à <?= $e($d['lieu_signature'] ?? ($p['entreprise_ville']??'Paris')) ?>, le <?= $e($d['date_signature'] ?: date('d/m/Y')) ?> — <?= $e($p['entreprise_nom'] ?? 'OEIL VIGILANT') ?> — Confidentiel
 </div>
 
 </div>

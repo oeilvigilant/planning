@@ -20,5 +20,10 @@ if (!is_array($data)) { http_response_code(400); exit; }
 
 $params = getAllParams();
 
+// L'aperçu ne doit jamais réutiliser la signature legacy du contrat principal
+// de l'agent — seule la signature propre à ce document (une fois enregistrée)
+// doit apparaître, ce qui est géré côté avenant.php lors de l'export PDF réel.
+$a['signature'] = null;
+
 header('Content-Type: text/html; charset=UTF-8');
 echo buildAvenantHtml($data, $params, $a);

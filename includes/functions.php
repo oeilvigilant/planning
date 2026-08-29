@@ -497,6 +497,55 @@ function ensureMissionsSchema(): void {
     } catch (Exception $e) {}
 }
 
+function ensureAvenantSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db = getDB();
+
+        $existsA = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'avenants'")->fetchColumn();
+        if (!$existsA) {
+            $db->exec("CREATE TABLE avenants (
+                id                     INT AUTO_INCREMENT PRIMARY KEY,
+                agent_id               INT NOT NULL,
+                type_document          VARCHAR(30)  NOT NULL DEFAULT 'avenant',
+                titre_document         VARCHAR(255) DEFAULT NULL,
+                numero                 VARCHAR(20)  DEFAULT NULL,
+                civilite               VARCHAR(10)  DEFAULT NULL,
+                nom_prenom             VARCHAR(255) DEFAULT NULL,
+                adresse                VARCHAR(255) DEFAULT NULL,
+                poste                  VARCHAR(150) DEFAULT NULL,
+                type_contrat           VARCHAR(50)  DEFAULT NULL,
+                date_contrat_reference VARCHAR(10)  DEFAULT NULL,
+                date_effet             VARCHAR(10)  DEFAULT NULL,
+                corps_html             LONGTEXT     NULL,
+                lieu_signature         VARCHAR(100) DEFAULT NULL,
+                date_signature         VARCHAR(10)  DEFAULT NULL,
+                signature              LONGTEXT     NULL,
+                signature_date         DATETIME     NULL,
+                signature_ip           VARCHAR(45)  NULL,
+                statut                 ENUM('actif','archive') DEFAULT 'actif',
+                created_at             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_agent_id (agent_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+
+        $hasColTok = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'signature_tokens' AND COLUMN_NAME = 'avenant_id'")->fetchColumn();
+        if (!$hasColTok) {
+            $db->exec("ALTER TABLE signature_tokens ADD COLUMN avenant_id INT NULL AFTER contrat_id");
+        }
+
+        $hasColLog = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'signatures_log' AND COLUMN_NAME = 'avenant_id'")->fetchColumn();
+        if (!$hasColLog) {
+            $db->exec("ALTER TABLE signatures_log ADD COLUMN avenant_id INT NULL AFTER contrat_id");
+        }
+    } catch (Exception $e) {}
+}
+
 // ── Paramètres ──────────────────────────────────────────────────────────────
 
 function getParam(string $cle, string $default = ''): string {
