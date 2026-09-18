@@ -46,7 +46,7 @@ if ($format === 'simple') {
     fputcsv($f, ['Nom','Détails','Prix unitaire','Unité','TVA','Type d\'article','Notes personnelles'], ';');
     foreach ($produits as $p) {
         fputcsv($f, [
-            $p['designation_courte'],
+            $p['code'] . ' - ' . $p['designation_courte'],
             $p['designation_longue'],
             number_format((float)$p['prix_defaut'], 2, ',', ''),
             $unites[$p['unite']] ?? $p['unite'],
