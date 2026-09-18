@@ -48,9 +48,9 @@ if ($format === 'simple') {
         fputcsv($f, [
             $p['code'] . ' - ' . $p['designation_courte'],
             $p['designation_longue'],
-            number_format((float)$p['prix_defaut'], 2, ',', ''),
+            number_format((float)$p['prix_defaut'], 2, '.', ''),
             $unites[$p['unite']] ?? $p['unite'],
-            number_format((float)$p['tva_taux'], 2, ',', ''),
+            number_format((float)$p['tva_taux'], 2, '.', ''),
             $familles[$p['famille']] ?? $p['famille'],
             $p['notes'],
         ], ';');
