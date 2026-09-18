@@ -34,11 +34,32 @@ $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $produits = $stmt->fetchAll();
 
+$format = $_GET['format'] ?? 'complet'; // 'complet' (sauvegarde/réimport) ou 'simple' (usage externe)
+$unites = produitUnites();
+
 header('Content-Type: text/csv; charset=utf-8');
-header('Content-Disposition: attachment; filename="produits_' . date('Y-m-d') . '.csv"');
 $f = fopen('php://output', 'w');
 fprintf($f, chr(0xEF).chr(0xBB).chr(0xBF));
 
+if ($format === 'simple') {
+    header('Content-Disposition: attachment; filename="produits_simplifie_' . date('Y-m-d') . '.csv"');
+    fputcsv($f, ['Nom','Détails','Prix unitaire','Unité','TVA','Type d\'article','Notes personnelles'], ';');
+    foreach ($produits as $p) {
+        fputcsv($f, [
+            $p['designation_courte'],
+            $p['designation_longue'],
+            number_format((float)$p['prix_defaut'], 2, ',', ''),
+            $unites[$p['unite']] ?? $p['unite'],
+            number_format((float)$p['tva_taux'], 2, ',', ''),
+            $familles[$p['famille']] ?? $p['famille'],
+            $p['notes'],
+        ], ';');
+    }
+    fclose($f);
+    exit;
+}
+
+header('Content-Disposition: attachment; filename="produits_' . date('Y-m-d') . '.csv"');
 $headers = ['code','famille','qualification','type_heure','designation_courte','designation_longue','unite','prix_defaut','tva_taux','actif','notes','ordre'];
 fputcsv($f, $headers, ';');
 

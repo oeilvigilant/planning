@@ -43,7 +43,16 @@ $currentModule = 'produits';
 $topbarActions = '';
 if (canDo('produits','export')) {
     $qs = http_build_query(['search'=>$search,'famille'=>$famille,'statut'=>$statut]);
-    $topbarActions .= '<a href="export.php?' . h($qs) . '" class="btn btn-ov-secondary btn-sm"><i class="fa fa-file-export me-1"></i> Exporter</a> ';
+    $topbarActions .= '
+    <div class="btn-group">
+        <button type="button" class="btn btn-ov-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fa fa-file-export me-1"></i> Exporter
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="export.php?format=complet&' . h($qs) . '">Export complet <small class="text-muted">(sauvegarde / réimport)</small></a></li>
+            <li><a class="dropdown-item" href="export.php?format=simple&' . h($qs) . '">Export simplifié <small class="text-muted">(Nom, Détails, Prix, Unité, TVA…)</small></a></li>
+        </ul>
+    </div> ';
 }
 if (canDo('produits','create')) {
     $topbarActions .= '<a href="import.php" class="btn btn-ov-secondary btn-sm"><i class="fa fa-file-import me-1"></i> Importer</a> ';
