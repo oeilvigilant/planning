@@ -103,7 +103,7 @@ $currentModule = $currentModule ?? '';
         </li>
         <?php endif; ?>
 
-        <?php if (canDo('devis','view') || canDo('clients','view')): ?>
+        <?php if (canDo('devis','view') || canDo('clients','view') || canDo('produits','view')): ?>
         <div class="sidebar-section">Commercial</div>
         <?php if (canDo('clients','view')): ?>
         <li class="nav-item">
@@ -116,6 +116,13 @@ $currentModule = $currentModule ?? '';
         <li class="nav-item">
             <a href="<?= APP_URL ?>/modules/devis/index.php" class="nav-link <?= (strncmp($currentModule,'devis',5)===0)?'active':'' ?>">
                 <span class="nav-icon"><i class="fa fa-file-invoice"></i></span> Devis
+            </a>
+        </li>
+        <?php endif; ?>
+        <?php if (canDo('produits','view')): ?>
+        <li class="nav-item">
+            <a href="<?= APP_URL ?>/modules/produits/index.php" class="nav-link <?= (strncmp($currentModule,'produits',8)===0)?'active':'' ?>">
+                <span class="nav-icon"><i class="fa fa-boxes-stacked"></i></span> Produits
             </a>
         </li>
         <?php endif; ?>

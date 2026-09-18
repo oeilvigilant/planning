@@ -546,6 +546,147 @@ function ensureAvenantSchema(): void {
     } catch (Exception $e) {}
 }
 
+/**
+ * Catalogue produits/prestations (module Produits).
+ * Famille "agent_securite" : combinaison qualification × type_heure (ex: AS-STD-JN).
+ * Familles "evenementiel" / "divers" : prestations hors grille horaire (forfait, intervention).
+ * À la création de la table, seed automatiquement le catalogue de départ et
+ * accorde les permissions du module aux rôles existants (view pour tous,
+ * create/edit en plus pour manager, tout pour admin).
+ */
+function ensureProduitsSchema(): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db = getDB();
+
+        $exists = $db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'produits'")->fetchColumn();
+        if ($exists) return;
+
+        $db->exec("CREATE TABLE produits (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(30) NOT NULL,
+            famille VARCHAR(30) NOT NULL DEFAULT 'agent_securite',
+            qualification VARCHAR(20) DEFAULT NULL,
+            type_heure VARCHAR(20) DEFAULT NULL,
+            designation_courte VARCHAR(100) NOT NULL,
+            designation_longue VARCHAR(255) NOT NULL DEFAULT '',
+            unite VARCHAR(20) NOT NULL DEFAULT 'heure',
+            prix_defaut DECIMAL(10,2) NOT NULL DEFAULT 0,
+            tva_taux DECIMAL(5,2) NOT NULL DEFAULT 20.00,
+            actif TINYINT(1) NOT NULL DEFAULT 1,
+            notes TEXT,
+            ordre INT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_code (code)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $qualifs = [
+            'STD'   => ['label' => 'Agent de sécurité',              'court' => 'Agent',           'prix' => ['JN'=>25.90,'NN'=>27.90,'JD'=>29.90,'ND'=>32.90,'JF'=>51.80,'NF'=>55.80]],
+            'ROND'  => ['label' => 'Agent rondier / mobile',         'court' => 'Agent rondier',    'prix' => ['JN'=>28.90,'NN'=>30.90,'JD'=>32.90,'ND'=>35.90,'JF'=>54.80,'NF'=>58.80]],
+            'CYN'   => ['label' => 'Agent cynophile (maître-chien)', 'court' => 'Agent cynophile',  'prix' => ['JN'=>35.00,'NN'=>38.50,'JD'=>40.00,'ND'=>43.50,'JF'=>60.00,'NF'=>64.00]],
+            'SSIAP' => ['label' => 'Agent SSIAP (sécurité incendie)','court' => 'Agent SSIAP',      'prix' => ['JN'=>29.90,'NN'=>31.90,'JD'=>33.90,'ND'=>36.90,'JF'=>55.80,'NF'=>59.80]],
+        ];
+        $types = [
+            'JN' => ['court' => 'Jour',         'long' => 'Jour (tarif normal, jour ouvré)'],
+            'NN' => ['court' => 'Nuit',         'long' => 'Nuit (tarif normal, jour ouvré)'],
+            'JD' => ['court' => 'Jour Dim.',    'long' => 'Jour Dimanche'],
+            'ND' => ['court' => 'Nuit Dim.',    'long' => 'Nuit Dimanche'],
+            'JF' => ['court' => 'Jour Férié',   'long' => 'Jour Férié'],
+            'NF' => ['court' => 'Nuit Férié',   'long' => 'Nuit Férié'],
+        ];
+
+        $stmt = $db->prepare("INSERT INTO produits
+            (code, famille, qualification, type_heure, designation_courte, designation_longue, unite, prix_defaut, tva_taux, ordre)
+            VALUES (?, 'agent_securite', ?, ?, ?, ?, 'heure', ?, 20.00, ?)");
+
+        $ordre = 0;
+        foreach ($qualifs as $qCode => $q) {
+            foreach ($types as $tCode => $t) {
+                $ordre++;
+                $code = "AS-{$qCode}-{$tCode}";
+                $stmt->execute([
+                    $code, $qCode, $tCode,
+                    $q['court'] . ' ' . $t['court'],
+                    $q['label'] . ' — ' . $t['long'],
+                    $q['prix'][$tCode],
+                    $ordre,
+                ]);
+            }
+        }
+
+        $divers = [
+            ['EVT-RONDE', 'evenementiel', 'Ronde de sécurité', 'Ronde de sécurité / intervention ponctuelle', 'intervention', 45.00],
+            ['EVT-SURV',  'evenementiel', 'Surveillance événementielle', 'Surveillance événementielle (heure ou forfait)', 'heure', 32.00],
+            ['DIV-DEPL',  'divers', 'Frais de déplacement', 'Frais de déplacement (forfait)', 'forfait', 25.00],
+            ['DIV-FORF',  'divers', 'Forfait divers', 'Forfait prestation diverse (à préciser sur le devis)', 'forfait', 0.00],
+        ];
+        $stmtD = $db->prepare("INSERT INTO produits
+            (code, famille, designation_courte, designation_longue, unite, prix_defaut, tva_taux, ordre)
+            VALUES (?, ?, ?, ?, ?, ?, 20.00, ?)");
+        foreach ($divers as $d) {
+            $ordre++;
+            $stmtD->execute([$d[0], $d[1], $d[2], $d[3], $d[4], $d[5], $ordre]);
+        }
+
+        // Permissions par défaut pour les rôles existants
+        try {
+            $roles = $db->query("SELECT id, slug FROM roles")->fetchAll();
+            $stmtPerm = $db->prepare("
+                INSERT IGNORE INTO role_permissions (role_id, module, can_view, can_create, can_edit, can_delete, can_export)
+                VALUES (?, 'produits', ?, ?, ?, ?, ?)
+            ");
+            foreach ($roles as $role) {
+                if ($role['slug'] === 'admin') {
+                    $stmtPerm->execute([$role['id'], 1, 1, 1, 1, 1]);
+                } elseif ($role['slug'] === 'manager') {
+                    $stmtPerm->execute([$role['id'], 1, 1, 1, 0, 1]);
+                } else {
+                    $stmtPerm->execute([$role['id'], 1, 0, 0, 0, 0]);
+                }
+            }
+        } catch (Exception $e) {}
+    } catch (Exception $e) {}
+}
+
+function produitFamilles(): array {
+    return [
+        'agent_securite' => 'Agent de sécurité',
+        'evenementiel'   => 'Événementiel / ponctuel',
+        'divers'         => 'Divers / forfaits',
+    ];
+}
+function produitQualifications(): array {
+    return [
+        'STD'   => 'Agent de sécurité',
+        'ROND'  => 'Agent rondier / mobile',
+        'CYN'   => 'Agent cynophile (maître-chien)',
+        'SSIAP' => 'Agent SSIAP (sécurité incendie)',
+    ];
+}
+function produitTypesHeure(): array {
+    return [
+        'JN' => 'Jour',
+        'NN' => 'Nuit',
+        'JD' => 'Jour Dimanche',
+        'ND' => 'Nuit Dimanche',
+        'JF' => 'Jour Férié',
+        'NF' => 'Nuit Férié',
+    ];
+}
+function produitUnites(): array {
+    return [
+        'heure'        => 'Heure',
+        'forfait'      => 'Forfait',
+        'jour'         => 'Jour',
+        'intervention' => 'Intervention',
+        'unite'        => 'Unité',
+    ];
+}
+
 // ── Paramètres ──────────────────────────────────────────────────────────────
 
 function getParam(string $cle, string $default = ''): string {
