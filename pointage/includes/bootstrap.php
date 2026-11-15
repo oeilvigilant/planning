@@ -9,6 +9,8 @@ require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/metier.php';
 require_once __DIR__ . '/agent_auth.php';
 
+ptRedirectionCanonique();
+
 if (session_status() === PHP_SESSION_NONE) {
     session_name('ov_pointage');
     session_set_cookie_params([
@@ -22,6 +24,7 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 header('X-Content-Type-Options: nosniff');
+header('Cache-Control: no-store, private');   // jamais de page personnelle dans un cache partagé
 header('Referrer-Policy: same-origin');
 
 ensurePointageSchema();
@@ -42,16 +45,38 @@ function ptBaseUrl(): string {
     if ($base !== null) return $base;
     if (defined('POINTAGE_URL')) return $base = rtrim(POINTAGE_URL, '/');
 
-    $root   = str_replace('\\', '/', (string)realpath(__DIR__ . '/..'));
-    $script = str_replace('\\', '/', (string)realpath($_SERVER['SCRIPT_FILENAME'] ?? ''));
-    $path   = '';
-    if ($root !== '' && $script !== '' && strpos($script, $root) === 0) {
-        $rel  = substr($script, strlen($root));                       // ex. /admin/agents.php
-        $name = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
-        if ($rel !== '' && substr($name, -strlen($rel)) === $rel) $path = substr($name, 0, -strlen($rel));
-    }
+    $rel  = ptScriptRelatif();
+    $name = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    $path = ($rel !== '' && substr($name, -strlen($rel)) === $rel) ? substr($name, 0, -strlen($rel)) : '';
     $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     return $base = (ptIsHttps() ? 'https://' : 'http://') . $host . rtrim($path, '/');
+}
+
+/** Chemin du script courant relatif au dossier de l'outil (ex. « /admin/agents.php »). */
+function ptScriptRelatif(): string {
+    $root   = str_replace('\\', '/', (string)realpath(__DIR__ . '/..'));
+    $script = str_replace('\\', '/', (string)realpath($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    if ($root === '' || $script === '' || strpos($script, $root) !== 0) return '';
+    return substr($script, strlen($root));
+}
+
+/**
+ * L'adresse officielle est https://pointage.oeilvigilant.com.
+ * Toute autre adresse publique d'Oeil Vigilant (ex. l'ancienne
+ * oeilvigilant.com/planning/pointage/) y est redirigée en conservant la page
+ * et ses paramètres, pour que les liens déjà envoyés restent valables.
+ * Le développement local (localhost) n'est pas concerné.
+ */
+function ptRedirectionCanonique(): void {
+    $canon = 'pointage.oeilvigilant.com';
+    $host  = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
+    if ($host === '' || $host === $canon || !preg_match('/(^|\.)oeilvigilant\.com$/', $host)) return;
+    $rel = ptScriptRelatif();
+    if ($rel === '') return;
+    $qs = (string)($_SERVER['QUERY_STRING'] ?? '');
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    header('Location: https://' . $canon . $rel . ($qs !== '' ? '?' . $qs : ''), true, $method === 'GET' ? 301 : 307);
+    exit;
 }
 
 function ptUrl(string $path = ''): string {
