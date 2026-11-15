@@ -20,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rayon = (int)($_POST['pt_rayon_m'] ?? 200);
     $respNom = trim((string)($_POST['pt_responsable_nom'] ?? ''));
     $respTel = trim((string)($_POST['pt_responsable_tel'] ?? ''));
+    $respWa  = trim((string)($_POST['pt_responsable_whatsapp'] ?? ''));
     $consignes = trim((string)($_POST['pt_consignes'] ?? ''));
 
     if ($lat !== '' || $lng !== '') {
@@ -29,18 +30,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $rayon = max(30, min(2000, $rayon));
     if ($respTel !== '' && !preg_match('/^[\d\s+().-]{6,25}$/', $respTel)) $errors[] = 'Téléphone du responsable invalide.';
+    if ($respWa !== '' && !preg_match('/^[\d\s+().-]{6,25}$/', $respWa)) $errors[] = 'Numéro WhatsApp du responsable invalide.';
 
     if (!$errors) {
         $db->prepare("UPDATE missions SET pt_adresse = ?, pt_latitude = ?, pt_longitude = ?, pt_rayon_m = ?,
-                pt_responsable_nom = ?, pt_responsable_tel = ?, pt_consignes = ? WHERE id = ?")
+                pt_responsable_nom = ?, pt_responsable_tel = ?, pt_responsable_whatsapp = ?, pt_consignes = ? WHERE id = ?")
            ->execute([$adresse ?: null, $lat === '' ? null : $lat, $lng === '' ? null : $lng, $rayon,
-                      $respNom ?: null, $respTel ?: null, $consignes ?: null, $id]);
+                      $respNom ?: null, $respTel ?: null, $respWa ?: null, $consignes ?: null, $id]);
         ptFlash('success', 'Site « ' . $m['nom'] . ' » enregistré.');
         ptRedirect('admin/missions.php');
     }
     $m = array_merge($m, [
         'pt_adresse' => $adresse, 'pt_latitude' => $lat, 'pt_longitude' => $lng, 'pt_rayon_m' => $rayon,
-        'pt_responsable_nom' => $respNom, 'pt_responsable_tel' => $respTel, 'pt_consignes' => $consignes,
+        'pt_responsable_nom' => $respNom, 'pt_responsable_tel' => $respTel, 'pt_responsable_whatsapp' => $respWa, 'pt_consignes' => $consignes,
     ]);
 }
 
@@ -89,8 +91,12 @@ ptAdminHead('Site — ' . $m['nom'], 'sites', $extraHead);
             <label class="form-label small fw-semibold" for="rn">Nom</label>
             <input class="form-control mb-3" id="rn" name="pt_responsable_nom" value="<?= h((string)$m['pt_responsable_nom']) ?>" placeholder="Ex. Chef de poste">
             <label class="form-label small fw-semibold" for="rt">Téléphone</label>
-            <input class="form-control" id="rt" name="pt_responsable_tel" value="<?= h((string)$m['pt_responsable_tel']) ?>" placeholder="06 12 34 56 78">
-            <div class="small text-muted mt-2">Si vide, l'agent appellera la permanence (<?= h(getParam('entreprise_tel', 'non renseignée')) ?>).</div>
+            <input class="form-control mb-3" id="rt" name="pt_responsable_tel" value="<?= h((string)$m['pt_responsable_tel']) ?>" placeholder="06 12 34 56 78">
+            <label class="form-label small fw-semibold" for="rw"><i class="fa-brands fa-whatsapp text-success"></i> WhatsApp <span class="text-muted fw-normal">(si différent)</span></label>
+            <input class="form-control" id="rw" name="pt_responsable_whatsapp" value="<?= h((string)($m['pt_responsable_whatsapp'] ?? '')) ?>" placeholder="Même numéro si vide">
+            <div class="small text-muted mt-2">Si aucun numéro n'est renseigné, l'agent contacte le contact par défaut :
+                <strong><?= h(getParam('pointage_contact_nom', 'Permanence')) ?></strong> <?= h(getParam('pointage_contact_tel', '') ?: '(non renseigné)') ?>
+                — <a href="parametres.php">modifier</a>.</div>
         </div>
         <div class="pta-card">
             <h2><i class="fa fa-clipboard-list me-1 text-warning"></i> Consignes du poste</h2>

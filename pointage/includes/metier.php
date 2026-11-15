@@ -21,7 +21,7 @@ function ptDistanceM(float $lat1, float $lng1, float $lat2, float $lng2): int {
 function ptVacations(int $agentId, string $dateDebut, string $dateFin): array {
     $st = getDB()->prepare("SELECT pl.id, pl.date_travail, pl.heure_debut, pl.heure_fin, pl.note,
             m.id AS mission_id, m.nom AS mission_nom, m.lieu, m.pt_adresse, m.pt_latitude, m.pt_longitude,
-            m.pt_rayon_m, m.pt_responsable_nom, m.pt_responsable_tel, m.pt_consignes,
+            m.pt_rayon_m, m.pt_responsable_nom, m.pt_responsable_tel, m.pt_responsable_whatsapp, m.pt_consignes,
             c.nom AS client_nom
         FROM planning_lignes pl
         JOIN planning_versions pv ON pv.id = pl.version_id AND pv.is_current = 1
@@ -58,6 +58,23 @@ function ptVacationCourante(int $agentId, ?int $now = null): ?array {
         if ($d > $now && ($prochaine === null || $d < strtotime($prochaine['debut_dt']))) $prochaine = $v;
     }
     return $prochaine;
+}
+
+/**
+ * Contact à joindre pour une vacation : responsable du site s'il est renseigné,
+ * sinon contact par défaut (permanence). WhatsApp = numéro dédié, sinon numéro d'appel.
+ * Retourne ['nom'=>, 'tel'=>, 'whatsapp'=>] (chaînes éventuellement vides).
+ */
+function ptContact(?array $vac): array {
+    $tel = trim((string)($vac['pt_responsable_tel'] ?? ''));
+    $wa  = trim((string)($vac['pt_responsable_whatsapp'] ?? ''));
+    $nom = trim((string)($vac['pt_responsable_nom'] ?? ''));
+    if ($tel === '' && $wa === '') {
+        $nom = getParam('pointage_contact_nom', 'Permanence');
+        $tel = trim(getParam('pointage_contact_tel', ''));
+        $wa  = trim(getParam('pointage_contact_whatsapp', ''));
+    }
+    return ['nom' => $nom ?: 'Responsable', 'tel' => $tel, 'whatsapp' => $wa !== '' ? $wa : $tel];
 }
 
 /** Numéro au format international pour wa.me (France par défaut). */

@@ -13,8 +13,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($tol < 0 || $tol > 60) $errors[] = 'La tolérance doit être comprise entre 0 et 60 minutes.';
     if ($rayon < 30 || $rayon > 2000) $errors[] = 'Le périmètre doit être compris entre 30 et 2000 m.';
     if (mb_strlen($texte) < 50) $errors[] = 'Le texte d\'information RGPD est trop court.';
+    $cNom = trim((string)($_POST['contact_nom'] ?? ''));
+    $cTel = trim((string)($_POST['contact_tel'] ?? ''));
+    $cWa  = trim((string)($_POST['contact_whatsapp'] ?? ''));
+    foreach (['téléphone' => $cTel, 'WhatsApp' => $cWa] as $lib => $num) {
+        if ($num !== '' && !preg_match('/^[\d\s+().-]{6,25}$/', $num)) $errors[] = "Numéro $lib du contact par défaut invalide.";
+    }
 
     if (!$errors) {
+        setParam('pointage_contact_nom', $cNom !== '' ? $cNom : 'Permanence');
+        setParam('pointage_contact_tel', $cTel);
+        setParam('pointage_contact_whatsapp', $cWa);
         setParam('pointage_tolerance_min', (string)$tol);
         setParam('pointage_rayon_defaut_m', (string)$rayon);
         $ancien = str_replace("\r\n", "\n", getParam('pointage_rgpd_texte', ''));
@@ -44,6 +53,16 @@ ptAdminHead('Paramètres', 'parametres');
 <form method="post" class="row g-3">
     <?= ptCsrfField() ?>
     <div class="col-lg-4">
+        <div class="pta-card">
+            <h2><i class="fa fa-headset me-1 text-warning"></i> Contact par défaut</h2>
+            <div class="small text-muted mb-2">Joint par l'agent quand le site n'a pas de responsable renseigné (permanence, astreinte…).</div>
+            <label class="form-label small fw-semibold" for="cn">Nom affiché</label>
+            <input class="form-control mb-2" id="cn" name="contact_nom" value="<?= h(getParam('pointage_contact_nom', 'Permanence')) ?>">
+            <label class="form-label small fw-semibold" for="ct"><i class="fa fa-phone"></i> Téléphone</label>
+            <input class="form-control mb-2" id="ct" name="contact_tel" value="<?= h(getParam('pointage_contact_tel', '')) ?>" placeholder="06 12 34 56 78">
+            <label class="form-label small fw-semibold" for="cw"><i class="fa-brands fa-whatsapp text-success"></i> WhatsApp <span class="text-muted fw-normal">(si différent)</span></label>
+            <input class="form-control" id="cw" name="contact_whatsapp" value="<?= h(getParam('pointage_contact_whatsapp', '')) ?>" placeholder="Même numéro si vide">
+        </div>
         <div class="pta-card">
             <h2><i class="fa fa-clock me-1 text-warning"></i> Tolérance de pointage</h2>
             <div class="input-group mb-2">

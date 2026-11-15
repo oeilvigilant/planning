@@ -38,7 +38,7 @@ ptAdminHead('Sites', 'sites');
                 <?php endif; ?>
             </td>
             <td class="small"><?= $m['pt_latitude'] ? (int)$m['pt_rayon_m'] . ' m' : '—' ?></td>
-            <td class="small"><?= h($m['pt_responsable_nom'] ?: '—') ?><div class="text-muted"><?= h($m['pt_responsable_tel'] ?: '') ?></div></td>
+            <td class="small"><?= h($m['pt_responsable_nom'] ?: '—') ?><div class="text-muted"><?= h($m['pt_responsable_tel'] ?: ($m['pt_responsable_nom'] ? '' : 'contact par défaut')) ?></div></td>
             <td class="text-end pe-3"><a class="btn btn-sm btn-pta" href="mission.php?id=<?= (int)$m['id'] ?>"><i class="fa fa-pen me-1"></i>Configurer</a></td>
         </tr>
     <?php endforeach; ?>

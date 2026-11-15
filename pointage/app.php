@@ -6,12 +6,8 @@ require_once __DIR__ . '/includes/layout.php';
 $agent = ptRequireAgent();
 $vac   = ptVacationCourante((int)$agent['id']);
 
-$telResp = $vac['pt_responsable_tel'] ?? '';
-$nomResp = $vac['pt_responsable_nom'] ?? '';
-if ($telResp === '') {
-    $telResp = getParam('entreprise_tel', '');
-    $nomResp = 'Permanence OEIL VIGILANT';
-}
+$contact = ptContact($vac);
+$waTexte = 'Bonjour, ici ' . $agent['prenom'] . ' ' . $agent['nom'] . ($vac ? ' (' . $vac['mission_nom'] . ')' : '') . '. ';
 
 $initiales = mb_strtoupper(mb_substr($agent['prenom'], 0, 1) . mb_substr($agent['nom'], 0, 1));
 $photoUrl  = $agent['photo'] ? UPLOAD_URL . '/photos/' . rawurlencode($agent['photo']) : '';
@@ -79,11 +75,14 @@ ptHead('Accueil');
 <?php endif; ?>
 
 <div class="pt-actions">
-    <?php if ($telResp): ?>
-        <a class="pt-action" href="tel:<?= h(preg_replace('/[^\d+]/', '', $telResp)) ?>"><i class="fa fa-phone"></i>Appeler<br><span class="pt-muted pt-small"><?= h($nomResp ?: 'Responsable') ?></span></a>
-        <a class="pt-action" target="_blank" rel="noopener" href="https://wa.me/<?= h(ptTelWhatsapp($telResp)) ?>"><i class="fa-brands fa-whatsapp"></i>WhatsApp<br><span class="pt-muted pt-small">Message</span></a>
+    <?php if ($contact['tel']): ?>
+        <a class="pt-action" href="tel:<?= h(preg_replace('/[^\d+]/', '', $contact['tel'])) ?>"><i class="fa fa-phone"></i>Appeler<br><span class="pt-muted pt-small"><?= h($contact['nom']) ?></span></a>
     <?php else: ?>
         <span class="pt-action disabled"><i class="fa fa-phone"></i>Appeler<br><span class="pt-small">Non renseigné</span></span>
+    <?php endif; ?>
+    <?php if ($contact['whatsapp']): ?>
+        <a class="pt-action" target="_blank" rel="noopener" href="https://wa.me/<?= h(ptTelWhatsapp($contact['whatsapp'])) ?>?text=<?= h(rawurlencode($waTexte)) ?>"><i class="fa-brands fa-whatsapp" style="color:#25d366"></i>WhatsApp<br><span class="pt-muted pt-small"><?= h($contact['nom']) ?></span></a>
+    <?php else: ?>
         <span class="pt-action disabled"><i class="fa-brands fa-whatsapp"></i>WhatsApp<br><span class="pt-small">Non renseigné</span></span>
     <?php endif; ?>
     <span class="pt-action disabled"><i class="fa fa-triangle-exclamation"></i>Signaler<br><span class="pt-small">Bientôt</span></span>

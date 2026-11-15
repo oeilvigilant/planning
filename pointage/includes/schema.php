@@ -5,7 +5,7 @@
  * exécutée qu'une fois, on ne relit pas INFORMATION_SCHEMA à chaque requête.
  */
 
-const PT_SCHEMA_VERSION = 1;
+const PT_SCHEMA_VERSION = 2;
 
 function ensurePointageSchema(): void {
     static $done = false;
@@ -94,6 +94,19 @@ function ensurePointageSchema(): void {
             JOIN roles r ON r.id = rp.role_id
             WHERE r.slug IN ('manager','planificateur') AND rp.module = 'planning'
               AND NOT EXISTS (SELECT 1 FROM role_permissions x WHERE x.role_id = rp.role_id AND x.module = 'pointage')");
+    }
+
+    if ($current < 2) {
+        // WhatsApp du responsable de site (si différent du numéro d'appel)
+        $hasWa = (int)$db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missions' AND COLUMN_NAME = 'pt_responsable_whatsapp'")->fetchColumn();
+        if (!$hasWa) $db->exec("ALTER TABLE missions ADD COLUMN pt_responsable_whatsapp VARCHAR(30) DEFAULT NULL AFTER pt_responsable_tel");
+
+        // Contact par défaut (permanence), initialisé avec le téléphone de l'entreprise
+        $ins = $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)");
+        $ins->execute(['pointage_contact_nom', 'Permanence OEIL VIGILANT']);
+        $ins->execute(['pointage_contact_tel', getParam('entreprise_tel', '')]);
+        $ins->execute(['pointage_contact_whatsapp', '']);
     }
 
     setParam('pointage_schema_version', (string)PT_SCHEMA_VERSION);
