@@ -78,6 +78,34 @@ function ptExecuterTaches(?int $now = null): array {
             }
         }
 
+        // 2 bis. Rondes en retard : sur les sites avec une fréquence de ronde, chaque agent en
+        // service doit terminer une ronde complète toutes les N minutes (+ marge).
+        $marge = max(0, (int)getParam('pointage_ronde_marge_min', '15'));
+        $rs = $db->query("SELECT s.id, s.agent_id, s.mission_id, s.debut_reel, a.prenom, a.nom, m.nom AS site_nom, m.pt_ronde_freq_min AS freq
+            FROM pt_services s JOIN agents a ON a.id = s.agent_id JOIN missions m ON m.id = s.mission_id
+            WHERE s.fin_retenu IS NULL AND s.statut <> 'annule' AND m.pt_ronde_freq_min > 0
+              AND EXISTS (SELECT 1 FROM pt_points p WHERE p.mission_id = m.id AND p.actif = 1)")->fetchAll();
+        foreach ($rs as $s) {
+            $freq = (int)$s['freq'] * 60;
+            $etat = ptEtatRonde((int)$s['mission_id'], (int)$s['agent_id'], $now);
+            $ref = strtotime($s['debut_reel']);
+            if ($etat['derniere_complete'] && strtotime($etat['derniere_complete']) > $ref) $ref = strtotime($etat['derniere_complete']);
+            $retard = $now - ($ref + $freq + $marge * 60);
+            if ($retard < 0) continue;
+            $cycle = intdiv($now - $ref, $freq);
+            if (ptUneFois('ronde_agent_' . $s['id'] . '_' . $ref . '_' . $cycle)) {
+                ptNotifierAgent((int)$s['agent_id'], 'Ronde à faire', 'Il est temps de faire votre ronde sur ' . $s['site_nom']
+                    . ($etat['restants'] ? ' (points restants : ' . implode(', ', array_slice($etat['restants'], 0, 3)) . ')' : '') . '.', 'ronde.php');
+                $log[] = "ronde en retard (agent) {$s['prenom']} {$s['nom']}";
+            }
+            if ($retard >= 15 * 60 && ptUneFois('ronde_resp_' . $s['id'] . '_' . $ref)) {
+                ptNotifierResponsables('Ronde non effectuée : ' . $s['site_nom'],
+                    $s['prenom'] . ' ' . $s['nom'] . ' n\'a pas terminé de ronde depuis ' . date('H\hi', $ref)
+                    . ' (fréquence : toutes les ' . (int)$s['freq'] . ' min).', 'admin/rondes.php?site=' . (int)$s['mission_id']);
+                $log[] = "ronde en retard (resp) {$s['site_nom']}";
+            }
+        }
+
         // 3. Rapport hebdomadaire aux clients (lundi à partir de 7 h)
         if (date('N', $now) === '1' && (int)date('G', $now) >= 7) {
             $sem = date('o-W', $now);
@@ -88,9 +116,17 @@ function ptExecuterTaches(?int $now = null): array {
             foreach ($portails as $p) {
                 if (!ptUneFois('hebdo_' . $p['id'] . '_' . $sem)) continue;
                 $lien = ptUrl('client/index.php?t=' . $p['token'] . '&v=rapport&du=' . $du . '&au=' . $au);
-                ptMail($p['email'], 'Rapport de la semaine — ' . ptMarque(),
-                    "Bonjour,\n\nVotre rapport de prestation du " . date('d/m', strtotime($du)) . ' au ' . date('d/m/Y', strtotime($au))
-                    . " est disponible :\n$lien\n\nVous pouvez le consulter, l'imprimer et le signer en ligne.\n\nCordialement,\n" . ptMarque());
+                $texte = "Bonjour,\n\nVeuillez trouver ci-joint le rapport de prestation du " . date('d/m', strtotime($du)) . ' au ' . date('d/m/Y', strtotime($au))
+                    . ".\n\nVous pouvez aussi le consulter et le signer en ligne :\n$lien\n\nCordialement,\n" . ptMarque();
+                try {
+                    require_once __DIR__ . '/pdf.php';
+                    $p['mission_ids'] = array_values(array_filter(array_map('intval', explode(',', $p['missions'])))) ?: [0];
+                    $p['client_nom'] = null;
+                    ptMailPj($p['email'], 'Rapport de la semaine — ' . ptMarque(), $texte, 'rapport_' . $du . '_' . $au . '.pdf', ptRapportClientPdf($p, $du, $au));
+                } catch (Throwable $e) {
+                    error_log('OV Pointage — PDF hebdo : ' . $e->getMessage());
+                    ptMail($p['email'], 'Rapport de la semaine — ' . ptMarque(), $texte);
+                }
                 $log[] = "rapport hebdo envoyé à {$p['email']}";
             }
         }

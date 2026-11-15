@@ -141,7 +141,8 @@ else:
                 <div class="text-muted"><?= h($p['libelle']) ?><?= $p['client_nom'] ? ' · ' . h($p['client_nom']) : '' ?></div></div>
             <div class="text-end"><div class="fw-semibold">Du <?= date('d/m/Y', strtotime($du)) ?> au <?= date('d/m/Y', strtotime($au)) ?></div>
                 <div class="small text-muted">Édité le <?= date('d/m/Y à H:i') ?></div>
-                <button class="btn btn-sm btn-outline-dark mt-2 no-print" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimer / PDF</button></div>
+                <a class="btn btn-sm btn-dark mt-2 no-print" href="rapport-pdf.php?t=<?= h($t) ?>&du=<?= h($du) ?>&au=<?= h($au) ?>"><i class="fa fa-file-pdf me-1"></i>Télécharger le PDF</a>
+                <button class="btn btn-sm btn-outline-dark mt-2 no-print" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimer</button></div>
         </div>
         <hr>
         <div class="row text-center g-2 mb-3">

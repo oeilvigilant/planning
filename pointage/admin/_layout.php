@@ -8,6 +8,7 @@ function ptAdminHead(string $title, string $active = '', string $extraHead = '')
         'carte'      => ['carte.php', 'fa-map-location-dot', 'Carte'],
         'pointages'  => ['pointages.php', 'fa-clock', 'Pointages'],
         'evenements' => ['evenements.php', 'fa-triangle-exclamation', 'Événements'],
+        'rondes'     => ['rondes.php', 'fa-qrcode', 'Rondes'],
         'rapports'   => ['rapports.php', 'fa-chart-column', 'Rapports'],
         'agents'     => ['agents.php', 'fa-users', 'Agents'],
         'sites'      => ['missions.php', 'fa-location-dot', 'Sites'],

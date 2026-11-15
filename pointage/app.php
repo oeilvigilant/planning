@@ -95,14 +95,14 @@ ptHead('Accueil');
         </button>
         <?php if ($selfie === 'optionnel'): ?>
             <label class="pt-check pt-small" style="justify-content:center;margin:12px 0 0">
-                <input type="checkbox" data-pt-selfie-opt style="width:20px;height:20px"> <span>Ajouter une photo (selfie)</span>
+                <input type="checkbox" data-pt-selfie-opt style="width:20px;height:20px"> <span>Ajouter une photo (poste, tenue, selfie…)</span>
             </label>
         <?php elseif ($selfie === 'obligatoire'): ?>
-            <div class="pt-muted pt-small" style="margin-top:10px"><i class="fa fa-camera"></i> Une photo vous sera demandée.</div>
+            <div class="pt-muted pt-small" style="margin-top:10px"><i class="fa fa-camera"></i> Une photo vous sera demandée (poste, tenue ou selfie).</div>
         <?php endif; ?>
         <div class="pt-muted pt-small" data-pt-status style="margin-top:10px;min-height:1.3em"></div>
     <?php endif; ?>
-    <input type="file" accept="image/*" capture="user" data-pt-camera hidden>
+    <input type="file" accept="image/*" capture="environment" data-pt-camera hidden>
 </div>
 
 <?php if ($site || $vac):
@@ -144,6 +144,19 @@ ptHead('Accueil');
     <a class="pt-action" href="<?= h(ptUrl('evenement.php')) ?>"><i class="fa fa-triangle-exclamation"></i>Signaler<br><span class="pt-muted pt-small">Incident, photo</span></a>
     <a class="pt-action" href="<?= h(ptUrl('evenement.php?type=main_courante')) ?>"><i class="fa fa-book"></i>Main courante<br><span class="pt-muted pt-small">Rondes, passation</span></a>
 </div>
+
+<?php
+$siteRonde = $site ? (int)$site['id'] : 0;
+$nbPoints = 0;
+if ($siteRonde) { $nbPoints = count(ptPointsSite($siteRonde)); }
+elseif ($sites) { foreach ($sites as $s) $nbPoints += count(ptPointsSite((int)$s['id'])); }
+if ($nbPoints):
+    $etatR = $siteRonde ? ptEtatRonde($siteRonde, $agentId) : null; ?>
+<a class="pt-btn pt-btn-ghost" href="<?= h(ptUrl('ronde.php')) ?>" style="margin-bottom:14px;border-color:var(--pt-gold)">
+    <i class="fa fa-qrcode" style="color:var(--pt-gold)"></i> Faire ma ronde
+    <?php if ($etatR): ?><span class="pt-badge pt-badge-grey"><?= (int)$etatR['faits'] ?>/<?= (int)$etatR['total'] ?></span><?php endif; ?>
+</a>
+<?php endif; ?>
 
 <button type="button" class="pt-sos" data-pt-sos data-api="<?= h(ptUrl('api/evenement.php')) ?>"
         data-tel="<?= h(preg_replace('/[^\d+]/', '', $contact['tel'])) ?>">

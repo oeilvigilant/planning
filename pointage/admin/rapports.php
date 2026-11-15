@@ -34,6 +34,13 @@ foreach ($st->fetchAll() as $s) {
 }
 uasort($sitesT, function ($a, $b) { return $b['total'] <=> $a['total']; });
 
+if (($_GET['export'] ?? '') === 'pdf') {
+    ptRequireAdmin('export');
+    require_once __DIR__ . '/../includes/pdf.php';
+    $titreSite = 'Tous les sites';
+    if ($fSite) { $s = ptSite($fSite); $titreSite = $s ? $s['nom'] : $titreSite; }
+    ptPdfEnvoyer(ptRapportHeuresPdf($agents, $tot, $du, $au, $titreSite), 'heures_' . $du . '_' . $au . '.pdf');
+}
 if (($_GET['export'] ?? '') === 'csv') {
     ptRequireAdmin('export');
     header('Content-Type: text/csv; charset=utf-8');
@@ -57,7 +64,10 @@ ptAdminHead('Rapports', 'rapports');
 <div class="pta-title">
     <div><h1>Rapports d'heures</h1><div class="text-muted small">Heures retenues (après tolérance et corrections), du <?= date('d/m/Y', strtotime($du)) ?> au <?= date('d/m/Y', strtotime($au)) ?></div></div>
     <div class="d-flex gap-2">
-        <?php if (ptAdminCan('export')): ?><a class="btn btn-sm btn-outline-secondary" href="?<?= h($qs) ?>&export=csv"><i class="fa fa-file-csv me-1"></i>Export</a><?php endif; ?>
+        <?php if (ptAdminCan('export')): ?>
+            <a class="btn btn-sm btn-pta" href="?<?= h($qs) ?>&export=pdf"><i class="fa fa-file-pdf me-1"></i>PDF</a>
+            <a class="btn btn-sm btn-outline-secondary" href="?<?= h($qs) ?>&export=csv"><i class="fa fa-file-csv me-1"></i>Excel (CSV)</a>
+        <?php endif; ?>
         <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimer</button>
     </div>
 </div>

@@ -130,6 +130,8 @@ ptAdminHead('Portails clients', 'portails');
     <div class="d-flex flex-wrap gap-2 mt-2">
         <button class="btn btn-sm btn-outline-secondary" type="button" data-copy="<?= h($lien) ?>"><i class="fa fa-copy me-1"></i>Copier</button>
         <a class="btn btn-sm btn-outline-secondary" target="_blank" href="<?= h($lien) ?>"><i class="fa fa-up-right-from-square me-1"></i>Ouvrir</a>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= h(ptUrl('client/rapport-pdf.php?t=' . $p['token'] . '&du=' . date('Y-m-01', strtotime('first day of last month')) . '&au=' . date('Y-m-t', strtotime('last day of last month')))) ?>"><i class="fa fa-file-pdf me-1"></i>PDF mois dernier</a>
+        <a class="btn btn-sm btn-outline-secondary" href="<?= h(ptUrl('client/rapport-pdf.php?t=' . $p['token'] . '&du=' . date('Y-m-01') . '&au=' . date('Y-m-d'))) ?>"><i class="fa fa-file-pdf me-1"></i>PDF ce mois</a>
         <a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="https://wa.me/?text=<?= h(rawurlencode($msg)) ?>"><i class="fa-brands fa-whatsapp me-1"></i>WhatsApp</a>
         <?php if ($p['email']): ?><a class="btn btn-sm btn-outline-primary" href="mailto:<?= h($p['email']) ?>?subject=<?= h(rawurlencode('Suivi de prestation — ' . ptMarque())) ?>&body=<?= h(rawurlencode($msg)) ?>"><i class="fa fa-envelope me-1"></i>Email</a><?php endif; ?>
     </div>

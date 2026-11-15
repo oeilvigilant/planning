@@ -34,7 +34,7 @@ ptAdminHead('Connexion');
         <label class="form-label small fw-semibold" for="password">Mot de passe</label>
         <input class="form-control mb-4" type="password" id="password" name="password" required>
         <button class="btn btn-pta w-100 py-2" type="submit">Se connecter</button>
-        <p class="text-muted small text-center mt-3 mb-0">Mêmes identifiants que OV-Gestion.</p>
+        <p class="text-muted small text-center mt-3 mb-0">Mêmes identifiants que OV-Gestion · <a href="oubli.php">Mot de passe oublié ?</a></p>
     </form>
 </div>
 <main>

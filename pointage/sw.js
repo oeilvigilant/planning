@@ -4,13 +4,14 @@
  *   pour pouvoir pointer hors connexion (les pointages partent ensuite) ;
  * - API, espace responsable et portail client : jamais mis en cache.
  */
-var SHELL_CACHE = 'ovpt-shell-v3';
+var SHELL_CACHE = 'ovpt-shell-v4';
 var PAGES_CACHE = 'ovpt-pages';
 var SHELL = [
     './assets/pointage.css',
     './assets/pointage.js',
     './assets/app.js',
     './assets/evenement.js',
+    './assets/ronde.js',
     './assets/icons/icon-192.png',
     './offline.html'
 ];

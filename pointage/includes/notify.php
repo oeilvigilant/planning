@@ -170,6 +170,18 @@ function ptMail(string $to, string $sujet, string $texte): bool {
     return @mail($to, '=?UTF-8?B?' . base64_encode($sujet) . '?=', $texte, $headers);
 }
 
+/** Email texte avec une pièce jointe (ex. rapport PDF). */
+function ptMailPj(string $to, string $sujet, string $texte, string $nomPj, string $contenuPj, string $typePj = 'application/pdf'): bool {
+    $host = (string)parse_url(ptBaseUrl(), PHP_URL_HOST);
+    $from = getParam('pointage_email_expediteur', '') ?: 'no-reply@' . preg_replace('/^(www|pointage)\./', '', $host ?: 'localhost');
+    $b = 'ovpt' . bin2hex(random_bytes(8));
+    $headers = "From: " . ptMarque() . " <$from>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"$b\"";
+    $corps = "--$b\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n$texte\r\n"
+           . "--$b\r\nContent-Type: $typePj; name=\"$nomPj\"\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"$nomPj\"\r\n\r\n"
+           . chunk_split(base64_encode($contenuPj)) . "--$b--";
+    return @mail($to, '=?UTF-8?B?' . base64_encode($sujet) . '?=', $corps, $headers);
+}
+
 /** Exécute une action une seule fois pour une clé donnée (anti-doublon des rappels). */
 function ptUneFois(string $cle): bool {
     try {

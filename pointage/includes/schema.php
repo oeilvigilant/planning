@@ -12,7 +12,7 @@
  * s'exécute qu'une fois.
  */
 
-const PT_SCHEMA_VERSION = 4;
+const PT_SCHEMA_VERSION = 5;
 
 function ensurePointageSchema(): void {
     static $done = false;
@@ -265,6 +265,54 @@ function ensurePointageSchema(): void {
         $ins->execute(['pointage_alerte_emails', getParam('entreprise_email', '')]);
         $ins->execute(['pointage_rappel_avant_min', '15']);
         $ins->execute(['pointage_alerte_non_pris_min', '15']);
+    }
+
+    if ($current < 5) {
+        // Rondes : points de contrôle (QR code collé sur place) et passages scannés
+        ptAddColumns($db, 'missions', ['pt_ronde_freq_min' => "INT NOT NULL DEFAULT 0"]);
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_points (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            mission_id INT NOT NULL,
+            nom VARCHAR(150) NOT NULL,
+            consigne VARCHAR(255) DEFAULT NULL,
+            code CHAR(16) NOT NULL,
+            ordre INT NOT NULL DEFAULT 0,
+            actif TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_code (code),
+            INDEX idx_mission (mission_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_passages (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            uuid CHAR(36) DEFAULT NULL,
+            point_id INT NOT NULL,
+            mission_id INT NOT NULL,
+            agent_id INT NOT NULL,
+            service_id INT DEFAULT NULL,
+            scanne_le DATETIME NOT NULL,
+            lat DECIMAL(10,7) DEFAULT NULL,
+            lng DECIMAL(10,7) DEFAULT NULL,
+            precision_m INT DEFAULT NULL,
+            hors_ligne TINYINT(1) NOT NULL DEFAULT 0,
+            note VARCHAR(255) DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_uuid (uuid),
+            INDEX idx_mission (mission_id, scanne_le),
+            INDEX idx_service (service_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Mot de passe oublié (responsables)
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_resets (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            token_hash CHAR(64) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used_at DATETIME DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_token (token_hash)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)")->execute(['pointage_ronde_marge_min', '15']);
     }
 
     setParam('pointage_schema_version', (string)PT_SCHEMA_VERSION);

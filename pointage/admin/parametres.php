@@ -78,11 +78,11 @@ ptAdminHead('Paramètres', 'parametres');
         <div class="pta-card">
             <h2><i class="fa fa-camera me-1 text-warning"></i> Photo au pointage</h2>
             <?php $sm = getParam('pointage_selfie', 'optionnel'); ?>
-            <?php foreach (['non' => 'Jamais', 'optionnel' => 'Au choix de l\'agent', 'obligatoire' => 'Obligatoire à la prise de service'] as $k => $l): ?>
+            <?php foreach (['non' => 'Pas de photo', 'optionnel' => 'Au choix de l\'agent (recommandé)', 'obligatoire' => 'Obligatoire à la prise de service'] as $k => $l): ?>
                 <label class="form-check"><input class="form-check-input" type="radio" name="selfie" value="<?= $k ?>" <?= $sm === $k ? 'checked' : '' ?>>
                     <span class="form-check-label"><?= $l ?></span></label>
             <?php endforeach; ?>
-            <div class="small text-muted mt-1">Le selfie prouve que c'est bien l'agent qui pointe. Photos visibles par les responsables uniquement.</div>
+            <div class="small text-muted mt-1">La caméra arrière s'ouvre : l'agent photographie son poste, sa tenue, ou se prend en photo s'il le souhaite (il peut retourner la caméra). Photos visibles par les responsables uniquement.</div>
         </div>
         <div class="pta-card">
             <h2><i class="fa fa-headset me-1 text-warning"></i> Contact par défaut</h2>

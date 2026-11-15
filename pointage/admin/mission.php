@@ -75,6 +75,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     pt_longitude = ?, pt_rayon_m = ?, pt_responsable_nom = ?, pt_responsable_tel = ?, pt_responsable_whatsapp = ?, pt_consignes = ?
                 WHERE id = ?")->execute(array_merge($vals, [$id]));
         }
+        $freq = (int)($_POST['pt_ronde_freq_min'] ?? 0);
+        if (!in_array($freq, [0, 30, 45, 60, 90, 120, 180, 240, 360], true)) $freq = 0;
+        $db->prepare("UPDATE missions SET pt_ronde_freq_min = ? WHERE id = ?")->execute([$freq, $id]);
+
         // Affectations : seuls les agents actifs listés ici sont concernés
         if ($agentIds) {
             $db->prepare("DELETE FROM mission_agents WHERE mission_id = ? AND agent_id IN (" . implode(',', $agentIds) . ")")->execute([$id]);
@@ -179,6 +183,24 @@ ptAdminHead($isNew ? 'Nouveau site' : 'Site — ' . $m['nom'], 'sites', $extraHe
             <input class="form-control" id="rw" name="pt_responsable_whatsapp" value="<?= h((string)($m['pt_responsable_whatsapp'] ?? '')) ?>" placeholder="Même numéro si vide">
             <div class="small text-muted mt-2">Si vide : contact par défaut <strong><?= h(getParam('pointage_contact_nom', 'Permanence')) ?></strong>
                 <?= h(getParam('pointage_contact_tel', '') ?: '(non renseigné)') ?> — <a href="parametres.php">modifier</a>.</div>
+        </div>
+        <div class="pta-card">
+            <h2><i class="fa fa-qrcode me-1 text-warning"></i> Rondes</h2>
+            <label class="form-label small fw-semibold" for="freq">Une ronde complète</label>
+            <select class="form-select mb-2" id="freq" name="pt_ronde_freq_min">
+                <?php $fq = (int)($m['pt_ronde_freq_min'] ?? 0);
+                foreach ([0 => 'Pas de fréquence imposée', 30 => 'toutes les 30 min', 45 => 'toutes les 45 min', 60 => 'toutes les heures', 90 => 'toutes les 1 h 30',
+                          120 => 'toutes les 2 h', 180 => 'toutes les 3 h', 240 => 'toutes les 4 h', 360 => 'toutes les 6 h'] as $k => $l): ?>
+                    <option value="<?= $k ?>" <?= $fq === $k ? 'selected' : '' ?>><?= $l ?></option>
+                <?php endforeach; ?>
+            </select>
+            <div class="small text-muted">En cas de retard : rappel à l'agent, puis alerte au responsable 15 min plus tard.</div>
+            <?php if (!$isNew):
+                $nbPts = count(ptPointsSite((int)$m['id'])); ?>
+                <a class="btn btn-sm btn-outline-secondary w-100 mt-2" href="points.php?mission=<?= (int)$m['id'] ?>"><i class="fa fa-location-crosshairs me-1"></i>Points de ronde (<?= $nbPts ?>) et étiquettes QR</a>
+            <?php else: ?>
+                <div class="small text-muted mt-2">Vous pourrez ajouter les points de ronde après la création du site.</div>
+            <?php endif; ?>
         </div>
         <div class="pta-card">
             <h2><i class="fa fa-clipboard-list me-1 text-warning"></i> Consignes du poste</h2>
