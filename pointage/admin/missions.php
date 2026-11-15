@@ -15,8 +15,11 @@ ptAdminHead('Sites', 'sites');
 <div class="pta-title">
     <div>
         <h1>Sites</h1>
-        <div class="text-muted small">Position du site, périmètre de pointage et responsable à contacter, pour chaque mission.</div>
+        <div class="text-muted small">Position du site, périmètre de pointage, agents affectés et responsable à contacter.</div>
     </div>
+    <?php if (ptAdminCan('create')): ?>
+    <a class="btn btn-sm btn-pta" href="mission.php"><i class="fa fa-plus me-1"></i>Nouveau site</a>
+    <?php endif; ?>
 </div>
 
 <div class="pta-card p-0">
@@ -42,7 +45,7 @@ ptAdminHead('Sites', 'sites');
             <td class="text-end pe-3"><a class="btn btn-sm btn-pta" href="mission.php?id=<?= (int)$m['id'] ?>"><i class="fa fa-pen me-1"></i>Configurer</a></td>
         </tr>
     <?php endforeach; ?>
-    <?php if (!$missions): ?><tr><td colspan="6" class="text-center text-muted py-4">Aucune mission. Créez-les dans OV-Gestion.</td></tr><?php endif; ?>
+    <?php if (!$missions): ?><tr><td colspan="6" class="text-center text-muted py-4">Aucun site. <a href="mission.php">Créez votre premier site</a>.</td></tr><?php endif; ?>
     </tbody>
 </table>
 </div>

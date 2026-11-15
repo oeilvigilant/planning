@@ -48,9 +48,9 @@ function ptRequireAgent(bool $checkRgpd = true): array {
 /** Variante API JSON. */
 function ptRequireAgentApi(): array {
     $agent = ptCurrentAgent();
-    if (!$agent) ptJson(['ok' => false, 'error' => 'Session expirée, reconnectez-vous.', 'relogin' => true], 401);
+    if (!$agent) ptJson(['ok' => false, 'message' => 'Session expirée, reconnectez-vous.', 'relogin' => true], 401);
     if ((int)$agent['rgpd_version'] < ptRgpdVersion()) {
-        ptJson(['ok' => false, 'error' => 'Veuillez lire et accepter l\'information RGPD.', 'rgpd' => true], 403);
+        ptJson(['ok' => false, 'message' => 'Veuillez lire et accepter l\'information RGPD.', 'rgpd' => true], 403);
     }
     return $agent;
 }

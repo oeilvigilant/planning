@@ -1,6 +1,7 @@
 <?php
-/** Tableau de bord responsable (le suivi en direct arrive en phase 4). */
+/** Tableau de bord responsable : agents en poste, pointages à vérifier, mise en route. */
 require_once __DIR__ . '/_init.php';
+require_once __DIR__ . '/../includes/pointer.php';
 $user = ptRequireAdmin('view');
 $db = getDB();
 
@@ -9,6 +10,13 @@ $nbActives  = (int)$db->query("SELECT COUNT(*) FROM pt_acces pa JOIN agents a ON
 $nbInvites  = (int)$db->query("SELECT COUNT(*) FROM pt_acces pa JOIN agents a ON a.id = pa.agent_id WHERE a.actif = 1 AND pa.pin_hash IS NULL AND pa.activation_token IS NOT NULL AND pa.activation_expires >= NOW()")->fetchColumn();
 $nbMissions = (int)$db->query("SELECT COUNT(*) FROM missions WHERE actif = 1")->fetchColumn();
 $nbGeo      = (int)$db->query("SELECT COUNT(*) FROM missions WHERE actif = 1 AND pt_latitude IS NOT NULL")->fetchColumn();
+
+$enPoste = $db->query("SELECT s.id, s.debut_retenu, s.debut_reel, s.alertes, a.nom, a.prenom, m.nom AS site_nom
+    FROM pt_services s JOIN agents a ON a.id = s.agent_id JOIN missions m ON m.id = s.mission_id
+    WHERE s.fin_retenu IS NULL AND s.statut <> 'annule' ORDER BY s.debut_reel")->fetchAll();
+$nbVerif = (int)$db->query("SELECT COUNT(*) FROM pt_services WHERE statut = 'a_verifier'")->fetchColumn();
+$nbAgentsSansSite = (int)$db->query("SELECT COUNT(*) FROM agents a WHERE a.actif = 1 AND (a.statut_inscription IS NULL OR a.statut_inscription = 'validee')
+    AND NOT EXISTS (SELECT 1 FROM mission_agents ma JOIN missions m ON m.id = ma.mission_id AND m.actif = 1 WHERE ma.agent_id = a.id)")->fetchColumn();
 
 $etapes = [
     ['ok' => $nbGeo > 0, 'titre' => 'Positionner vos sites', 'texte' => "$nbGeo / $nbMissions mission(s) géolocalisée(s)", 'href' => 'missions.php'],
@@ -26,11 +34,33 @@ ptAdminHead('Tableau de bord', 'dashboard');
 </div>
 
 <div class="row g-3 mb-3">
-    <div class="col-6 col-lg-3"><div class="pta-kpi"><div class="v"><?= $nbActives ?><span class="text-muted fs-6">/<?= $nbAgents ?></span></div><div class="l">Agents équipés</div></div></div>
-    <div class="col-6 col-lg-3"><div class="pta-kpi"><div class="v"><?= $nbInvites ?></div><div class="l">Invitations en attente</div></div></div>
-    <div class="col-6 col-lg-3"><div class="pta-kpi"><div class="v"><?= $nbGeo ?><span class="text-muted fs-6">/<?= $nbMissions ?></span></div><div class="l">Sites géolocalisés</div></div></div>
-    <div class="col-6 col-lg-3"><div class="pta-kpi"><div class="v">—</div><div class="l">Agents en poste (bientôt)</div></div></div>
+    <div class="col-6 col-lg-3"><div class="pta-kpi"><div class="v text-success"><?= count($enPoste) ?></div><div class="l">Agents en poste maintenant</div></div></div>
+    <div class="col-6 col-lg-3"><a class="pta-kpi d-block text-decoration-none" href="pointages.php?statut=a_verifier&du=<?= date('Y-m-d', strtotime('-60 days')) ?>"><div class="v <?= $nbVerif ? 'text-danger' : '' ?>"><?= $nbVerif ?></div><div class="l">Pointages à vérifier</div></a></div>
+    <div class="col-6 col-lg-3"><a class="pta-kpi d-block text-decoration-none" href="agents.php"><div class="v"><?= $nbActives ?><span class="text-muted fs-6">/<?= $nbAgents ?></span></div><div class="l">Agents équipés<?= $nbInvites ? " · $nbInvites invitation(s) en attente" : '' ?></div></a></div>
+    <div class="col-6 col-lg-3"><a class="pta-kpi d-block text-decoration-none" href="missions.php"><div class="v"><?= $nbGeo ?><span class="text-muted fs-6">/<?= $nbMissions ?></span></div><div class="l">Sites géolocalisés</div></a></div>
 </div>
+
+<div class="pta-card">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="mb-0"><span class="text-success">●</span> En poste maintenant</h2>
+        <a class="small" href="pointages.php">Tous les pointages</a>
+    </div>
+    <?php if (!$enPoste): ?><div class="text-muted small">Aucun agent en service.</div><?php endif; ?>
+    <?php foreach ($enPoste as $p):
+        $min = (int)floor((time() - strtotime($p['debut_reel'])) / 60); ?>
+        <div class="d-flex align-items-center gap-3 py-2 border-top">
+            <div class="flex-grow-1"><span class="fw-semibold"><?= h($p['prenom'] . ' ' . $p['nom']) ?></span>
+                <span class="text-muted small">· <?= h($p['site_nom']) ?></span></div>
+            <?php foreach (array_filter(explode(',', (string)$p['alertes'])) as $x): if ($x === 'hors_ligne') continue; ?>
+                <span class="pta-badge ko"><?= h(ptLibelleAlerte($x)) ?></span>
+            <?php endforeach; ?>
+            <span class="small text-muted text-nowrap">depuis <?= date('H\hi', strtotime($p['debut_reel'])) ?> (<?= ptFormatDuree($min) ?>)</span>
+        </div>
+    <?php endforeach; ?>
+</div>
+<?php if ($nbAgentsSansSite): ?>
+<div class="alert alert-warning small"><i class="fa fa-triangle-exclamation me-1"></i><?= $nbAgentsSansSite ?> agent(s) actif(s) ne sont affectés à aucun site : ils ne pourront pas pointer. <a href="agents.php">Voir les agents</a></div>
+<?php endif; ?>
 
 <div class="pta-card">
     <h2>Mise en route</h2>

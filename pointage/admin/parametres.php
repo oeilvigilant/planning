@@ -20,7 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($num !== '' && !preg_match('/^[\d\s+().-]{6,25}$/', $num)) $errors[] = "Numéro $lib du contact par défaut invalide.";
     }
 
+    $selfie = (string)($_POST['selfie'] ?? 'optionnel');
+    if (!in_array($selfie, ['non', 'optionnel', 'obligatoire'], true)) $selfie = 'optionnel';
+    $marque = trim((string)($_POST['marque'] ?? ''));
+
     if (!$errors) {
+        setParam('pointage_selfie', $selfie);
+        setParam('pointage_marque', mb_substr($marque, 0, 80));
         setParam('pointage_contact_nom', $cNom !== '' ? $cNom : 'Permanence');
         setParam('pointage_contact_tel', $cTel);
         setParam('pointage_contact_whatsapp', $cWa);
@@ -53,6 +59,21 @@ ptAdminHead('Paramètres', 'parametres');
 <form method="post" class="row g-3">
     <?= ptCsrfField() ?>
     <div class="col-lg-4">
+        <div class="pta-card">
+            <h2><i class="fa fa-building me-1 text-warning"></i> Votre société</h2>
+            <label class="form-label small fw-semibold" for="marque">Nom affiché aux agents</label>
+            <input class="form-control" id="marque" name="marque" value="<?= h(getParam('pointage_marque', '')) ?>" placeholder="<?= h(ptMarque()) ?>">
+            <div class="small text-muted mt-1">Sur l'application, les messages d'invitation et les rapports.</div>
+        </div>
+        <div class="pta-card">
+            <h2><i class="fa fa-camera me-1 text-warning"></i> Photo au pointage</h2>
+            <?php $sm = getParam('pointage_selfie', 'optionnel'); ?>
+            <?php foreach (['non' => 'Jamais', 'optionnel' => 'Au choix de l\'agent', 'obligatoire' => 'Obligatoire à la prise de service'] as $k => $l): ?>
+                <label class="form-check"><input class="form-check-input" type="radio" name="selfie" value="<?= $k ?>" <?= $sm === $k ? 'checked' : '' ?>>
+                    <span class="form-check-label"><?= $l ?></span></label>
+            <?php endforeach; ?>
+            <div class="small text-muted mt-1">Le selfie prouve que c'est bien l'agent qui pointe. Photos visibles par les responsables uniquement.</div>
+        </div>
         <div class="pta-card">
             <h2><i class="fa fa-headset me-1 text-warning"></i> Contact par défaut</h2>
             <div class="small text-muted mb-2">Joint par l'agent quand le site n'a pas de responsable renseigné (permanence, astreinte…).</div>

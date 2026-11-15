@@ -2,6 +2,8 @@
 config/config.php
 config/config.lws.php
 pointage/config.php
+pointage/uploads/*
+!pointage/uploads/.htaccess
 
 # Uploads utilisateurs (photos, documents agents)
 uploads/photos/*

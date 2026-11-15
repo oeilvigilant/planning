@@ -45,4 +45,5 @@ ptHead('Connexion');
     </p>
     <div class="pt-footer-links"><a href="<?= h(ptUrl('rgpd.php')) ?>">Vos données</a></div>
 </div>
+<script>if (window.caches) caches.delete('ovpt-pages');</script>
 <?php ptFoot();

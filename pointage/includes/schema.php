@@ -1,27 +1,38 @@
 <?php
 /**
- * Schéma de l'outil Pointage (tables préfixées pt_).
- * Versionné via le paramètre `pointage_schema_version` : chaque étape n'est
- * exécutée qu'une fois, on ne relit pas INFORMATION_SCHEMA à chaque requête.
+ * Schéma de l'outil Pointage.
+ *
+ * L'outil fonctionne de deux façons, sans réglage :
+ *  - à côté d'OV-Gestion : il réutilise ses tables (agents, missions, clients,
+ *    utilisateurs, planning) et n'ajoute que des colonnes pt_* et des tables pt_* ;
+ *  - seul, sur une base vide (vente à un autre client) : il crée les tables
+ *    minimales dont il a besoin. Le planning est alors simplement absent.
+ *
+ * Versionné via le paramètre `pointage_schema_version` : chaque étape ne
+ * s'exécute qu'une fois.
  */
 
-const PT_SCHEMA_VERSION = 2;
+const PT_SCHEMA_VERSION = 3;
 
 function ensurePointageSchema(): void {
     static $done = false;
     if ($done) return;
     $done = true;
 
-    $current = (int)getParam('pointage_schema_version', '0');
+    try {
+        $current = (int)getParam('pointage_schema_version', '0');
+    } catch (PDOException $e) {
+        $current = 0;   // base vide : la table parametres n'existe pas encore
+    }
     if ($current >= PT_SCHEMA_VERSION) return;
 
     $db = getDB();
 
+    if ($current < 3) ptEnsureTablesDeBase($db);
+
     if ($current < 1) {
-        // Coordonnées et contact terrain des missions
-        $cols = $db->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missions'")->fetchAll(PDO::FETCH_COLUMN);
-        $add = [
+        // Coordonnées et contact terrain des missions (sites)
+        ptAddColumns($db, 'missions', [
             'pt_adresse'         => "VARCHAR(255) DEFAULT NULL",
             'pt_latitude'        => "DECIMAL(10,7) DEFAULT NULL",
             'pt_longitude'       => "DECIMAL(10,7) DEFAULT NULL",
@@ -29,12 +40,7 @@ function ensurePointageSchema(): void {
             'pt_responsable_nom' => "VARCHAR(150) DEFAULT NULL",
             'pt_responsable_tel' => "VARCHAR(30) DEFAULT NULL",
             'pt_consignes'       => "TEXT",
-        ];
-        foreach ($add as $col => $def) {
-            if (!in_array($col, $cols, true)) {
-                $db->exec("ALTER TABLE missions ADD COLUMN `$col` $def");
-            }
-        }
+        ]);
 
         // Accès agent à l'outil (lien d'activation + PIN + RGPD)
         $db->exec("CREATE TABLE IF NOT EXISTS pt_acces (
@@ -77,17 +83,15 @@ function ensurePointageSchema(): void {
             INDEX idx_agent (agent_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // Paramètres par défaut (sans écraser un réglage existant)
-        $defaults = [
+        $ins = $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)");
+        foreach ([
             'pointage_tolerance_min'  => '5',
             'pointage_rayon_defaut_m' => '200',
             'pointage_rgpd_version'   => '1',
             'pointage_rgpd_texte'     => ptRgpdTexteDefaut(),
-        ];
-        $ins = $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)");
-        foreach ($defaults as $k => $v) $ins->execute([$k, $v]);
+        ] as $k => $v) $ins->execute([$k, $v]);
 
-        // Droit 'pointage' : managers et planificateurs alignés sur 'planning'
+        // Droit 'pointage' : managers et planificateurs alignés sur 'planning' (si OV-Gestion est présent)
         $db->exec("INSERT INTO role_permissions (role_id, module, can_view, can_create, can_edit, can_delete, can_export)
             SELECT rp.role_id, 'pointage', rp.can_view, rp.can_create, rp.can_edit, rp.can_delete, rp.can_export
             FROM role_permissions rp
@@ -97,25 +101,205 @@ function ensurePointageSchema(): void {
     }
 
     if ($current < 2) {
-        // WhatsApp du responsable de site (si différent du numéro d'appel)
-        $hasWa = (int)$db->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'missions' AND COLUMN_NAME = 'pt_responsable_whatsapp'")->fetchColumn();
-        if (!$hasWa) $db->exec("ALTER TABLE missions ADD COLUMN pt_responsable_whatsapp VARCHAR(30) DEFAULT NULL AFTER pt_responsable_tel");
-
-        // Contact par défaut (permanence), initialisé avec le téléphone de l'entreprise
+        ptAddColumns($db, 'missions', ['pt_responsable_whatsapp' => "VARCHAR(30) DEFAULT NULL"]);
         $ins = $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)");
-        $ins->execute(['pointage_contact_nom', 'Permanence OEIL VIGILANT']);
+        $ins->execute(['pointage_contact_nom', 'Permanence']);
         $ins->execute(['pointage_contact_tel', getParam('entreprise_tel', '')]);
         $ins->execute(['pointage_contact_whatsapp', '']);
+    }
+
+    if ($current < 3) {
+        // Un service = une prise + une fin de service. Heures « réelles » (saisies par
+        // l'agent) et « retenues » (après tolérance ou correction) séparées.
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_services (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            agent_id INT NOT NULL,
+            mission_id INT NOT NULL,
+            planning_ligne_id INT DEFAULT NULL,
+            prevu_debut DATETIME DEFAULT NULL,
+            prevu_fin DATETIME DEFAULT NULL,
+
+            debut_reel DATETIME NOT NULL,
+            debut_retenu DATETIME NOT NULL,
+            debut_uuid CHAR(36) DEFAULT NULL,
+            debut_lat DECIMAL(10,7) DEFAULT NULL,
+            debut_lng DECIMAL(10,7) DEFAULT NULL,
+            debut_precision_m INT DEFAULT NULL,
+            debut_distance_m INT DEFAULT NULL,
+            debut_hors_zone TINYINT(1) NOT NULL DEFAULT 0,
+            debut_photo VARCHAR(255) DEFAULT NULL,
+            debut_hors_ligne TINYINT(1) NOT NULL DEFAULT 0,
+
+            fin_reel DATETIME DEFAULT NULL,
+            fin_retenu DATETIME DEFAULT NULL,
+            fin_uuid CHAR(36) DEFAULT NULL,
+            fin_lat DECIMAL(10,7) DEFAULT NULL,
+            fin_lng DECIMAL(10,7) DEFAULT NULL,
+            fin_precision_m INT DEFAULT NULL,
+            fin_distance_m INT DEFAULT NULL,
+            fin_hors_zone TINYINT(1) NOT NULL DEFAULT 0,
+            fin_photo VARCHAR(255) DEFAULT NULL,
+            fin_hors_ligne TINYINT(1) NOT NULL DEFAULT 0,
+
+            statut ENUM('en_cours','a_verifier','ok','valide','annule') NOT NULL DEFAULT 'en_cours',
+            alertes VARCHAR(255) DEFAULT NULL,
+            source ENUM('agent','manuel') NOT NULL DEFAULT 'agent',
+            note VARCHAR(255) DEFAULT NULL,
+            valide_par INT DEFAULT NULL,
+            valide_le DATETIME DEFAULT NULL,
+            created_by_user INT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_debut_uuid (debut_uuid),
+            UNIQUE KEY uk_fin_uuid (fin_uuid),
+            INDEX idx_agent_debut (agent_id, debut_retenu),
+            INDEX idx_mission_debut (mission_id, debut_retenu),
+            INDEX idx_statut (statut)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Historique des corrections : la donnée d'origine n'est jamais perdue
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_corrections (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            service_id INT NOT NULL,
+            action VARCHAR(30) NOT NULL,
+            avant TEXT,
+            apres TEXT,
+            motif VARCHAR(255) DEFAULT NULL,
+            user_id INT DEFAULT NULL,
+            user_nom VARCHAR(150) DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_service (service_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)")->execute(['pointage_selfie', 'optionnel']);
     }
 
     setParam('pointage_schema_version', (string)PT_SCHEMA_VERSION);
 }
 
+/**
+ * Tables partagées avec OV-Gestion. Si elles existent déjà (installation OV),
+ * rien ne change ; sur une base vide, on crée le strict nécessaire.
+ */
+function ptEnsureTablesDeBase(PDO $db): void {
+    $db->exec("CREATE TABLE IF NOT EXISTS parametres (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        cle VARCHAR(100) NOT NULL,
+        valeur TEXT,
+        label VARCHAR(150) DEFAULT NULL,
+        groupe VARCHAR(50) DEFAULT NULL,
+        UNIQUE KEY cle (cle)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS roles (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nom VARCHAR(100) NOT NULL,
+        slug VARCHAR(50) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY slug (slug)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("INSERT IGNORE INTO roles (nom, slug, description) VALUES
+        ('Administrateur', 'admin', 'Accès complet'),
+        ('Manager', 'manager', 'Gestion des agents et des sites')");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS role_permissions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        role_id INT NOT NULL,
+        module VARCHAR(50) NOT NULL,
+        can_view TINYINT(1) DEFAULT 0,
+        can_create TINYINT(1) DEFAULT 0,
+        can_edit TINYINT(1) DEFAULT 0,
+        can_delete TINYINT(1) DEFAULT 0,
+        can_export TINYINT(1) DEFAULT 0,
+        UNIQUE KEY role_module (role_id, module)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("INSERT IGNORE INTO role_permissions (role_id, module, can_view, can_create, can_edit, can_delete, can_export)
+        SELECT id, 'pointage', 1, 1, 1, 0, 1 FROM roles WHERE slug = 'manager'");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS utilisateurs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nom VARCHAR(100) NOT NULL,
+        prenom VARCHAR(100) NOT NULL,
+        email VARCHAR(150) NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        role_id INT NOT NULL DEFAULT 1,
+        actif TINYINT(1) DEFAULT 1,
+        last_login TIMESTAMP NULL DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS clients (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nom VARCHAR(255) NOT NULL,
+        adresse TEXT,
+        email VARCHAR(255) DEFAULT '',
+        telephone VARCHAR(30) DEFAULT '',
+        contact VARCHAR(255) DEFAULT '',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS missions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nom VARCHAR(255) NOT NULL,
+        client_id INT DEFAULT NULL,
+        lieu VARCHAR(255) DEFAULT NULL,
+        description TEXT,
+        actif TINYINT(1) DEFAULT 1,
+        is_default TINYINT(1) DEFAULT 0,
+        created_by INT DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS mission_agents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        mission_id INT NOT NULL,
+        agent_id INT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY mission_agent (mission_id, agent_id),
+        INDEX idx_agent (agent_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS agents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        matricule VARCHAR(30) DEFAULT NULL,
+        nom VARCHAR(100) NOT NULL,
+        prenom VARCHAR(100) NOT NULL,
+        sexe ENUM('M','F') NOT NULL DEFAULT 'M',
+        telephone VARCHAR(20) DEFAULT NULL,
+        email VARCHAR(150) DEFAULT NULL,
+        photo VARCHAR(255) DEFAULT NULL,
+        actif TINYINT(1) DEFAULT 1,
+        statut_inscription VARCHAR(20) DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+function ptAddColumns(PDO $db, string $table, array $cols): void {
+    $st = $db->prepare("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+    $st->execute([$table]);
+    $existing = $st->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($cols as $col => $def) {
+        if (!in_array($col, $existing, true)) $db->exec("ALTER TABLE `$table` ADD COLUMN `$col` $def");
+    }
+}
+
+/** Le planning d'OV-Gestion est-il présent dans cette base ? */
+function ptHasPlanning(): bool {
+    static $has = null;
+    if ($has === null) {
+        $n = (int)getDB()->query("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME IN ('planning_lignes','planning_versions')")->fetchColumn();
+        $has = $n === 2;
+    }
+    return $has;
+}
+
 function ptRgpdTexteDefaut(): string {
     return <<<TXT
 ## Pourquoi cet outil ?
-OEIL VIGILANT utilise cet outil pour enregistrer vos prises et fins de service, vous permettre de signaler un événement et de joindre rapidement votre responsable, et justifier les heures réalisées auprès du client.
+Votre employeur utilise cet outil pour enregistrer vos prises et fins de service, vous permettre de signaler un événement et de joindre rapidement votre responsable, et justifier les heures réalisées auprès du client.
 
 ## Quelles données ?
 - Votre identité (nom, prénom, matricule)
@@ -126,13 +310,13 @@ OEIL VIGILANT utilise cet outil pour enregistrer vos prises et fins de service, 
 **Aucun suivi de position en continu.** L'application ne vous localise jamais en dehors de ces actions, ni en dehors de vos heures de service.
 
 ## Qui y a accès ?
-La direction et les responsables d'OEIL VIGILANT. Le client de la mission peut consulter les heures et les événements de **sa** mission uniquement.
+La direction et les responsables de votre employeur. Le client de la mission peut consulter les heures et les événements de **sa** mission uniquement.
 
 ## Combien de temps ?
 - Horaires de travail : 5 ans (obligations sociales)
 - Positions GPS et photos : 1 an, puis suppression
 
 ## Vos droits
-Vous pouvez demander l'accès, la rectification ou l'effacement de vos données, et vous opposer à leur traitement pour un motif légitime, auprès de la direction d'OEIL VIGILANT. Vous pouvez aussi saisir la CNIL (www.cnil.fr).
+Vous pouvez demander l'accès, la rectification ou l'effacement de vos données, et vous opposer à leur traitement pour un motif légitime, auprès de votre employeur. Vous pouvez aussi saisir la CNIL (www.cnil.fr).
 TXT;
 }

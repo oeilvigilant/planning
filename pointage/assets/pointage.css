@@ -122,6 +122,21 @@ label.pt-label { display: block; font-size: .85rem; color: var(--pt-muted); marg
 .pt-main-btn.stop { background: radial-gradient(circle at 30% 30%, #f87171, #b91c1c); }
 .pt-main-btn.soon { background: radial-gradient(circle at 30% 30%, #4b5563, #1f2937); color: rgba(255,255,255,0.75); }
 
+.pt-main-btn.busy { opacity: .7; pointer-events: none; animation: ptPulse 1.2s infinite; }
+@keyframes ptPulse { 50% { transform: scale(.96); } }
+[hidden] { display: none !important; }
+
+.pt-chrono { font-size: 1.6rem; font-weight: 800; color: var(--pt-gold-light); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.pt-service-info { margin-top: 14px; }
+.pt-sites { text-align: left; }
+.pt-site-choice {
+    display: flex; gap: 12px; align-items: center; padding: 12px 14px; margin-top: 8px;
+    border: 1px solid var(--pt-line); border-radius: 14px; background: rgba(255,255,255,0.04); cursor: pointer;
+}
+.pt-site-choice input { width: 22px; height: 22px; accent-color: var(--pt-gold); flex-shrink: 0; }
+.pt-site-choice:has(input:checked) { border-color: var(--pt-gold); background: rgba(201,168,76,0.1); }
+.pt-total { font-size: 2rem; font-weight: 800; color: var(--pt-gold-light); margin: 6px 0 4px; }
+
 /* Actions rapides */
 .pt-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 14px; }
 .pt-action {

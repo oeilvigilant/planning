@@ -59,6 +59,9 @@ jobs:
             **/.git*
             **/.git*/**
             config.php
+            uploads/**/*.jpg
+            uploads/**/*.png
+            uploads/**/*.webp
             *.log
           dangerous-clean-slate: false
           log-level: standard

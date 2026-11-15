@@ -19,6 +19,7 @@ function ptDistanceM(float $lat1, float $lng1, float $lat2, float $lng2): int {
  * bornes réelles en datetime (fin le lendemain si dépassement de minuit).
  */
 function ptVacations(int $agentId, string $dateDebut, string $dateFin): array {
+    if (!ptHasPlanning()) return [];
     $st = getDB()->prepare("SELECT pl.id, pl.date_travail, pl.heure_debut, pl.heure_fin, pl.note,
             m.id AS mission_id, m.nom AS mission_nom, m.lieu, m.pt_adresse, m.pt_latitude, m.pt_longitude,
             m.pt_rayon_m, m.pt_responsable_nom, m.pt_responsable_tel, m.pt_responsable_whatsapp, m.pt_consignes,
@@ -75,6 +76,111 @@ function ptContact(?array $vac): array {
         $wa  = trim(getParam('pointage_contact_whatsapp', ''));
     }
     return ['nom' => $nom ?: 'Responsable', 'tel' => $tel, 'whatsapp' => $wa !== '' ? $wa : $tel];
+}
+
+/** Nom de la société affiché dans l'outil (marque blanche). */
+function ptMarque(): string {
+    $m = trim(getParam('pointage_marque', ''));
+    if ($m === '') $m = trim(getParam('entreprise_nom', ''));
+    return $m !== '' ? $m : 'Pointage';
+}
+
+/** Sites actifs auxquels l'agent est affecté. */
+function ptSitesAgent(int $agentId): array {
+    $st = getDB()->prepare("SELECT m.id, m.nom, m.lieu, m.pt_adresse, m.pt_latitude, m.pt_longitude, m.pt_rayon_m,
+            m.pt_responsable_nom, m.pt_responsable_tel, m.pt_responsable_whatsapp, m.pt_consignes, c.nom AS client_nom
+        FROM mission_agents ma
+        JOIN missions m ON m.id = ma.mission_id AND m.actif = 1
+        LEFT JOIN clients c ON c.id = m.client_id
+        WHERE ma.agent_id = ?
+        ORDER BY m.nom");
+    $st->execute([$agentId]);
+    return $st->fetchAll();
+}
+
+function ptSite(int $missionId): ?array {
+    $st = getDB()->prepare("SELECT m.*, c.nom AS client_nom FROM missions m LEFT JOIN clients c ON c.id = m.client_id WHERE m.id = ?");
+    $st->execute([$missionId]);
+    return $st->fetch() ?: null;
+}
+
+/** Service en cours (prise sans fin) d'un agent, ou null. */
+function ptServiceOuvert(int $agentId): ?array {
+    $st = getDB()->prepare("SELECT s.*, m.nom AS mission_nom FROM pt_services s JOIN missions m ON m.id = s.mission_id
+        WHERE s.agent_id = ? AND s.fin_retenu IS NULL AND s.statut <> 'annule'
+        ORDER BY s.debut_reel DESC LIMIT 1");
+    $st->execute([$agentId]);
+    return $st->fetch() ?: null;
+}
+
+/** Minutes retenues d'un service (0 si en cours). */
+function ptDureeMin(array $s): int {
+    if (empty($s['fin_retenu'])) return 0;
+    return max(0, (int)round((strtotime($s['fin_retenu']) - strtotime($s['debut_retenu'])) / 60));
+}
+
+function ptFormatDuree(int $min): string {
+    return sprintf('%dh%02d', intdiv($min, 60), $min % 60);
+}
+
+/**
+ * Applique la tolérance : si l'heure réelle est à ± tolérance de l'heure prévue,
+ * on retient l'heure prévue. Retourne [heure retenue, écart en minutes (réel - prévu) ou null].
+ */
+function ptAppliquerTolerance(string $reel, ?string $prevu): array {
+    $reel = date('Y-m-d H:i:00', strtotime($reel));
+    if (!$prevu) return [$reel, null];
+    $ecart = (int)round((strtotime($reel) - strtotime($prevu)) / 60);
+    $tol = max(0, (int)getParam('pointage_tolerance_min', '5'));
+    return [abs($ecart) <= $tol ? date('Y-m-d H:i:00', strtotime($prevu)) : $reel, $ecart];
+}
+
+/** Vacation planifiée correspondant à une prise de service (même site, fenêtre -3 h / +fin). */
+function ptVacationPourPrise(int $agentId, int $missionId, int $ts): ?array {
+    foreach (ptVacations($agentId, date('Y-m-d', $ts - 86400), date('Y-m-d', $ts + 86400)) as $v) {
+        if ((int)$v['mission_id'] !== $missionId) continue;
+        if ($ts >= strtotime($v['debut_dt']) - 3 * 3600 && $ts <= strtotime($v['fin_dt'])) return $v;
+    }
+    return null;
+}
+
+/**
+ * Enregistre une photo envoyée en data URL JPEG/PNG. Retourne le chemin relatif
+ * (dans uploads/) ou null. Les photos ne sont jamais servies directement.
+ */
+function ptEnregistrerPhoto(string $dataUrl, string $prefixe): ?string {
+    if (!preg_match('#^data:image/(jpeg|png|webp);base64,#', $dataUrl, $m)) return null;
+    $bin = base64_decode(substr($dataUrl, strpos($dataUrl, ',') + 1), true);
+    if ($bin === false || strlen($bin) > 3 * 1024 * 1024) return null;
+    $info = @getimagesizefromstring($bin);
+    if (!$info || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) return null;
+    $ext = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'][$info[2]];
+    $rel = date('Y/m') . '/' . $prefixe . '-' . bin2hex(random_bytes(10)) . '.' . $ext;
+    $abs = ptUploadsDir() . '/' . $rel;
+    if (!is_dir(dirname($abs)) && !mkdir(dirname($abs), 0755, true)) return null;
+    return file_put_contents($abs, $bin) !== false ? $rel : null;
+}
+
+function ptUploadsDir(): string {
+    return dirname(__DIR__) . '/uploads';
+}
+
+/** Matricule au format AA + sexe + numéro (ex. 26F03), compatible avec OV-Gestion. */
+function ptGenererMatricule(string $sexe): string {
+    $pref = sprintf('%02d%s', (int)date('y'), $sexe === 'F' ? 'F' : 'M');
+    $st = getDB()->prepare("SELECT COALESCE(MAX(CAST(SUBSTRING(matricule, ?) AS UNSIGNED)), 0) FROM agents
+        WHERE matricule LIKE ? AND matricule REGEXP ?");
+    $st->execute([strlen($pref) + 1, $pref . '%', '^' . $pref . '[0-9]+$']);
+    return $pref . sprintf('%02d', (int)$st->fetchColumn() + 1);
+}
+
+/** Journalise une correction (la donnée d'origine reste dans pt_services.*_reel). */
+function ptLogCorrection(int $serviceId, string $action, $avant, $apres, string $motif, ?array $user): void {
+    getDB()->prepare("INSERT INTO pt_corrections (service_id, action, avant, apres, motif, user_id, user_nom) VALUES (?,?,?,?,?,?,?)")
+        ->execute([$serviceId, $action,
+            $avant === null ? null : json_encode($avant, JSON_UNESCAPED_UNICODE),
+            $apres === null ? null : json_encode($apres, JSON_UNESCAPED_UNICODE),
+            $motif, $user['id'] ?? null, $user ? trim($user['prenom'] . ' ' . $user['nom']) : null]);
 }
 
 /** Numéro au format international pour wa.me (France par défaut). */

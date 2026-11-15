@@ -2,6 +2,8 @@
 require_once __DIR__ . '/_init.php';
 
 if (ptAdminUser()) ptRedirect('admin/index.php');
+// Outil installé seul sur une base vide : on crée d'abord le compte administrateur
+if ((int)getDB()->query("SELECT COUNT(*) FROM utilisateurs")->fetchColumn() === 0) ptRedirect('admin/installation.php');
 
 $error = '';
 $email = '';

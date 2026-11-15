@@ -5,7 +5,8 @@ function ptAdminHead(string $title, string $active = '', string $extraHead = '')
     $u = ptAdminUser();
     $nav = [
         'dashboard'  => ['index.php', 'fa-gauge', 'Tableau de bord'],
-        'agents'     => ['agents.php', 'fa-users', 'Agents & accès'],
+        'pointages'  => ['pointages.php', 'fa-clock', 'Pointages'],
+        'agents'     => ['agents.php', 'fa-users', 'Agents'],
         'sites'      => ['missions.php', 'fa-location-dot', 'Sites'],
         'parametres' => ['parametres.php', 'fa-sliders', 'Paramètres'],
     ];
@@ -20,7 +21,7 @@ function ptAdminHead(string $title, string $active = '', string $extraHead = '')
 <link rel="icon" type="image/png" href="<?= h(ptUrl('assets/icons/icon-192.png')) ?>">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-<link href="<?= h(ptUrl('admin/admin.css')) ?>?v=1" rel="stylesheet">
+<link href="<?= h(ptUrl('admin/admin.css')) ?>?v=<?= PT_ASSETS_V ?>" rel="stylesheet">
 <?= $extraHead ?>
 </head>
 <body class="pta-body" data-base="<?= h(ptBaseUrl()) ?>" data-csrf="<?= h(ptCsrfToken()) ?>">

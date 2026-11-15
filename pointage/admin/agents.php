@@ -69,10 +69,15 @@ ptAdminHead('Agents & accès', 'agents');
         <h1>Agents & accès</h1>
         <div class="text-muted small"><?= $nbActifs ?> agent(s) sur <?= count($agents) ?> ont activé l'application</div>
     </div>
-    <form class="d-flex gap-2" method="get">
-        <input class="form-control form-control-sm" name="q" value="<?= h($q) ?>" placeholder="Rechercher un agent…" style="min-width:220px">
-        <button class="btn btn-sm btn-outline-secondary"><i class="fa fa-search"></i></button>
-    </form>
+    <div class="d-flex gap-2 flex-wrap">
+        <form class="d-flex gap-2" method="get">
+            <input class="form-control form-control-sm" name="q" value="<?= h($q) ?>" placeholder="Rechercher un agent…" style="min-width:200px">
+            <button class="btn btn-sm btn-outline-secondary"><i class="fa fa-search"></i></button>
+        </form>
+        <?php if (ptAdminCan('create')): ?>
+        <a class="btn btn-sm btn-pta" href="agent.php"><i class="fa fa-user-plus me-1"></i>Nouvel agent</a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <div class="pta-card p-0">
@@ -86,13 +91,13 @@ ptAdminHead('Agents & accès', 'agents');
         [$cls, $lib] = ptStatutAcces($a, $rgpdV);
         $lienActif = $a['activation_token'] && strtotime($a['activation_expires']) >= time();
         $lien = $lienActif ? ptUrl('activer.php?t=' . $a['activation_token']) : '';
-        $msg = "Bonjour " . $a['prenom'] . ", voici votre lien personnel pour activer l'application de pointage OEIL VIGILANT : " . $lien
+        $msg = "Bonjour " . $a['prenom'] . ", voici votre lien personnel pour activer l'application de pointage " . ptMarque() . " : " . $lien
              . " (valable jusqu'au " . ($a['activation_expires'] ? date('d/m/Y', strtotime($a['activation_expires'])) : '') . ").";
         $tel = $a['telephone'] ? ptTelWhatsapp($a['telephone']) : '';
     ?>
         <tr id="agent-<?= (int)$a['id'] ?>">
             <td class="ps-3">
-                <div class="fw-semibold"><?= h($a['nom'] . ' ' . $a['prenom']) ?></div>
+                <a class="fw-semibold text-reset" href="agent.php?id=<?= (int)$a['id'] ?>"><?= h($a['nom'] . ' ' . $a['prenom']) ?></a>
                 <div class="text-muted small"><?= h($a['matricule'] ?: '—') ?> · <?= h($a['telephone'] ?: 'pas de téléphone') ?></div>
             </td>
             <td class="small text-muted" style="max-width:240px"><?= h($a['missions'] ?: '—') ?></td>
@@ -140,7 +145,7 @@ ptAdminHead('Agents & accès', 'agents');
                             <a class="btn btn-sm btn-outline-primary" href="sms:<?= h(preg_replace('/[^\d+]/', '', $a['telephone'])) ?>?&body=<?= h(rawurlencode($msg)) ?>"><i class="fa fa-comment-sms me-1"></i>SMS</a>
                             <?php endif; ?>
                             <?php if ($a['email']): ?>
-                            <a class="btn btn-sm btn-outline-primary" href="mailto:<?= h($a['email']) ?>?subject=<?= h(rawurlencode('Votre application de pointage OEIL VIGILANT')) ?>&body=<?= h(rawurlencode($msg)) ?>"><i class="fa fa-envelope me-1"></i>Email</a>
+                            <a class="btn btn-sm btn-outline-primary" href="mailto:<?= h($a['email']) ?>?subject=<?= h(rawurlencode('Votre application de pointage ' . ptMarque())) ?>&body=<?= h(rawurlencode($msg)) ?>"><i class="fa fa-envelope me-1"></i>Email</a>
                             <?php endif; ?>
                         </div>
                         <div class="small text-muted mt-2">Astuce : l'agent peut aussi scanner le QR code avec son téléphone.</div>
@@ -151,7 +156,7 @@ ptAdminHead('Agents & accès', 'agents');
         <?php endif; ?>
     <?php endforeach; ?>
     <?php if (!$agents): ?>
-        <tr><td colspan="5" class="text-center text-muted py-4">Aucun agent actif.</td></tr>
+        <tr><td colspan="5" class="text-center text-muted py-4">Aucun agent actif. <a href="agent.php">Créez votre premier agent</a>.</td></tr>
     <?php endif; ?>
     </tbody>
 </table>

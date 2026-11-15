@@ -1,20 +1,39 @@
 <?php
-/** Écran principal de l'agent. */
+/** Écran principal de l'agent : pointage, site, contact, heures. */
 require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/layout.php';
+require_once __DIR__ . '/includes/pointer.php';
 
-$agent = ptRequireAgent();
-$vac   = ptVacationCourante((int)$agent['id']);
+$agent   = ptRequireAgent();
+$agentId = (int)$agent['id'];
+$ouvert  = ptServiceOuvert($agentId);
+$sites   = ptSitesAgent($agentId);
+$vac     = ptVacationCourante($agentId);
 
-$contact = ptContact($vac);
-$waTexte = 'Bonjour, ici ' . $agent['prenom'] . ' ' . $agent['nom'] . ($vac ? ' (' . $vac['mission_nom'] . ')' : '') . '. ';
+// Site affiché : celui du service en cours, sinon de la vacation prévue, sinon le site unique
+$site = null;
+if ($ouvert) $site = ptSite((int)$ouvert['mission_id']);
+elseif ($vac) $site = ptSite((int)$vac['mission_id']);
+elseif (count($sites) === 1) $site = $sites[0];
+$choixSite = !$ouvert && !$site && count($sites) > 1;
+
+$contact = ptContact($site ? $site : ($vac ?: null));
+$waTexte = 'Bonjour, ici ' . $agent['prenom'] . ' ' . $agent['nom'] . ($site ? ' (' . $site['nom'] . ')' : '') . '. ';
+
+// Heures du mois et derniers services
+$db = getDB();
+$st = $db->prepare("SELECT s.*, m.nom AS mission_nom FROM pt_services s JOIN missions m ON m.id = s.mission_id
+    WHERE s.agent_id = ? AND s.statut <> 'annule' AND s.debut_retenu >= ? ORDER BY s.debut_retenu DESC");
+$st->execute([$agentId, date('Y-m-01 00:00:00')]);
+$servicesMois = $st->fetchAll();
+$totalMois = 0;
+foreach ($servicesMois as $s) $totalMois += ptDureeMin($s);
 
 $initiales = mb_strtoupper(mb_substr($agent['prenom'], 0, 1) . mb_substr($agent['nom'], 0, 1));
 $photoUrl  = ($agent['photo'] && ptPhotosUrl() !== '') ? ptPhotosUrl() . '/' . rawurlencode($agent['photo']) : '';
+$selfie    = getParam('pointage_selfie', 'optionnel');
 
-function ptHeureCourte(string $dt): string {
-    return date('H\hi', strtotime($dt));
-}
+function ptH(string $dt): string { return date('H\hi', strtotime($dt)); }
 
 ptHead('Accueil');
 ?>
@@ -33,44 +52,81 @@ ptHead('Accueil');
     <a class="pt-icon-btn" href="#menu" data-bs-toggle="offcanvas" data-bs-target="#ptMenu" aria-label="Menu"><i class="fa fa-bars"></i></a>
 </div>
 
-<div class="pt-card" style="text-align:center">
+<div class="pt-alert pt-alert-info" data-pt-queue style="display:none"></div>
+
+<div class="pt-card pt-pointage" style="text-align:center"
+     data-pt-pointage
+     data-api="<?= h(ptUrl('api/pointer.php')) ?>"
+     data-agent="<?= $agentId ?>"
+     data-etat="<?= $ouvert ? 'en_service' : 'hors_service' ?>"
+     data-debut="<?= $ouvert ? h(date('c', strtotime($ouvert['debut_reel']))) : '' ?>"
+     data-selfie="<?= h($selfie) ?>"
+     data-site="<?= $site ? (int)$site['id'] : '' ?>">
+
     <div class="pt-clock" data-pt-clock><?= date('H:i:s') ?></div>
     <div class="pt-date" data-pt-date></div>
 
-    <button class="pt-main-btn soon" type="button" disabled style="margin-top:18px">
-        <i class="fa fa-fingerprint"></i>
-        <span>Pointer</span>
-    </button>
-    <div class="pt-muted pt-small" style="margin-top:10px">Le pointage arrive dans la prochaine mise à jour.</div>
+    <div class="pt-service-info" data-en-service <?= $ouvert ? '' : 'hidden' ?>>
+        <span class="pt-badge pt-badge-green"><i class="fa fa-circle fa-beat-fade" style="font-size:.5rem"></i> En service</span>
+        <div class="pt-small pt-muted mt-1">
+            <?= $ouvert ? h($ouvert['mission_nom']) . ' · depuis ' . ptH($ouvert['debut_reel']) : '' ?>
+        </div>
+        <div class="pt-chrono" data-pt-chrono>0:00:00</div>
+    </div>
+
+    <?php if ($choixSite): ?>
+    <div class="pt-sites" data-hors-service>
+        <div class="pt-card-label" style="margin-top:14px">Sur quel site êtes-vous ?</div>
+        <?php foreach ($sites as $i => $s): ?>
+            <label class="pt-site-choice">
+                <input type="radio" name="pt_site" value="<?= (int)$s['id'] ?>">
+                <span><strong><?= h($s['nom']) ?></strong><?php if ($s['client_nom']): ?><br><small class="pt-muted"><?= h($s['client_nom']) ?></small><?php endif; ?></span>
+            </label>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!$ouvert && !$sites && !$vac): ?>
+        <div class="pt-alert pt-alert-danger" style="margin-top:16px">Vous n'êtes affecté à aucun site. Contactez votre responsable.</div>
+    <?php else: ?>
+        <button class="pt-main-btn <?= $ouvert ? 'stop' : 'start' ?>" type="button" data-pt-btn style="margin-top:18px">
+            <i class="fa <?= $ouvert ? 'fa-right-from-bracket' : 'fa-fingerprint' ?>"></i>
+            <span data-pt-btn-label><?= $ouvert ? 'Fin de service' : 'Prise de service' ?></span>
+        </button>
+        <?php if ($selfie === 'optionnel'): ?>
+            <label class="pt-check pt-small" style="justify-content:center;margin:12px 0 0">
+                <input type="checkbox" data-pt-selfie-opt style="width:20px;height:20px"> <span>Ajouter une photo (selfie)</span>
+            </label>
+        <?php elseif ($selfie === 'obligatoire'): ?>
+            <div class="pt-muted pt-small" style="margin-top:10px"><i class="fa fa-camera"></i> Une photo vous sera demandée.</div>
+        <?php endif; ?>
+        <div class="pt-muted pt-small" data-pt-status style="margin-top:10px;min-height:1.3em"></div>
+    <?php endif; ?>
+    <input type="file" accept="image/*" capture="user" data-pt-camera hidden>
 </div>
 
-<?php if ($vac):
-    $enCours = time() >= strtotime($vac['debut_dt']) && time() <= strtotime($vac['fin_dt']);
-    $adresse = $vac['pt_adresse'] ?: $vac['lieu'];
+<?php if ($site || $vac):
+    $nomSite = $site['nom'] ?? $vac['mission_nom'];
+    $adresse = ($site['pt_adresse'] ?? '') ?: ($site['lieu'] ?? ($vac['lieu'] ?? ''));
+    $gps = !empty($site['pt_latitude']) ? $site['pt_latitude'] . ',' . $site['pt_longitude'] : $adresse;
 ?>
 <div class="pt-card">
-    <div class="pt-card-label"><?= $enCours ? 'Vacation en cours' : 'Prochaine vacation' ?></div>
-    <h2 style="margin-bottom:6px"><?= h($vac['mission_nom']) ?></h2>
+    <div class="pt-card-label"><?= $ouvert ? 'Site en cours' : ($vac ? 'Prochaine vacation' : 'Mon site') ?></div>
+    <h2 style="margin-bottom:6px"><?= h($nomSite) ?></h2>
+    <?php if ($vac && (!$site || (int)$vac['mission_id'] === (int)$site['id'])): ?>
     <div class="pt-info-row"><i class="fa fa-clock"></i>
-        <div><?= h(formatDate($vac['date_travail'])) ?> · <strong><?= ptHeureCourte($vac['debut_dt']) ?> → <?= ptHeureCourte($vac['fin_dt']) ?></strong>
-            <?php if ($enCours): ?> <span class="pt-badge pt-badge-green">En cours</span><?php endif; ?></div>
+        <div><?= h(formatDate($vac['date_travail'])) ?> · <strong><?= ptH($vac['debut_dt']) ?> → <?= ptH($vac['fin_dt']) ?></strong></div>
     </div>
-    <?php if ($vac['client_nom']): ?>
-    <div class="pt-info-row"><i class="fa fa-building"></i><div><?= h($vac['client_nom']) ?></div></div>
+    <?php endif; ?>
+    <?php if (!empty($site['client_nom'])): ?>
+    <div class="pt-info-row"><i class="fa fa-building"></i><div><?= h($site['client_nom']) ?></div></div>
     <?php endif; ?>
     <?php if ($adresse): ?>
     <div class="pt-info-row"><i class="fa fa-location-dot"></i>
         <div><?= h($adresse) ?><br>
-            <a class="pt-small" target="_blank" rel="noopener"
-               href="https://www.google.com/maps/dir/?api=1&destination=<?= h(rawurlencode($vac['pt_latitude'] ? $vac['pt_latitude'] . ',' . $vac['pt_longitude'] : $adresse)) ?>">
-               <i class="fa fa-route"></i> Itinéraire</a></div>
+            <a class="pt-small" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=<?= h(rawurlencode($gps)) ?>"><i class="fa fa-route"></i> Itinéraire</a></div>
     </div>
     <?php endif; ?>
-</div>
-<?php else: ?>
-<div class="pt-card">
-    <div class="pt-card-label">Planning</div>
-    <div class="pt-muted">Aucune vacation prévue dans les prochaines 24 h.</div>
 </div>
 <?php endif; ?>
 
@@ -89,16 +145,38 @@ ptHead('Accueil');
     <span class="pt-action sos disabled"><i class="fa fa-bell"></i>SOS<br><span class="pt-small">Bientôt</span></span>
 </div>
 
-<?php if ($vac && trim((string)$vac['pt_consignes']) !== ''): ?>
+<?php if ($site && trim((string)($site['pt_consignes'] ?? '')) !== ''): ?>
 <div class="pt-card">
     <h2><i class="fa fa-clipboard-list me-1"></i> Consignes du poste</h2>
-    <div style="white-space:pre-line;font-size:.95rem"><?= h($vac['pt_consignes']) ?></div>
+    <div style="white-space:pre-line;font-size:.95rem"><?= h($site['pt_consignes']) ?></div>
 </div>
 <?php endif; ?>
 
+<div class="pt-card">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <h2 style="margin:0"><i class="fa fa-clock-rotate-left me-1"></i> Mes heures</h2>
+        <span class="pt-muted pt-small"><?= h(getNomMois((int)date('n'))) ?></span>
+    </div>
+    <div class="pt-total"><?= ptFormatDuree($totalMois) ?></div>
+    <?php if (!$servicesMois): ?>
+        <div class="pt-muted pt-small">Aucun service ce mois-ci.</div>
+    <?php endif; ?>
+    <?php foreach (array_slice($servicesMois, 0, 6) as $s): ?>
+        <div class="pt-info-row">
+            <i class="fa <?= $s['fin_retenu'] ? 'fa-check' : 'fa-hourglass-half' ?>"></i>
+            <div style="flex:1">
+                <div><strong><?= date('d/m', strtotime($s['debut_retenu'])) ?></strong> · <?= ptH($s['debut_retenu']) ?> → <?= $s['fin_retenu'] ? ptH($s['fin_retenu']) : 'en cours' ?></div>
+                <div class="pt-muted pt-small"><?= h($s['mission_nom']) ?></div>
+            </div>
+            <div style="font-weight:700"><?= $s['fin_retenu'] ? ptFormatDuree(ptDureeMin($s)) : '' ?></div>
+        </div>
+    <?php endforeach; ?>
+    <div class="pt-muted pt-small" style="margin-top:8px">Heures retenues, sous réserve de validation par votre responsable.</div>
+</div>
+
 <div class="pt-card pt-install" data-pt-install>
     <h2><i class="fa fa-mobile-screen me-1"></i> Installer l'application</h2>
-    <p class="pt-muted pt-small mb-2">Ajoutez OV Pointage sur votre écran d'accueil pour l'ouvrir en un geste et recevoir les rappels.</p>
+    <p class="pt-muted pt-small mb-2">Ajoutez l'application sur votre écran d'accueil pour l'ouvrir en un geste et recevoir les rappels.</p>
     <div data-ios class="pt-small">Sur iPhone : touchez <i class="fa fa-arrow-up-from-bracket"></i> <strong>Partager</strong>, puis <strong>« Sur l'écran d'accueil »</strong>.</div>
     <button type="button" class="pt-btn pt-btn-gold" data-install-btn><i class="fa fa-download"></i> Installer</button>
 </div>
@@ -111,7 +189,7 @@ ptHead('Accueil');
     </div>
     <div class="offcanvas-body d-flex flex-column gap-2">
         <a class="pt-btn pt-btn-ghost" href="<?= h(ptUrl('rgpd.php')) ?>"><i class="fa fa-shield-halved"></i> Vos données</a>
-        <form method="post" action="<?= h(ptUrl('logout.php')) ?>" class="mt-auto">
+        <form method="post" action="<?= h(ptUrl('logout.php')) ?>" class="mt-auto" data-pt-logout>
             <?= ptCsrfField() ?>
             <button class="pt-btn pt-btn-ghost" type="submit"><i class="fa fa-right-from-bracket"></i> Se déconnecter</button>
         </form>
@@ -119,4 +197,4 @@ ptHead('Accueil');
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<?php ptFoot();
+<?php ptFoot(['assets/app.js']);

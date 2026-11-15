@@ -1,9 +1,12 @@
 <?php
 /** Mise en page mobile de l'application agent. */
 
+/** Version des CSS/JS : à incrémenter à chaque modification (cache LWS et navigateurs). */
+const PT_ASSETS_V = '3';
+
 function ptHead(string $title, array $opts = []): void {
     $bodyClass = $opts['bodyClass'] ?? '';
-    $v = '1';
+    $v = PT_ASSETS_V;
     ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -33,9 +36,9 @@ function ptHead(string $title, array $opts = []): void {
 
 function ptFoot(array $scripts = []): void {
     ?>
-<script src="<?= h(ptUrl('assets/pointage.js')) ?>?v=1"></script>
+<script src="<?= h(ptUrl('assets/pointage.js')) ?>?v=<?= PT_ASSETS_V ?>"></script>
 <?php foreach ($scripts as $s): ?>
-<script src="<?= h(ptUrl($s)) ?>?v=1"></script>
+<script src="<?= h(ptUrl($s)) ?>?v=<?= PT_ASSETS_V ?>"></script>
 <?php endforeach; ?>
 </body>
 </html>
@@ -48,7 +51,7 @@ function ptBrand(string $sous = 'Pointage terrain'): void {
 <div class="pt-brand">
     <img src="<?= h(ptUrl('assets/icons/icon-192.png')) ?>" alt="" class="pt-brand-logo">
     <div>
-        <div class="pt-brand-name">OEIL VIGILANT</div>
+        <div class="pt-brand-name"><?= h(mb_strtoupper(ptMarque())) ?></div>
         <div class="pt-brand-sub"><?= h($sous) ?></div>
     </div>
 </div>

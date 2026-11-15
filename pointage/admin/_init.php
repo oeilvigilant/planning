@@ -5,6 +5,7 @@
  * à l'outil (indépendante du back-office).
  */
 require_once __DIR__ . '/../includes/bootstrap.php';
+require_once __DIR__ . '/../includes/layout.php';   // PT_ASSETS_V
 require_once __DIR__ . '/_layout.php';
 
 function ptAdminUser(): ?array {
