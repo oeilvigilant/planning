@@ -39,6 +39,7 @@ jobs:
             *.log
             INSTALL.md
             CLAUDE.md
+            pointage/**
           dangerous-clean-slate: false
           log-level: standard
 
@@ -59,9 +60,7 @@ jobs:
             **/.git*
             **/.git*/**
             config.php
-            uploads/**/*.jpg
-            uploads/**/*.png
-            uploads/**/*.webp
+            uploads/**
             *.log
           dangerous-clean-slate: false
           log-level: standard

@@ -161,8 +161,18 @@ function ptEnregistrerPhoto(string $dataUrl, string $prefixe): ?string {
     return file_put_contents($abs, $bin) !== false ? $rel : null;
 }
 
+/**
+ * Dossier des photos, créé à la demande avec son .htaccess de blocage
+ * (il n'est pas déployé par FTP : il ne contient que des données).
+ */
 function ptUploadsDir(): string {
-    return dirname(__DIR__) . '/uploads';
+    $dir = dirname(__DIR__) . '/uploads';
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $ht = $dir . '/.htaccess';
+    if (is_dir($dir) && !is_file($ht)) {
+        @file_put_contents($ht, "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n");
+    }
+    return $dir;
 }
 
 /** Matricule au format AA + sexe + numéro (ex. 26F03), compatible avec OV-Gestion. */
