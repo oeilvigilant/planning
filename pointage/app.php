@@ -10,7 +10,7 @@ $contact = ptContact($vac);
 $waTexte = 'Bonjour, ici ' . $agent['prenom'] . ' ' . $agent['nom'] . ($vac ? ' (' . $vac['mission_nom'] . ')' : '') . '. ';
 
 $initiales = mb_strtoupper(mb_substr($agent['prenom'], 0, 1) . mb_substr($agent['nom'], 0, 1));
-$photoUrl  = $agent['photo'] ? UPLOAD_URL . '/photos/' . rawurlencode($agent['photo']) : '';
+$photoUrl  = ($agent['photo'] && ptPhotosUrl() !== '') ? ptPhotosUrl() . '/' . rawurlencode($agent['photo']) : '';
 
 function ptHeureCourte(string $dt): string {
     return date('H\hi', strtotime($dt));

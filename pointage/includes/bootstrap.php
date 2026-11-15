@@ -4,9 +4,7 @@
  * Outil séparé du back-office : session propre, URL propre, mise en page propre.
  * Il partage seulement la base de données (agents, missions, planning).
  */
-require_once __DIR__ . '/../../config/config.php';
-require_once __DIR__ . '/../../config/db.php';
-require_once __DIR__ . '/../../includes/functions.php';
+require_once __DIR__ . '/core.php';
 require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/metier.php';
 require_once __DIR__ . '/agent_auth.php';
@@ -26,7 +24,6 @@ if (session_status() === PHP_SESSION_NONE) {
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: same-origin');
 
-ensureMissionsSchema();
 ensurePointageSchema();
 
 function ptIsHttps(): bool {
@@ -37,16 +34,24 @@ function ptIsHttps(): bool {
 /**
  * URL de base de l'outil :
  * - constante POINTAGE_URL si définie dans config.php,
- * - sinon sous-domaine pointage.* s'il est utilisé,
- * - sinon APP_URL/pointage (local WAMP).
+ * - sinon déduite de la requête (hôte + chemin du dossier de l'outil),
+ *   ce qui marche aussi bien sur pointage.oeilvigilant.com qu'en local.
  */
 function ptBaseUrl(): string {
-    if (defined('POINTAGE_URL')) return rtrim(POINTAGE_URL, '/');
-    $host = $_SERVER['HTTP_HOST'] ?? '';
-    if (stripos($host, 'pointage.') === 0) {
-        return (ptIsHttps() ? 'https://' : 'http://') . $host;
+    static $base = null;
+    if ($base !== null) return $base;
+    if (defined('POINTAGE_URL')) return $base = rtrim(POINTAGE_URL, '/');
+
+    $root   = str_replace('\\', '/', (string)realpath(__DIR__ . '/..'));
+    $script = str_replace('\\', '/', (string)realpath($_SERVER['SCRIPT_FILENAME'] ?? ''));
+    $path   = '';
+    if ($root !== '' && $script !== '' && strpos($script, $root) === 0) {
+        $rel  = substr($script, strlen($root));                       // ex. /admin/agents.php
+        $name = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($rel !== '' && substr($name, -strlen($rel)) === $rel) $path = substr($name, 0, -strlen($rel));
     }
-    return rtrim(APP_URL, '/') . '/pointage';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    return $base = (ptIsHttps() ? 'https://' : 'http://') . $host . rtrim($path, '/');
 }
 
 function ptUrl(string $path = ''): string {

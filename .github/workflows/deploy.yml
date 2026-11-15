@@ -9,6 +9,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     name: FTP Deploy → LWS
+    env:
+      # L'envoi de l'outil Pointage n'a lieu que lorsque son compte FTP est configuré
+      HAS_POINTAGE_FTP: ${{ secrets.FTP_POINTAGE_USER != '' && secrets.FTP_POINTAGE_PASS != '' }}
 
     steps:
       - name: Checkout code
@@ -36,5 +39,26 @@ jobs:
             *.log
             INSTALL.md
             CLAUDE.md
+          dangerous-clean-slate: false
+          log-level: standard
+
+      # Outil Pointage : dossier séparé « pointage.oeilvigilant.com » (sous-domaine),
+      # via un compte FTP LWS dont le dossier racine est ce dossier.
+      - name: Deploy Pointage via FTP
+        if: env.HAS_POINTAGE_FTP == 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ftp.oeilvigilant.com
+          username: ${{ secrets.FTP_POINTAGE_USER }}
+          password: ${{ secrets.FTP_POINTAGE_PASS }}
+          port: 21
+          protocol: ftp
+          local-dir: ./pointage/
+          server-dir: /
+          exclude: |
+            **/.git*
+            **/.git*/**
+            config.php
+            *.log
           dangerous-clean-slate: false
           log-level: standard
