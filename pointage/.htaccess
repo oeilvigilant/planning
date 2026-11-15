@@ -1,0 +1,10 @@
+DirectoryIndex index.php
+Options -Indexes
+
+AddType application/manifest+json .webmanifest
+
+<IfModule mod_headers.c>
+    <FilesMatch "sw\.js$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>
