@@ -197,6 +197,113 @@
     }
     if (btn) btn.addEventListener('click', pointer);
 
+    /* ---------- SOS (appui long 2 s) ---------- */
+    var sosBtn = document.querySelector('[data-pt-sos]');
+    if (sosBtn) {
+        var sosTimer = null, sosSent = false;
+        var startSos = function (e) {
+            e.preventDefault();
+            if (sosSent) return;
+            sosBtn.classList.add('holding');
+            sosTimer = setTimeout(function () {
+                sosSent = true;
+                sosBtn.classList.remove('holding');
+                sosBtn.classList.add('sent');
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                var label = sosBtn.querySelector('.pt-sos-label');
+                label.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Envoi de l\'alerte…';
+                var payload = { uuid: uuid(), type: 'sos', ts_appareil: Date.now(), hors_ligne: false };
+                getPosition().then(function (pos) {
+                    if (pos) { payload.lat = pos.lat; payload.lng = pos.lng; payload.precision = pos.precision; }
+                    return fetch(sosBtn.getAttribute('data-api'), { method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json', 'X-OV-Pointage': '1' }, body: JSON.stringify(payload) })
+                        .then(function (r) { return r.json(); });
+                }).then(function (res) {
+                    label.innerHTML = '<i class="fa fa-check"></i> ' + (res.ok ? 'Alerte envoyée à vos responsables' : (res.message || 'Échec'));
+                }).catch(function () {
+                    label.innerHTML = '<i class="fa fa-triangle-exclamation"></i> Pas de réseau : APPELEZ votre responsable';
+                }).then(function () {
+                    var tel = sosBtn.getAttribute('data-tel');
+                    if (tel) setTimeout(function () { if (confirm('Appeler votre responsable maintenant ?')) location.href = 'tel:' + tel; }, 600);
+                });
+            }, 2000);
+        };
+        var stopSos = function () { clearTimeout(sosTimer); sosBtn.classList.remove('holding'); };
+        sosBtn.addEventListener('pointerdown', startSos);
+        ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { sosBtn.addEventListener(ev, stopSos); });
+        sosBtn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    }
+
+    /* ---------- Notifications push ---------- */
+    var pushBox = document.querySelector('[data-pt-push]');
+    function b64ToUint8(b64) {
+        var pad = '='.repeat((4 - b64.length % 4) % 4), raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+        var arr = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+        return arr;
+    }
+    if (pushBox && 'serviceWorker' in navigator) {
+        var pushApi = pushBox.getAttribute('data-api');
+        var supported = 'PushManager' in window && 'Notification' in window;
+        var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        if (!supported && isIos && !standalone) {
+            pushBox.hidden = false;
+            pushBox.querySelector('[data-pt-push-btn]').hidden = true;
+            pushBox.querySelector('[data-pt-push-ios]').hidden = false;
+        } else if (supported) {
+            navigator.serviceWorker.ready.then(function (reg) {
+                return reg.pushManager.getSubscription().then(function (sub) {
+                    if (!sub || Notification.permission !== 'granted') pushBox.hidden = false;
+                    if (sub && Notification.permission === 'granted') {
+                        // Réenregistre l'abonnement (si l'agent a changé de téléphone ou de compte)
+                        fetch(pushApi, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-OV-Pointage': '1' },
+                            body: JSON.stringify({ qui: 'agent', action: 'enregistrer', subscription: sub.toJSON() }) });
+                    }
+                });
+            });
+            pushBox.querySelector('[data-pt-push-btn]').addEventListener('click', function () {
+                var btnP = this;
+                btnP.disabled = true;
+                Notification.requestPermission().then(function (perm) {
+                    if (perm !== 'granted') throw new Error('Notifications refusées. Autorisez-les dans les réglages du navigateur.');
+                    return fetch(pushApi, { credentials: 'same-origin' }).then(function (r) { return r.json(); });
+                }).then(function (k) {
+                    return navigator.serviceWorker.ready.then(function (reg) {
+                        return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToUint8(k.publicKey) });
+                    });
+                }).then(function (sub) {
+                    return fetch(pushApi, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-OV-Pointage': '1' },
+                        body: JSON.stringify({ qui: 'agent', action: 'abonner', subscription: sub.toJSON() }) }).then(function (r) { return r.json(); });
+                }).then(function (res) {
+                    toast(res.message, res.ok ? 'success' : 'info');
+                    if (res.ok) pushBox.hidden = true;
+                }).catch(function (e) {
+                    toast(e.message || 'Impossible d\'activer les notifications.', 'danger');
+                }).then(function () { btnP.disabled = false; });
+            });
+        }
+    }
+
+    /* ---------- Envoi des signalements faits hors connexion ---------- */
+    var EVQ = 'ovpt_evq_v1_' + box.getAttribute('data-agent');
+    function syncEvenements() {
+        var q;
+        try { q = JSON.parse(localStorage.getItem(EVQ) || '[]'); } catch (e) { q = []; }
+        if (!q.length || !navigator.onLine) return;
+        var item = q[0];
+        fetch(box.getAttribute('data-api').replace('pointer.php', 'evenement.php'), { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-OV-Pointage': '1' }, body: JSON.stringify(item) })
+            .then(function (r) {
+                if (r.status === 401 || r.status === 403 || r.status >= 500) return;
+                q.shift();
+                try { localStorage.setItem(EVQ, JSON.stringify(q)); } catch (e) {}
+                if (q.length) syncEvenements(); else toast('Signalements hors connexion envoyés.', 'success');
+            }).catch(function () {});
+    }
+    window.addEventListener('online', syncEvenements);
+    syncEvenements();
+
     /* ---------- Envoi de la file d'attente ---------- */
     var syncing = false;
     function sync() {

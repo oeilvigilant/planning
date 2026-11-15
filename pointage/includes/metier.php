@@ -193,6 +193,70 @@ function ptLogCorrection(int $serviceId, string $action, $avant, $apres, string 
             $motif, $user['id'] ?? null, $user ? trim($user['prenom'] . ' ' . $user['nom']) : null]);
 }
 
+/** Jours fériés français (fixes + Pâques) + ceux de la table jours_feries si présente. Clés 'Y-m-d'. */
+function ptFeries(int $annee): array {
+    static $cache = [];
+    if (isset($cache[$annee])) return $cache[$annee];
+    // Pâques (algorithme de Meeus/Jones/Butcher)
+    $a = $annee % 19; $b = intdiv($annee, 100); $c = $annee % 100; $d = intdiv($b, 4); $e = $b % 4;
+    $f = intdiv($b + 8, 25); $g = intdiv($b - $f + 1, 3); $h = (19 * $a + $b - $d - $g + 15) % 30;
+    $i = intdiv($c, 4); $k = $c % 4; $l = (32 + 2 * $e + 2 * $i - $h - $k) % 7; $m = intdiv($a + 11 * $h + 22 * $l, 451);
+    $mois = intdiv($h + $l - 7 * $m + 114, 31); $jour = (($h + $l - 7 * $m + 114) % 31) + 1;
+    $paques = mktime(12, 0, 0, $mois, $jour, $annee);
+    $j = [];
+    foreach (['01-01', '05-01', '05-08', '07-14', '08-15', '11-01', '11-11', '12-25'] as $md) $j["$annee-$md"] = true;
+    foreach ([1, 39, 50] as $off) $j[date('Y-m-d', $paques + $off * 86400)] = true;   // lundi de Pâques, Ascension, Pentecôte
+    try {
+        if (ptHasTable('jours_feries')) {
+            foreach (getDB()->query("SELECT date, recurrent FROM jours_feries") as $r) {
+                if ((int)$r['recurrent']) $j[$annee . substr($r['date'], 4)] = true;
+                elseif ((int)substr($r['date'], 0, 4) === $annee) $j[$r['date']] = true;
+            }
+        }
+    } catch (PDOException $e) {}
+    return $cache[$annee] = $j;
+}
+
+function ptHasTable(string $t): bool {
+    static $c = [];
+    if (!isset($c[$t])) {
+        $st = getDB()->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+        $st->execute([$t]);
+        $c[$t] = (int)$st->fetchColumn() > 0;
+    }
+    return $c[$t];
+}
+
+/**
+ * Ventile un service en minutes : total, dont nuit, dont dimanche, dont férié
+ * (catégories cumulables, comme les majorations). Plage de nuit : paramètres
+ * nuit_debut / nuit_fin (21:00–06:00 par défaut).
+ */
+function ptVentiler(string $debut, string $fin): array {
+    $r = ['total' => 0, 'nuit' => 0, 'dimanche' => 0, 'ferie' => 0];
+    $t0 = strtotime($debut); $t1 = strtotime($fin);
+    if (!$t0 || !$t1 || $t1 <= $t0) return $r;
+    static $nd = null, $nf = null;
+    if ($nd === null) {
+        $toMin = function ($hm, $def) { return preg_match('/^(\d{1,2}):(\d{2})/', (string)$hm, $m) ? (int)$m[1] * 60 + (int)$m[2] : $def; };
+        $nd = $toMin(getParam('nuit_debut', '21:00'), 21 * 60);
+        $nf = $toMin(getParam('nuit_fin', '06:00'), 6 * 60);
+    }
+    for ($t = $t0; $t < $t1; $t += 60) {
+        $r['total']++;
+        $min = (int)date('G', $t) * 60 + (int)date('i', $t);
+        if ($nd > $nf ? ($min >= $nd || $min < $nf) : ($min >= $nd && $min < $nf)) $r['nuit']++;
+        if (date('N', $t) === '7') $r['dimanche']++;
+        if (isset(ptFeries((int)date('Y', $t))[date('Y-m-d', $t)])) $r['ferie']++;
+    }
+    return $r;
+}
+
+/** Libellé court d'un agent pour un client : « Prénom N. ». */
+function ptNomCourt(string $prenom, string $nom): string {
+    return $prenom . ' ' . mb_strtoupper(mb_substr($nom, 0, 1)) . '.';
+}
+
 /** Numéro au format international pour wa.me (France par défaut). */
 function ptTelWhatsapp(string $tel): string {
     $d = preg_replace('/\D+/', '', $tel);

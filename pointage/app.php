@@ -141,8 +141,21 @@ ptHead('Accueil');
     <?php else: ?>
         <span class="pt-action disabled"><i class="fa-brands fa-whatsapp"></i>WhatsApp<br><span class="pt-small">Non renseigné</span></span>
     <?php endif; ?>
-    <span class="pt-action disabled"><i class="fa fa-triangle-exclamation"></i>Signaler<br><span class="pt-small">Bientôt</span></span>
-    <span class="pt-action sos disabled"><i class="fa fa-bell"></i>SOS<br><span class="pt-small">Bientôt</span></span>
+    <a class="pt-action" href="<?= h(ptUrl('evenement.php')) ?>"><i class="fa fa-triangle-exclamation"></i>Signaler<br><span class="pt-muted pt-small">Incident, photo</span></a>
+    <a class="pt-action" href="<?= h(ptUrl('evenement.php?type=main_courante')) ?>"><i class="fa fa-book"></i>Main courante<br><span class="pt-muted pt-small">Rondes, passation</span></a>
+</div>
+
+<button type="button" class="pt-sos" data-pt-sos data-api="<?= h(ptUrl('api/evenement.php')) ?>"
+        data-tel="<?= h(preg_replace('/[^\d+]/', '', $contact['tel'])) ?>">
+    <span class="pt-sos-fill"></span>
+    <span class="pt-sos-label"><i class="fa fa-bell"></i> SOS — maintenir 2 secondes</span>
+</button>
+
+<div class="pt-card" data-pt-push hidden data-api="<?= h(ptUrl('api/push.php')) ?>">
+    <h2><i class="fa fa-bell me-1"></i> Activer les rappels</h2>
+    <p class="pt-muted pt-small mb-2">Recevez un rappel avant votre vacation et si vous oubliez de pointer.</p>
+    <button type="button" class="pt-btn pt-btn-gold" data-pt-push-btn><i class="fa fa-bell"></i> Activer les notifications</button>
+    <div class="pt-muted pt-small" data-pt-push-ios hidden style="margin-top:8px">Sur iPhone, installez d'abord l'application sur l'écran d'accueil (voir ci-dessous), puis ouvrez-la depuis l'icône.</div>
 </div>
 
 <?php if ($site && trim((string)($site['pt_consignes'] ?? '')) !== ''): ?>

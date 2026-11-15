@@ -15,6 +15,9 @@ $enPoste = $db->query("SELECT s.id, s.debut_retenu, s.debut_reel, s.alertes, a.n
     FROM pt_services s JOIN agents a ON a.id = s.agent_id JOIN missions m ON m.id = s.mission_id
     WHERE s.fin_retenu IS NULL AND s.statut <> 'annule' ORDER BY s.debut_reel")->fetchAll();
 $nbVerif = (int)$db->query("SELECT COUNT(*) FROM pt_services WHERE statut = 'a_verifier'")->fetchColumn();
+$sosOuverts = $db->query("SELECT e.id, e.survenu_le, a.prenom, a.nom, m.nom AS site_nom FROM pt_evenements e JOIN agents a ON a.id = e.agent_id
+    LEFT JOIN missions m ON m.id = e.mission_id WHERE e.type = 'sos' AND e.statut <> 'clos' ORDER BY e.survenu_le DESC")->fetchAll();
+$nbIncidents = (int)$db->query("SELECT COUNT(*) FROM pt_evenements WHERE type = 'incident' AND statut <> 'clos'")->fetchColumn();
 $nbAgentsSansSite = (int)$db->query("SELECT COUNT(*) FROM agents a WHERE a.actif = 1 AND (a.statut_inscription IS NULL OR a.statut_inscription = 'validee')
     AND NOT EXISTS (SELECT 1 FROM mission_agents ma JOIN missions m ON m.id = ma.mission_id AND m.actif = 1 WHERE ma.agent_id = a.id)")->fetchColumn();
 
@@ -33,6 +36,17 @@ ptAdminHead('Tableau de bord', 'dashboard');
     </div>
 </div>
 
+<?php foreach ($sosOuverts as $s): ?>
+    <a href="evenements.php?id=<?= (int)$s['id'] ?>" class="alert alert-danger d-flex align-items-center gap-3 text-decoration-none">
+        <i class="fa fa-bell fa-shake fa-lg"></i>
+        <div><strong>SOS — <?= h($s['prenom'] . ' ' . $s['nom']) ?></strong> · <?= h($s['site_nom'] ?: 'site inconnu') ?> · <?= date('d/m H\hi', strtotime($s['survenu_le'])) ?>
+            <div class="small">Cliquez pour voir la position et traiter l'alerte.</div></div>
+    </a>
+<?php endforeach; ?>
+<?php if ($nbIncidents): ?>
+    <a href="evenements.php?type=incident&statut=ouvert&du=<?= date('Y-m-d', strtotime('-60 days')) ?>" class="alert alert-warning d-block small text-decoration-none">
+        <i class="fa fa-triangle-exclamation me-1"></i><?= $nbIncidents ?> incident(s) non clos. Voir les événements</a>
+<?php endif; ?>
 <div class="row g-3 mb-3">
     <div class="col-6 col-lg-3"><div class="pta-kpi"><div class="v text-success"><?= count($enPoste) ?></div><div class="l">Agents en poste maintenant</div></div></div>
     <div class="col-6 col-lg-3"><a class="pta-kpi d-block text-decoration-none" href="pointages.php?statut=a_verifier&du=<?= date('Y-m-d', strtotime('-60 days')) ?>"><div class="v <?= $nbVerif ? 'text-danger' : '' ?>"><?= $nbVerif ?></div><div class="l">Pointages à vérifier</div></a></div>
@@ -80,4 +94,4 @@ ptAdminHead('Tableau de bord', 'dashboard');
     <div class="small text-muted mb-2">Adresse à communiquer à vos agents (ils peuvent l'ajouter à leur écran d'accueil) :</div>
     <div class="pta-link-box"><?= h(ptUrl('')) ?></div>
 </div>
-<?php ptAdminFoot();
+<?php ptAdminFoot('<script>setTimeout(function () { location.reload(); }, 60000);</script>');

@@ -24,7 +24,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($selfie, ['non', 'optionnel', 'obligatoire'], true)) $selfie = 'optionnel';
     $marque = trim((string)($_POST['marque'] ?? ''));
 
+    $emails = implode(', ', array_filter(array_map('trim', explode(',', (string)($_POST['alerte_emails'] ?? '')))));
+    foreach (array_filter(array_map('trim', explode(',', $emails))) as $em) {
+        if (!filter_var($em, FILTER_VALIDATE_EMAIL)) $errors[] = "Email d'alerte invalide : $em";
+    }
+    $rappel = max(0, min(120, (int)($_POST['rappel_avant'] ?? 15)));
+    $nonPris = max(5, min(180, (int)($_POST['non_pris'] ?? 15)));
+
     if (!$errors) {
+        setParam('pointage_alerte_emails', $emails);
+        setParam('pointage_rappel_avant_min', (string)$rappel);
+        setParam('pointage_alerte_non_pris_min', (string)$nonPris);
         setParam('pointage_selfie', $selfie);
         setParam('pointage_marque', mb_substr($marque, 0, 80));
         setParam('pointage_contact_nom', $cNom !== '' ? $cNom : 'Permanence');
@@ -114,6 +124,31 @@ ptAdminHead('Paramètres', 'parametres');
                 <input class="form-check-input" type="checkbox" name="nouvelle_version" value="1">
                 <span class="form-check-label">Changement important : publier une nouvelle version, que chaque agent devra relire et valider à sa prochaine ouverture.</span>
             </label>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="pta-card">
+            <h2><i class="fa fa-bell me-1 text-warning"></i> Alertes et rappels</h2>
+            <label class="form-label small fw-semibold">Emails prévenus en cas de SOS, de poste non pris ou d'incident critique</label>
+            <input class="form-control mb-2" name="alerte_emails" value="<?= h(getParam('pointage_alerte_emails', '')) ?>" placeholder="direction@…, astreinte@…">
+            <div class="row g-2">
+                <div class="col-6"><label class="form-label small fw-semibold">Rappel à l'agent avant sa vacation</label>
+                    <div class="input-group"><input class="form-control" type="number" min="0" max="120" name="rappel_avant" value="<?= (int)getParam('pointage_rappel_avant_min', '15') ?>"><span class="input-group-text">min</span></div></div>
+                <div class="col-6"><label class="form-label small fw-semibold">Alerte « poste non pris » après</label>
+                    <div class="input-group"><input class="form-control" type="number" min="5" max="180" name="non_pris" value="<?= (int)getParam('pointage_alerte_non_pris_min', '15') ?>"><span class="input-group-text">min</span></div></div>
+            </div>
+            <div class="small text-muted mt-2">Les alertes arrivent aussi en notification sur votre téléphone et votre ordinateur : bouton <i class="fa fa-bell"></i> « Activer les alertes » en haut de page. Les rappels concernent les vacations prévues au planning.</div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="pta-card">
+            <h2><i class="fa fa-stopwatch me-1 text-warning"></i> Tâche planifiée (rappels à l'heure)</h2>
+            <?php $ts = (int)getParam('pointage_taches_ts', '0'); ?>
+            <div class="small mb-2">Dernière exécution : <strong><?= $ts ? date('d/m/Y H:i', $ts) : 'jamais' ?></strong>
+                <?= $ts && time() - $ts > 900 ? ' <span class="text-danger">(il y a plus de 15 min : configurez la tâche ci-dessous)</span>' : '' ?></div>
+            <div class="small text-muted mb-1">Adresse à appeler toutes les 5 minutes :</div>
+            <div class="pta-link-box mb-2"><?= h(ptUrl('cron.php?cle=' . getParam('pointage_cron_cle', ''))) ?></div>
+            <div class="small text-muted">LWS : Espace client → votre hébergement → <strong>Tâches planifiées (Cron)</strong> → ajouter, fréquence « toutes les 5 minutes », type URL. Ou gratuitement sur <strong>cron-job.org</strong>. Sans cela, les rappels partent seulement quand quelqu'un utilise l'outil.</div>
         </div>
     </div>
     <?php if (ptAdminCan('edit')): ?>

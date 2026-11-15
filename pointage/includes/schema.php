@@ -12,7 +12,7 @@
  * s'exécute qu'une fois.
  */
 
-const PT_SCHEMA_VERSION = 3;
+const PT_SCHEMA_VERSION = 4;
 
 function ensurePointageSchema(): void {
     static $done = false;
@@ -172,6 +172,99 @@ function ensurePointageSchema(): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)")->execute(['pointage_selfie', 'optionnel']);
+    }
+
+    if ($current < 4) {
+        // Événements terrain : incidents, SOS, main courante
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_evenements (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            uuid CHAR(36) DEFAULT NULL,
+            agent_id INT NOT NULL,
+            mission_id INT DEFAULT NULL,
+            service_id INT DEFAULT NULL,
+            type ENUM('incident','sos','main_courante') NOT NULL DEFAULT 'incident',
+            categorie VARCHAR(50) DEFAULT NULL,
+            gravite ENUM('info','faible','moyenne','haute','critique') NOT NULL DEFAULT 'info',
+            description TEXT,
+            photos TEXT,
+            lat DECIMAL(10,7) DEFAULT NULL,
+            lng DECIMAL(10,7) DEFAULT NULL,
+            precision_m INT DEFAULT NULL,
+            survenu_le DATETIME NOT NULL,
+            statut ENUM('ouvert','en_cours','clos') NOT NULL DEFAULT 'ouvert',
+            visible_client TINYINT(1) NOT NULL DEFAULT 1,
+            commentaire TEXT,
+            traite_par INT DEFAULT NULL,
+            traite_le DATETIME DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_uuid (uuid),
+            INDEX idx_mission (mission_id, survenu_le),
+            INDEX idx_statut (statut, type)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Abonnements aux notifications push (agents et responsables)
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_push (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            agent_id INT DEFAULT NULL,
+            user_id INT DEFAULT NULL,
+            endpoint VARCHAR(600) NOT NULL,
+            p256dh VARCHAR(200) NOT NULL,
+            auth VARCHAR(100) NOT NULL,
+            user_agent VARCHAR(255) DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_endpoint (endpoint(255)),
+            INDEX idx_agent (agent_id),
+            INDEX idx_user (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Anti-doublon des rappels / alertes / tâches planifiées
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_notifs (
+            cle VARCHAR(150) PRIMARY KEY,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Portails clients (lien sécurisé, lecture seule)
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_portails (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            token CHAR(64) NOT NULL,
+            libelle VARCHAR(150) NOT NULL,
+            client_id INT DEFAULT NULL,
+            missions VARCHAR(500) NOT NULL DEFAULT '',
+            email VARCHAR(255) DEFAULT NULL,
+            voir_heures TINYINT(1) NOT NULL DEFAULT 1,
+            voir_evenements TINYINT(1) NOT NULL DEFAULT 1,
+            voir_photos TINYINT(1) NOT NULL DEFAULT 0,
+            envoi_hebdo TINYINT(1) NOT NULL DEFAULT 0,
+            expire_le DATE DEFAULT NULL,
+            revoque TINYINT(1) NOT NULL DEFAULT 0,
+            derniere_visite DATETIME DEFAULT NULL,
+            created_by INT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_token (token)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Signatures des rapports par le client
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_signatures (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            portail_id INT NOT NULL,
+            mission_id INT DEFAULT NULL,
+            periode_du DATE NOT NULL,
+            periode_au DATE NOT NULL,
+            total_min INT NOT NULL DEFAULT 0,
+            nom VARCHAR(150) NOT NULL,
+            fonction VARCHAR(150) DEFAULT NULL,
+            signature MEDIUMTEXT NOT NULL,
+            ip VARCHAR(45) DEFAULT NULL,
+            user_agent VARCHAR(255) DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_portail (portail_id, periode_du)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $ins = $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)");
+        $ins->execute(['pointage_cron_cle', bin2hex(random_bytes(16))]);
+        $ins->execute(['pointage_alerte_emails', getParam('entreprise_email', '')]);
+        $ins->execute(['pointage_rappel_avant_min', '15']);
+        $ins->execute(['pointage_alerte_non_pris_min', '15']);
     }
 
     setParam('pointage_schema_version', (string)PT_SCHEMA_VERSION);

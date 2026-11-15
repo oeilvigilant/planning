@@ -8,6 +8,8 @@ require_once __DIR__ . '/core.php';
 require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/metier.php';
 require_once __DIR__ . '/agent_auth.php';
+require_once __DIR__ . '/notify.php';
+require_once __DIR__ . '/taches.php';
 
 ptRedirectionCanonique();
 
@@ -25,9 +27,12 @@ if (session_status() === PHP_SESSION_NONE) {
 
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-store, private');   // jamais de page personnelle dans un cache partagé
-header('Referrer-Policy: same-origin');
+// Origine seule vers l'extérieur (jamais l'URL complète, qui peut contenir un jeton) ;
+// requise par les tuiles OpenStreetMap.
+header('Referrer-Policy: strict-origin-when-cross-origin');
 
 ensurePointageSchema();
+ptTachesSiBesoin();
 
 function ptIsHttps(): bool {
     return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
