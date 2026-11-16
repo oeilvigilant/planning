@@ -11,6 +11,7 @@ require_once __DIR__ . '/agent_auth.php';
 require_once __DIR__ . '/notify.php';
 require_once __DIR__ . '/pointer.php';
 require_once __DIR__ . '/rondes.php';
+require_once __DIR__ . '/inscriptions.php';
 require_once __DIR__ . '/taches.php';
 
 ptRedirectionCanonique();

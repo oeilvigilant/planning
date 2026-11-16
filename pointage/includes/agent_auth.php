@@ -22,13 +22,14 @@ function ptCurrentAgent(): ?array {
     $id = ptAgentId();
     if (!$id) { $cache = false; return null; }
 
-    $st = getDB()->prepare("SELECT a.id, a.nom, a.prenom, a.matricule, a.telephone, a.photo, a.actif,
+    $st = getDB()->prepare("SELECT a.id, a.nom, a.prenom, a.matricule, a.telephone, a.photo, a.actif, a.statut_inscription,
             pa.rgpd_version, pa.pin_hash
         FROM agents a JOIN pt_acces pa ON pa.agent_id = a.id
         WHERE a.id = ?");
     $st->execute([$id]);
     $row = $st->fetch();
-    if (!$row || !(int)$row['actif'] || empty($row['pin_hash'])) {
+    $enAttente = $row && $row['statut_inscription'] === 'en_attente';
+    if (!$row || (!(int)$row['actif'] && !$enAttente) || empty($row['pin_hash'])) {
         ptAgentLogout(false);
         $cache = false;
         return null;
@@ -41,6 +42,7 @@ function ptCurrentAgent(): ?array {
 function ptRequireAgent(bool $checkRgpd = true): array {
     $agent = ptCurrentAgent();
     if (!$agent) ptRedirect('login.php');
+    if ($agent['statut_inscription'] === 'en_attente') ptRedirect('attente.php');
     if ($checkRgpd && (int)$agent['rgpd_version'] < ptRgpdVersion()) ptRedirect('rgpd.php');
     return $agent;
 }
@@ -49,6 +51,9 @@ function ptRequireAgent(bool $checkRgpd = true): array {
 function ptRequireAgentApi(): array {
     $agent = ptCurrentAgent();
     if (!$agent) ptJson(['ok' => false, 'message' => 'Session expirée, reconnectez-vous.', 'relogin' => true], 401);
+    if ($agent['statut_inscription'] === 'en_attente') {
+        ptJson(['ok' => false, 'message' => 'Votre inscription attend la validation de votre responsable.'], 403);
+    }
     if ((int)$agent['rgpd_version'] < ptRgpdVersion()) {
         ptJson(['ok' => false, 'message' => 'Veuillez lire et accepter l\'information RGPD.', 'rgpd' => true], 403);
     }
@@ -131,7 +136,7 @@ function ptAgentLoginPin(string $identifiant, string $pin): array {
 
     $st = $db->prepare("SELECT a.id, a.telephone, a.matricule, pa.pin_hash, pa.pin_essais, pa.bloque_jusqua
         FROM agents a JOIN pt_acces pa ON pa.agent_id = a.id
-        WHERE a.actif = 1 AND pa.pin_hash IS NOT NULL");
+        WHERE (a.actif = 1 OR a.statut_inscription = 'en_attente') AND pa.pin_hash IS NOT NULL");
     $st->execute();
     $telCherche = ptNormaliserTel($identifiant);
     $cible = null;

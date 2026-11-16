@@ -74,6 +74,8 @@ ptAdminHead('Agents & accès', 'agents');
             <input class="form-control form-control-sm" name="q" value="<?= h($q) ?>" placeholder="Rechercher un agent…" style="min-width:200px">
             <button class="btn btn-sm btn-outline-secondary"><i class="fa fa-search"></i></button>
         </form>
+        <?php $nbAttente = count(ptInscriptionsEnAttente()); ?>
+        <a class="btn btn-sm <?= $nbAttente ? 'btn-warning' : 'btn-outline-secondary' ?>" href="inscriptions.php"><i class="fa fa-link me-1"></i>Liens d'inscription<?= $nbAttente ? ' · ' . $nbAttente . ' à valider' : '' ?></a>
         <?php if (ptAdminCan('create')): ?>
         <a class="btn btn-sm btn-pta" href="agent.php"><i class="fa fa-user-plus me-1"></i>Nouvel agent</a>
         <?php endif; ?>

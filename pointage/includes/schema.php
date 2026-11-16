@@ -12,7 +12,7 @@
  * s'exécute qu'une fois.
  */
 
-const PT_SCHEMA_VERSION = 7;
+const PT_SCHEMA_VERSION = 8;
 
 function ensurePointageSchema(): void {
     static $done = false;
@@ -335,6 +335,28 @@ function ensurePointageSchema(): void {
         ptAddColumns($db, 'pt_passages', [
             'distance_m' => "INT DEFAULT NULL",
             'hors_zone'  => "TINYINT(1) NOT NULL DEFAULT 0",
+        ]);
+    }
+
+    if ($current < 8) {
+        // Liens d'inscription : l'agent crée lui-même son compte (nom, téléphone, PIN)
+        $db->exec("CREATE TABLE IF NOT EXISTS pt_inscriptions (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            token CHAR(32) NOT NULL,
+            libelle VARCHAR(150) NOT NULL,
+            mission_id INT DEFAULT NULL,
+            validation TINYINT(1) NOT NULL DEFAULT 1,
+            expire_le DATETIME DEFAULT NULL,
+            max_util INT DEFAULT NULL,
+            nb_util INT NOT NULL DEFAULT 0,
+            actif TINYINT(1) NOT NULL DEFAULT 1,
+            created_by INT DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_token (token)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        ptAddColumns($db, 'agents', [
+            'statut_inscription' => "VARCHAR(20) DEFAULT NULL",
+            'pt_inscription_id'  => "INT DEFAULT NULL",
         ]);
     }
 

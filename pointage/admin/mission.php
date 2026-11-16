@@ -150,10 +150,17 @@ ptAdminHead($isNew ? 'Nouveau site' : 'Site — ' . $m['nom'], 'sites', $extraHe
             <h2><i class="fa fa-location-dot me-1 text-warning"></i> Position du site</h2>
             <div class="position-relative mb-2">
                 <input class="form-control" name="pt_adresse" id="adresse" autocomplete="off"
-                       value="<?= h(($m['pt_adresse'] ?? '') ?: ($m['lieu'] ?? '')) ?>" placeholder="Tapez l'adresse du site…">
+                       value="<?= h(($m['pt_adresse'] ?? '') ?: ($m['lieu'] ?? '')) ?>" placeholder="Adresse, nom de lieu (gare, zone industrielle…) ou coordonnées GPS">
                 <div class="pta-suggest d-none" id="suggest"></div>
             </div>
-            <div class="small text-muted mb-2">Choisissez l'adresse dans la liste, puis ajustez le repère sur la carte si besoin (entrée du site, poste de garde…).</div>
+            <div class="small text-muted mb-2">Choisissez dans la liste, ou cliquez sur la carte. Pas d'adresse ? Collez des coordonnées GPS ou un lien Google Maps.</div>
+            <div class="input-group input-group-sm mb-2">
+                <span class="input-group-text"><i class="fa fa-crosshairs me-1"></i>GPS</span>
+                <input class="form-control" id="coords" inputmode="decimal" autocomplete="off" placeholder="48.856600, 2.352200"
+                       value="<?= $m['pt_latitude'] !== '' && $m['pt_latitude'] !== null ? h(rtrim(rtrim((string)$m['pt_latitude'], '0'), '.') . ', ' . rtrim(rtrim((string)$m['pt_longitude'], '0'), '.')) : '' ?>">
+                <button class="btn btn-outline-secondary" type="button" id="coordsBtn">Placer</button>
+            </div>
+            <div class="small text-danger d-none mb-2" id="coordsErr">Coordonnées non reconnues. Exemple : 48.8566, 2.3522</div>
             <div id="ptaMap"></div>
             <div class="d-flex align-items-center gap-3 mt-3">
                 <label class="small fw-semibold text-nowrap" for="rayon">Périmètre de pointage</label>
@@ -255,31 +262,74 @@ $scripts = <<<'HTML'
     map.on('click', function (e) { place(e.latlng.lat, e.latlng.lng); });
     rayonI.addEventListener('input', function () { rayonV.textContent = rayonI.value + ' m'; if (circle) circle.setRadius(+rayonI.value); });
 
-    // Recherche d'adresse : Base Adresse Nationale (api-adresse.data.gouv.fr)
-    var timer = null;
+    // Coordonnées GPS : « 48.8566, 2.3522 », « 48,8566 2,3522 » ou lien Google Maps (@lat,lng / q=lat,lng / !3dlat!4dlng)
+    var coordsI = document.getElementById('coords'), coordsErr = document.getElementById('coordsErr');
+    function lireCoords(txt) {
+        txt = String(txt || '').trim();
+        var m = txt.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/) || txt.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/)
+             || txt.match(/[?&](?:q|query|ll)=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/)
+             || txt.match(/^(-?\d{1,2}(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:[.,]\d+)?)$/);
+        if (!m) return null;
+        var lat = parseFloat(m[1].replace(',', '.')), lng = parseFloat(m[2].replace(',', '.'));
+        if (isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+        return [lat, lng];
+    }
+    function placerCoords() {
+        var c = lireCoords(coordsI.value);
+        coordsErr.classList.toggle('d-none', !!c || !coordsI.value.trim());
+        if (c) place(c[0], c[1], 18);
+    }
+    document.getElementById('coordsBtn').addEventListener('click', placerCoords);
+    coordsI.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); placerCoords(); } });
+    coordsI.addEventListener('paste', function () { setTimeout(placerCoords, 0); });
+    var placeOrig = place;
+    place = function (lat, lng, zoom) { placeOrig(lat, lng, zoom); coordsI.value = lat.toFixed(6) + ', ' + lng.toFixed(6); coordsErr.classList.add('d-none'); };
+
+    // Recherche : coordonnées collées, adresses (Base Adresse Nationale) et lieux (OpenStreetMap)
+    function ajouter(label, sous, icone, lat, lng, garderTexte) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.innerHTML = '<i class="fa ' + icone + ' me-2 text-muted"></i>';
+        b.appendChild(document.createTextNode(label));
+        if (sous) { var s2 = document.createElement('small'); s2.className = 'd-block text-muted ms-4'; s2.textContent = sous; b.appendChild(s2); }
+        b.addEventListener('click', function () {
+            if (!garderTexte) adr.value = label;
+            sug.classList.add('d-none');
+            place(lat, lng, 18);
+        });
+        sug.appendChild(b);
+    }
+    var timer = null, seq = 0;
     adr.addEventListener('input', function () {
         clearTimeout(timer);
         var q = adr.value.trim();
-        if (q.length < 4) { sug.classList.add('d-none'); return; }
+        if (q.length < 3) { sug.classList.add('d-none'); return; }
+        var c = lireCoords(q);
+        if (c) {
+            sug.innerHTML = '';
+            ajouter('Placer le point GPS ' + c[0].toFixed(6) + ', ' + c[1].toFixed(6), 'Coordonnées reconnues', 'fa-crosshairs', c[0], c[1], true);
+            sug.classList.remove('d-none');
+            return;
+        }
+        var mon = ++seq;
         timer = setTimeout(function () {
-            fetch('https://api-adresse.data.gouv.fr/search/?limit=6&q=' + encodeURIComponent(q))
-                .then(function (r) { return r.json(); })
-                .then(function (d) {
-                    sug.innerHTML = '';
-                    (d.features || []).forEach(function (f) {
-                        var b = document.createElement('button');
-                        b.type = 'button';
-                        b.textContent = f.properties.label;
-                        b.addEventListener('click', function () {
-                            adr.value = f.properties.label;
-                            sug.classList.add('d-none');
-                            place(f.geometry.coordinates[1], f.geometry.coordinates[0], 18);
-                        });
-                        sug.appendChild(b);
-                    });
-                    sug.classList.toggle('d-none', !(d.features || []).length);
-                }).catch(function () {});
-        }, 300);
+            var ban = fetch('https://api-adresse.data.gouv.fr/search/?limit=5&q=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); }).then(function (d) { return d.features || []; }).catch(function () { return []; });
+            var osm = fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=fr&countrycodes=fr,be,lu,ch,mc&q=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); }).catch(function () { return []; });
+            Promise.all([ban, osm]).then(function (res) {
+                if (mon !== seq) return;   // une frappe plus récente a relancé la recherche
+                sug.innerHTML = '';
+                res[0].forEach(function (f) {
+                    ajouter(f.properties.label, 'Adresse', 'fa-house', f.geometry.coordinates[1], f.geometry.coordinates[0]);
+                });
+                (res[1] || []).forEach(function (o) {
+                    var parts = String(o.display_name || '').split(', ');
+                    ajouter(o.name || parts[0], parts.slice(o.name ? 1 : 1, 4).join(', '), 'fa-map-location-dot', parseFloat(o.lat), parseFloat(o.lon));
+                });
+                sug.classList.toggle('d-none', !sug.children.length);
+            });
+        }, 450);
     });
     document.addEventListener('click', function (e) { if (!sug.contains(e.target) && e.target !== adr) sug.classList.add('d-none'); });
     adr.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
