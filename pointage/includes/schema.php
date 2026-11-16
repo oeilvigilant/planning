@@ -12,7 +12,7 @@
  * s'exécute qu'une fois.
  */
 
-const PT_SCHEMA_VERSION = 6;
+const PT_SCHEMA_VERSION = 7;
 
 function ensurePointageSchema(): void {
     static $done = false;
@@ -328,6 +328,14 @@ function ensurePointageSchema(): void {
             'photo'   => "VARCHAR(255) DEFAULT NULL",
         ]);
         $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)")->execute(['pointage_whatsapp_groupe', '']);
+    }
+
+    if ($current < 7) {
+        // Position des passages de ronde : distance au site et contrôle de zone
+        ptAddColumns($db, 'pt_passages', [
+            'distance_m' => "INT DEFAULT NULL",
+            'hors_zone'  => "TINYINT(1) NOT NULL DEFAULT 0",
+        ]);
     }
 
     setParam('pointage_schema_version', (string)PT_SCHEMA_VERSION);

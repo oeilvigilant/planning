@@ -100,6 +100,7 @@ ptHead('Accueil');
         <?php elseif ($selfie === 'obligatoire'): ?>
             <div class="pt-muted pt-small" style="margin-top:10px"><i class="fa fa-camera"></i> Une photo vous sera demandée (poste, tenue ou selfie).</div>
         <?php endif; ?>
+        <div class="pt-gps" data-pt-gps data-pt-geo-auto></div>
         <div class="pt-muted pt-small" data-pt-status style="margin-top:10px;min-height:1.3em"></div>
     <?php endif; ?>
     <input type="file" accept="image/*" capture="environment" data-pt-camera hidden>

@@ -56,11 +56,7 @@
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
     }
     function position() {
-        return new Promise(function (resolve) {
-            if (!navigator.geolocation) return resolve(null);
-            navigator.geolocation.getCurrentPosition(function (p) { resolve(p.coords); }, function () { resolve(null); },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
-        });
+        return window.OVPT && OVPT.position ? OVPT.position() : Promise.resolve(null);
     }
 
     form.addEventListener('submit', function (e) {
@@ -76,7 +72,7 @@
         submit.disabled = true;
         statusEl.innerHTML = '<i class="fa fa-location-crosshairs fa-beat"></i> Localisation…';
         position().then(function (c) {
-            if (c) { payload.lat = c.latitude; payload.lng = c.longitude; payload.precision = c.accuracy; }
+            if (c) { payload.lat = c.lat; payload.lng = c.lng; payload.precision = c.precision; }
             statusEl.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Envoi…';
             if (!navigator.onLine) throw { offline: true };
             return fetch(API, { method: 'POST', credentials: 'same-origin',

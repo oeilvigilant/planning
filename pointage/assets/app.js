@@ -86,12 +86,7 @@
         });
     }
     function getPosition() {
-        return new Promise(function (resolve) {
-            if (!navigator.geolocation) return resolve(null);
-            navigator.geolocation.getCurrentPosition(function (p) {
-                resolve({ lat: p.coords.latitude, lng: p.coords.longitude, precision: p.coords.accuracy });
-            }, function () { resolve(null); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
-        });
+        return window.OVPT && OVPT.position ? OVPT.position() : Promise.resolve(null);
     }
     function takePhoto() {
         return new Promise(function (resolve) {
@@ -135,6 +130,7 @@
         });
     }
 
+    var sansGps = false;
     /* ---------- Pointer ---------- */
     function pointer() {
         if (busy) return;
@@ -161,16 +157,17 @@
             status('<i class="fa fa-location-crosshairs fa-beat"></i> Localisation…');
             return getPosition();
         }).then(function (pos) {
+            sansGps = !pos;
             if (pos) { payload.lat = pos.lat; payload.lng = pos.lng; payload.precision = pos.precision; }
             status('<i class="fa fa-spinner fa-spin"></i> Envoi…');
             if (!navigator.onLine) throw { offline: true };
             return send(payload).catch(function () { throw { offline: true }; });
         }).then(function (res) {
             if (res.ok) {
-                status('');
+                status(sansGps && OVPT.geoErreur && OVPT.geoErreur() ? '<i class="fa fa-location-crosshairs"></i> ' + OVPT.geoErreur() : '', 'err');
                 toast(res.message, (res.alertes || []).some(function (a) { return a !== 'hors_ligne'; }) ? 'info' : 'success');
                 setEtat(res.etat, action === 'debut' ? new Date().toISOString() : '');
-                setTimeout(function () { location.reload(); }, 2500);
+                setTimeout(function () { location.reload(); }, sansGps ? 6000 : 2500);
             } else if (res._http === 401 && res.relogin) {
                 location.href = document.body.getAttribute('data-base') + '/login.php';
             } else if (res._http === 403 && res.rgpd) {

@@ -56,7 +56,7 @@ function ptEnregistrerPassage(array $agent, array $p, ?int $now = null): array {
         if ($st->fetchColumn()) return ['http' => 200, 'ok' => true, 'deja' => true, 'message' => 'Passage déjà enregistré.'];
     }
 
-    $sql = "SELECT pt.*, m.nom AS site_nom, m.actif AS site_actif, m.pt_ronde_mode AS mode FROM pt_points pt JOIN missions m ON m.id = pt.mission_id WHERE ";
+    $sql = "SELECT pt.*, m.nom AS site_nom, m.actif AS site_actif, m.pt_ronde_mode AS mode, m.pt_latitude, m.pt_longitude, m.pt_rayon_m FROM pt_points pt JOIN missions m ON m.id = pt.mission_id WHERE ";
     $st = $db->prepare($sql . ($code !== '' ? "pt.code = ?" : "pt.id = ?"));
     $st->execute([$code !== '' ? $code : $pointId]);
     $pt = $st->fetch();
@@ -89,22 +89,32 @@ function ptEnregistrerPassage(array $agent, array $p, ?int $now = null): array {
     $lat = isset($p['lat']) && is_numeric($p['lat']) ? (float)$p['lat'] : null;
     $lng = isset($p['lng']) && is_numeric($p['lng']) ? (float)$p['lng'] : null;
     if ($lat === null || $lng === null || abs($lat) > 90 || abs($lng) > 180) $lat = $lng = null;
+    require_once __DIR__ . '/pointer.php';
+    [$dist, $horsZone] = ptControleZone($pt, $lat, $lng);
 
-    $db->prepare("INSERT INTO pt_passages (uuid, point_id, mission_id, agent_id, service_id, scanne_le, lat, lng, precision_m, hors_ligne, note, methode, photo)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    $db->prepare("INSERT INTO pt_passages (uuid, point_id, mission_id, agent_id, service_id, scanne_le, lat, lng, precision_m, hors_ligne, note, methode, photo,
+        distance_m, hors_zone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
        ->execute([$uuid ?: null, $pt['id'], $pt['mission_id'], $agentId,
                   ($ouvert && (int)$ouvert['mission_id'] === (int)$pt['mission_id']) ? $ouvert['id'] : null,
                   date('Y-m-d H:i:s', $ts), $lat, $lng,
                   isset($p['precision']) && is_numeric($p['precision']) ? (int)round($p['precision']) : null,
                   !empty($p['hors_ligne']) ? 1 : 0, mb_substr(trim((string)($p['note'] ?? '')), 0, 255) ?: null,
-                  $methode, $photo]);
+                  $methode, $photo, $dist, $horsZone ? 1 : 0]);
 
     $etat = ptEtatRonde((int)$pt['mission_id'], $agentId, $ts);
     $msg = '✔ ' . $pt['nom'] . ' — ' . date('H\hi', $ts) . '. ';
     $complete = $etat['derniere_complete'] && strtotime($etat['derniere_complete']) === strtotime(date('Y-m-d H:i:s', $ts));
     $msg .= !$complete && $etat['restants'] ? $etat['faits'] . '/' . $etat['total'] . ' points, reste : ' . implode(', ', array_slice($etat['restants'], 0, 3)) . (count($etat['restants']) > 3 ? '…' : '') . '.'
                               : 'Ronde complète (' . $etat['total'] . '/' . $etat['total'] . ') !';
-    return ['http' => 200, 'ok' => true, 'message' => $msg, 'point' => $pt['nom'], 'consigne' => (string)$pt['consigne'], 'etat' => $etat];
+    if ($horsZone) {
+        $msg .= ' ⚠ Vous êtes à ' . ptFormatDistance($dist) . ' du site : signalé au responsable.';
+        try {
+            ptNotifierResponsables('Ronde hors zone', trim(($agent['prenom'] ?? '') . ' ' . ($agent['nom'] ?? '')) . ' — ' . $pt['site_nom'] . ', point « '
+                . $pt['nom'] . ' » validé à ' . ptFormatDistance($dist) . ' du site (' . date('H\hi', $ts) . ').', 'admin/rondes.php?site=' . (int)$pt['mission_id']);
+        } catch (Throwable $e) { error_log('OV Pointage — notif ronde hors zone : ' . $e->getMessage()); }
+    }
+    elseif ($lat === null) $msg .= ' (position non disponible)';
+    return ['http' => 200, 'ok' => true, 'message' => $msg, 'point' => $pt['nom'], 'hors_zone' => $horsZone, 'distance_m' => $dist, 'sans_gps' => $lat === null, 'consigne' => (string)$pt['consigne'], 'etat' => $etat];
 }
 
 /**

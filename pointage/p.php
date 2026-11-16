@@ -17,6 +17,7 @@ ptHead('Point de ronde');
     <?php ptBrand('Ronde'); ?>
     <div class="pt-card" data-pt-passage data-code="<?= h($code) ?>" data-api="<?= h(ptUrl('api/passage.php')) ?>" data-agent="<?= (int)$agent['id'] ?>">
         <i class="fa fa-qrcode" style="font-size:3rem;color:var(--pt-gold)"></i>
+        <div data-pt-geo-auto></div>
         <div class="pt-small" data-scan-status style="margin-top:14px;font-size:1rem"></div>
     </div>
     <a class="pt-btn pt-btn-gold" href="<?= h(ptUrl('ronde.php')) ?>"><i class="fa fa-list-check"></i> Voir ma ronde</a>

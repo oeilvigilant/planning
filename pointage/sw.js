@@ -4,7 +4,7 @@
  *   pour pouvoir pointer hors connexion (les pointages partent ensuite) ;
  * - API, espace responsable et portail client : jamais mis en cache.
  */
-var SHELL_CACHE = 'ovpt-shell-v5';
+var SHELL_CACHE = 'ovpt-shell-v6';
 var PAGES_CACHE = 'ovpt-pages';
 var SHELL = [
     './assets/pointage.css',

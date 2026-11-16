@@ -2,7 +2,7 @@
 /** Mise en page mobile de l'application agent. */
 
 /** Version des CSS/JS : à incrémenter à chaque modification (cache LWS et navigateurs). */
-const PT_ASSETS_V = '6';
+const PT_ASSETS_V = '7';
 
 function ptHead(string $title, array $opts = []): void {
     $bodyClass = $opts['bodyClass'] ?? '';

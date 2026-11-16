@@ -54,7 +54,9 @@ ptAdminHead('Rondes', 'rondes');
             <?php foreach ($passages as $p): ?>
                 <tr class="small"><td class="ps-3 text-nowrap"><?= date('d/m H:i', strtotime($p['scanne_le'])) ?></td><td class="fw-semibold"><?= h($p['point_nom']) ?></td>
                     <td><?= h($p['site_nom']) ?></td><td><?= h($p['prenom'] . ' ' . $p['nom']) ?></td>
-                    <td class="text-nowrap"><?php if ($p['lat']): ?><a target="_blank" rel="noopener" href="https://www.google.com/maps?q=<?= h($p['lat'] . ',' . $p['lng']) ?>"><i class="fa fa-map-pin"></i></a><?php endif; ?>
+                    <td class="text-nowrap"><?php if ($p['lat']): ?><a target="_blank" rel="noopener" title="Voir la position<?= $p['precision_m'] ? ' (± ' . (int)$p['precision_m'] . ' m)' : '' ?>" href="https://www.google.com/maps?q=<?= h($p['lat'] . ',' . $p['lng']) ?>"><i class="fa fa-map-pin"></i><?= $p['distance_m'] !== null ? ' ' . h(ptFormatDistance((int)$p['distance_m'])) : '' ?></a>
+                        <?= $p['hors_zone'] ? '<span class="pta-badge ko">hors zone</span>' : '' ?>
+                        <?php else: ?><span class="pta-badge wait">sans position</span><?php endif; ?>
                         <?= $p['hors_ligne'] ? '<span class="pta-badge off">hors connexion</span>' : '' ?></td></tr>
             <?php endforeach; ?>
             <?php if (!$passages): ?><tr><td colspan="5" class="text-center text-muted py-4">Aucun passage sur cette période.</td></tr><?php endif; ?>

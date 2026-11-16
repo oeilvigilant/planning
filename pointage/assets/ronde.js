@@ -14,11 +14,7 @@
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
     }
     function position() {
-        return new Promise(function (resolve) {
-            if (!navigator.geolocation) return resolve(null);
-            navigator.geolocation.getCurrentPosition(function (p) { resolve(p.coords); }, function () { resolve(null); },
-                { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
-        });
+        return window.OVPT && OVPT.position ? OVPT.position() : Promise.resolve(null);
     }
     function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
     function status(html, color) { if (statusEl) { statusEl.innerHTML = html; statusEl.style.color = color || ''; } }
@@ -49,11 +45,12 @@
         status('<i class="fa fa-spinner fa-spin"></i> Enregistrement…');
         if (navigator.vibrate) navigator.vibrate(60);
         return position().then(function (c) {
-            if (c) { payload.lat = c.latitude; payload.lng = c.longitude; payload.precision = c.accuracy; }
+            if (c) { payload.lat = c.lat; payload.lng = c.lng; payload.precision = c.precision; }
             if (!navigator.onLine) throw { offline: true };
             return post(payload).catch(function () { throw { offline: true }; });
         }).then(function (res) {
-            status((res.ok ? '' : '<i class="fa fa-triangle-exclamation"></i> ') + esc(res.message) + (res.consigne ? '<br><em>' + esc(res.consigne) + '</em>' : ''),
+            var gpsInfo = !payload.lat && OVPT.geoErreur && OVPT.geoErreur() ? '<br><small><i class="fa fa-location-crosshairs"></i> ' + esc(OVPT.geoErreur()) + '</small>' : '';
+            status((res.ok ? '' : '<i class="fa fa-triangle-exclamation"></i> ') + esc(res.message) + (res.consigne ? '<br><em>' + esc(res.consigne) + '</em>' : '') + gpsInfo,
                 res.ok ? '#86efac' : '#fca5a5');
             if (res.ok && box) setTimeout(function () { location.reload(); }, 2200);
             return res;

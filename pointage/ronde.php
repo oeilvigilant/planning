@@ -35,6 +35,7 @@ ptHead('Ronde');
 <?php else: ?>
     <div class="pt-card" style="text-align:center" data-pt-ronde data-mode="<?= h($mode) ?>" data-api="<?= h(ptUrl('api/passage.php')) ?>" data-agent="<?= $agentId ?>">
         <div class="pt-card-label"><?= h($site['nom']) ?></div>
+        <div class="pt-gps" data-pt-gps data-pt-geo-auto></div>
         <div class="pt-total"><?= (int)$etat['faits'] ?> / <?= (int)$etat['total'] ?></div>
         <div class="pt-muted pt-small"><?= $etat['total'] > 1 ? 'points faits pour cette ronde' : 'ronde en cours' ?>
             <?= $etat['derniere_complete'] ? '· dernière ronde complète à ' . date('H\hi', strtotime($etat['derniere_complete'])) : '' ?>

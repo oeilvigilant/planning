@@ -83,7 +83,13 @@ function ptTraiterPointage(array $agent, array $p, ?int $now = null): array {
         $id = (int)$db->lastInsertId();
 
         $msg = 'Prise de service enregistrée à ' . date('H\hi', $ts) . ' — ' . $site['nom'] . '.';
-        if ($horsZone) $msg .= ' Vous êtes à ' . ptFormatDistance($dist) . ' du site : votre responsable sera prévenu.';
+        if ($horsZone) {
+            $msg .= ' Vous êtes à ' . ptFormatDistance($dist) . ' du site : votre responsable sera prévenu.';
+            try {
+                ptNotifierResponsables('Prise de service hors zone', trim($agent['prenom'] . ' ' . $agent['nom']) . ' — ' . $site['nom']
+                    . ' : à ' . ptFormatDistance($dist) . ' du site (' . date('H\hi', $ts) . ').', 'admin/pointages.php');
+            } catch (Throwable $e) { error_log('OV Pointage — notif hors zone : ' . $e->getMessage()); }
+        }
         elseif ($lat === null) $msg .= ' Position non disponible.';
         return ['http' => 200, 'ok' => true, 'service_id' => $id, 'etat' => 'en_service', 'message' => $msg, 'alertes' => $alertes];
     }

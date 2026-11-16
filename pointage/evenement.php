@@ -33,7 +33,7 @@ ptHead($type === 'main_courante' ? 'Main courante' : 'Signaler');
     <a href="?type=main_courante" class="<?= $type === 'main_courante' ? 'active' : '' ?>"><i class="fa fa-book"></i> Main courante</a>
 </div>
 
-<form class="pt-card" data-pt-evenement data-api="<?= h(ptUrl('api/evenement.php')) ?>" data-agent="<?= $agentId ?>" data-type="<?= $type ?>">
+<form class="pt-card" data-pt-geo-auto data-pt-evenement data-api="<?= h(ptUrl('api/evenement.php')) ?>" data-agent="<?= $agentId ?>" data-type="<?= $type ?>">
     <?php if (!$siteId && count($sites) > 1): ?>
         <label class="pt-label" style="margin-top:0">Site</label>
         <select class="pt-input" name="mission_id" required>
