@@ -83,7 +83,7 @@ function ptExecuterTaches(?int $now = null): array {
         $marge = max(0, (int)getParam('pointage_ronde_marge_min', '15'));
         $rs = $db->query("SELECT s.id, s.agent_id, s.mission_id, s.debut_reel, a.prenom, a.nom, m.nom AS site_nom, m.pt_ronde_freq_min AS freq
             FROM pt_services s JOIN agents a ON a.id = s.agent_id JOIN missions m ON m.id = s.mission_id
-            WHERE s.fin_retenu IS NULL AND s.statut <> 'annule' AND m.pt_ronde_freq_min > 0
+            WHERE s.fin_retenu IS NULL AND s.statut <> 'annule' AND m.pt_ronde_freq_min > 0 AND m.pt_ronde_mode <> 'aucune'
               AND EXISTS (SELECT 1 FROM pt_points p WHERE p.mission_id = m.id AND p.actif = 1)")->fetchAll();
         foreach ($rs as $s) {
             $freq = (int)$s['freq'] * 60;

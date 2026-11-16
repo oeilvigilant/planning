@@ -130,8 +130,24 @@ ptAdminHead('Portails clients', 'portails');
     <div class="d-flex flex-wrap gap-2 mt-2">
         <button class="btn btn-sm btn-outline-secondary" type="button" data-copy="<?= h($lien) ?>"><i class="fa fa-copy me-1"></i>Copier</button>
         <a class="btn btn-sm btn-outline-secondary" target="_blank" href="<?= h($lien) ?>"><i class="fa fa-up-right-from-square me-1"></i>Ouvrir</a>
-        <a class="btn btn-sm btn-outline-secondary" href="<?= h(ptUrl('client/rapport-pdf.php?t=' . $p['token'] . '&du=' . date('Y-m-01', strtotime('first day of last month')) . '&au=' . date('Y-m-t', strtotime('last day of last month')))) ?>"><i class="fa fa-file-pdf me-1"></i>PDF mois dernier</a>
-        <a class="btn btn-sm btn-outline-secondary" href="<?= h(ptUrl('client/rapport-pdf.php?t=' . $p['token'] . '&du=' . date('Y-m-01') . '&au=' . date('Y-m-d'))) ?>"><i class="fa fa-file-pdf me-1"></i>PDF ce mois</a>
+        <button class="btn btn-sm btn-pta" type="button" data-bs-toggle="collapse" data-bs-target="#pdf<?= (int)$p['id'] ?>"><i class="fa fa-file-pdf me-1"></i>Rapport PDF…</button>
+    </div>
+    <form class="collapse border rounded p-2 mt-2 small" id="pdf<?= (int)$p['id'] ?>" method="get" action="<?= h(ptUrl('client/rapport-pdf.php')) ?>">
+        <input type="hidden" name="t" value="<?= h($p['token']) ?>">
+        <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
+            <div><label class="form-label small mb-0">Du</label><input class="form-control form-control-sm" type="date" name="du" value="<?= date('Y-m-01', strtotime('first day of last month')) ?>"></div>
+            <div><label class="form-label small mb-0">Au</label><input class="form-control form-control-sm" type="date" name="au" value="<?= date('Y-m-t', strtotime('last day of last month')) ?>"></div>
+        </div>
+        <div class="d-flex flex-wrap gap-3">
+        <?php require_once __DIR__ . '/../includes/pdf.php';
+        $dispo = ptSectionsDemandees($p, null);
+        foreach (ptSectionsRapport() as $k => $l): if (!in_array($k, $dispo, true)) continue; ?>
+            <label class="form-check"><input class="form-check-input" type="checkbox" name="s[]" value="<?= $k ?>" checked><span class="form-check-label"><?= h($l) ?></span></label>
+        <?php endforeach; ?>
+        </div>
+        <button class="btn btn-sm btn-pta mt-2"><i class="fa fa-download me-1"></i>Générer</button>
+    </form>
+    <div>
         <a class="btn btn-sm btn-success" target="_blank" rel="noopener" href="https://wa.me/?text=<?= h(rawurlencode($msg)) ?>"><i class="fa-brands fa-whatsapp me-1"></i>WhatsApp</a>
         <?php if ($p['email']): ?><a class="btn btn-sm btn-outline-primary" href="mailto:<?= h($p['email']) ?>?subject=<?= h(rawurlencode('Suivi de prestation — ' . ptMarque())) ?>&body=<?= h(rawurlencode($msg)) ?>"><i class="fa fa-envelope me-1"></i>Email</a><?php endif; ?>
     </div>

@@ -141,9 +141,21 @@ else:
                 <div class="text-muted"><?= h($p['libelle']) ?><?= $p['client_nom'] ? ' · ' . h($p['client_nom']) : '' ?></div></div>
             <div class="text-end"><div class="fw-semibold">Du <?= date('d/m/Y', strtotime($du)) ?> au <?= date('d/m/Y', strtotime($au)) ?></div>
                 <div class="small text-muted">Édité le <?= date('d/m/Y à H:i') ?></div>
-                <a class="btn btn-sm btn-dark mt-2 no-print" href="rapport-pdf.php?t=<?= h($t) ?>&du=<?= h($du) ?>&au=<?= h($au) ?>"><i class="fa fa-file-pdf me-1"></i>Télécharger le PDF</a>
+                <button class="btn btn-sm btn-dark mt-2 no-print" type="button" data-bs-toggle="collapse" data-bs-target="#pdfOpts" onclick="document.getElementById('pdfOpts').classList.toggle('show')"><i class="fa fa-file-pdf me-1"></i>Télécharger le PDF</button>
                 <button class="btn btn-sm btn-outline-dark mt-2 no-print" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimer</button></div>
         </div>
+        <form class="collapse no-print border rounded p-3 mt-3" id="pdfOpts" method="get" action="rapport-pdf.php">
+            <input type="hidden" name="t" value="<?= h($t) ?>"><input type="hidden" name="du" value="<?= h($du) ?>"><input type="hidden" name="au" value="<?= h($au) ?>">
+            <div class="small fw-semibold mb-2">Que voulez-vous dans le PDF ?</div>
+            <div class="d-flex flex-wrap gap-3">
+            <?php require_once __DIR__ . '/../includes/pdf.php';
+            $dispo = ptSectionsDemandees($p, null);
+            foreach (ptSectionsRapport() as $k => $l): if (!in_array($k, $dispo, true)) continue; ?>
+                <label class="form-check small"><input class="form-check-input" type="checkbox" name="s[]" value="<?= $k ?>" checked><span class="form-check-label"><?= h($l) ?></span></label>
+            <?php endforeach; ?>
+            </div>
+            <button class="btn btn-sm btn-dark mt-2"><i class="fa fa-download me-1"></i>Générer le PDF</button>
+        </form>
         <hr>
         <div class="row text-center g-2 mb-3">
             <div class="col-4"><div class="cl-kpi"><?= ptFormatDuree($total) ?></div><div class="small text-muted">heures réalisées</div></div>

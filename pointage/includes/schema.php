@@ -12,7 +12,7 @@
  * s'exécute qu'une fois.
  */
 
-const PT_SCHEMA_VERSION = 5;
+const PT_SCHEMA_VERSION = 6;
 
 function ensurePointageSchema(): void {
     static $done = false;
@@ -313,6 +313,21 @@ function ensurePointageSchema(): void {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)")->execute(['pointage_ronde_marge_min', '15']);
+    }
+
+    if ($current < 6) {
+        // Mode de ronde par site : aucune / qr / photo / simple ; groupe WhatsApp par site
+        ptAddColumns($db, 'missions', [
+            'pt_ronde_mode'      => "VARCHAR(10) NOT NULL DEFAULT 'aucune'",
+            'pt_whatsapp_groupe' => "VARCHAR(255) DEFAULT NULL",
+        ]);
+        // Les sites qui avaient déjà des points de ronde restent en mode QR
+        $db->exec("UPDATE missions m SET pt_ronde_mode = 'qr' WHERE EXISTS (SELECT 1 FROM pt_points p WHERE p.mission_id = m.id)");
+        ptAddColumns($db, 'pt_passages', [
+            'methode' => "VARCHAR(10) NOT NULL DEFAULT 'qr'",
+            'photo'   => "VARCHAR(255) DEFAULT NULL",
+        ]);
+        $db->prepare("INSERT IGNORE INTO parametres (cle, valeur) VALUES (?, ?)")->execute(['pointage_whatsapp_groupe', '']);
     }
 
     setParam('pointage_schema_version', (string)PT_SCHEMA_VERSION);

@@ -87,7 +87,14 @@
             if (res.ok) {
                 statusEl.style.color = '#86efac';
                 statusEl.textContent = res.message;
-                setTimeout(function () { location.reload(); }, 1500);
+                // Partage WhatsApp : l'agent choisit le groupe (WhatsApp ne permet pas d'écrire directement dans un groupe)
+                var cats = form.querySelector('input[name="categorie"]:checked');
+                var txt = (payload.type === 'main_courante' ? '📒 Main courante' : '⚠️ Incident') + ' — '
+                    + (cats ? cats.parentElement.textContent.trim() : '') + '\n' + new Date().toLocaleString('fr-FR')
+                    + (payload.lat ? '\nhttps://maps.google.com/?q=' + payload.lat + ',' + payload.lng : '') + '\n' + (payload.description || '');
+                submit.outerHTML = '<a class="pt-btn pt-btn-green" target="_blank" rel="noopener" href="https://wa.me/?text=' + encodeURIComponent(txt)
+                    + '"><i class="fa-brands fa-whatsapp"></i> Partager dans un groupe WhatsApp</a>'
+                    + '<a class="pt-btn pt-btn-ghost" style="margin-top:10px" href="' + location.pathname + location.search + '">Terminé</a>';
             } else {
                 statusEl.style.color = '#fca5a5';
                 statusEl.textContent = res.message || 'Envoi refusé.';

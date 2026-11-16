@@ -88,7 +88,8 @@ function ptMarque(): string {
 /** Sites actifs auxquels l'agent est affecté. */
 function ptSitesAgent(int $agentId): array {
     $st = getDB()->prepare("SELECT m.id, m.nom, m.lieu, m.pt_adresse, m.pt_latitude, m.pt_longitude, m.pt_rayon_m,
-            m.pt_responsable_nom, m.pt_responsable_tel, m.pt_responsable_whatsapp, m.pt_consignes, c.nom AS client_nom
+            m.pt_responsable_nom, m.pt_responsable_tel, m.pt_responsable_whatsapp, m.pt_consignes, m.pt_ronde_mode, m.pt_ronde_freq_min,
+            m.pt_whatsapp_groupe, c.nom AS client_nom
         FROM mission_agents ma
         JOIN missions m ON m.id = ma.mission_id AND m.actif = 1
         LEFT JOIN clients c ON c.id = m.client_id
@@ -255,6 +256,18 @@ function ptVentiler(string $debut, string $fin): array {
 /** Libellé court d'un agent pour un client : « Prénom N. ». */
 function ptNomCourt(string $prenom, string $nom): string {
     return $prenom . ' ' . mb_strtoupper(mb_substr($nom, 0, 1)) . '.';
+}
+
+/** Valide un lien d'invitation de groupe WhatsApp (sinon chaîne vide). */
+function ptLienGroupeWhatsapp(string $lien): string {
+    $lien = trim($lien);
+    return preg_match('#^https://chat\.whatsapp\.com/[A-Za-z0-9]{10,40}$#', $lien) ? $lien : '';
+}
+
+/** Lien du groupe WhatsApp pour un site (sinon groupe par défaut, sinon vide). */
+function ptGroupeWhatsapp(?array $site): string {
+    $g = ptLienGroupeWhatsapp((string)($site['pt_whatsapp_groupe'] ?? ''));
+    return $g !== '' ? $g : ptLienGroupeWhatsapp(getParam('pointage_whatsapp_groupe', ''));
 }
 
 /** Numéro au format international pour wa.me (France par défaut). */

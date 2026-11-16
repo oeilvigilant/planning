@@ -31,7 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rappel = max(0, min(120, (int)($_POST['rappel_avant'] ?? 15)));
     $nonPris = max(5, min(180, (int)($_POST['non_pris'] ?? 15)));
 
+    $groupe = trim((string)($_POST['whatsapp_groupe'] ?? ''));
+    if ($groupe !== '' && ptLienGroupeWhatsapp($groupe) === '') $errors[] = 'Lien de groupe WhatsApp invalide (il doit commencer par https://chat.whatsapp.com/).';
+
     if (!$errors) {
+        setParam('pointage_whatsapp_groupe', ptLienGroupeWhatsapp($groupe));
         setParam('pointage_alerte_emails', $emails);
         setParam('pointage_rappel_avant_min', (string)$rappel);
         setParam('pointage_alerte_non_pris_min', (string)$nonPris);
@@ -92,7 +96,10 @@ ptAdminHead('Paramètres', 'parametres');
             <label class="form-label small fw-semibold" for="ct"><i class="fa fa-phone"></i> Téléphone</label>
             <input class="form-control mb-2" id="ct" name="contact_tel" value="<?= h(getParam('pointage_contact_tel', '')) ?>" placeholder="06 12 34 56 78">
             <label class="form-label small fw-semibold" for="cw"><i class="fa-brands fa-whatsapp text-success"></i> WhatsApp <span class="text-muted fw-normal">(si différent)</span></label>
-            <input class="form-control" id="cw" name="contact_whatsapp" value="<?= h(getParam('pointage_contact_whatsapp', '')) ?>" placeholder="Même numéro si vide">
+            <input class="form-control mb-2" id="cw" name="contact_whatsapp" value="<?= h(getParam('pointage_contact_whatsapp', '')) ?>" placeholder="Même numéro si vide">
+            <label class="form-label small fw-semibold" for="wg"><i class="fa-brands fa-whatsapp text-success"></i> Groupe WhatsApp des agents</label>
+            <input class="form-control" id="wg" name="whatsapp_groupe" value="<?= h(getParam('pointage_whatsapp_groupe', '')) ?>" placeholder="https://chat.whatsapp.com/…">
+            <div class="small text-muted mt-1">Bouton « Groupe WhatsApp » chez l'agent (un groupe propre à un site peut être indiqué sur la fiche du site). WhatsApp → groupe → nom du groupe → « Inviter via un lien ».</div>
         </div>
         <div class="pta-card">
             <h2><i class="fa fa-clock me-1 text-warning"></i> Tolérance de pointage</h2>

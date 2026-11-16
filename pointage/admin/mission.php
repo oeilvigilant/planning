@@ -77,7 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $freq = (int)($_POST['pt_ronde_freq_min'] ?? 0);
         if (!in_array($freq, [0, 30, 45, 60, 90, 120, 180, 240, 360], true)) $freq = 0;
-        $db->prepare("UPDATE missions SET pt_ronde_freq_min = ? WHERE id = ?")->execute([$freq, $id]);
+        $mode = (string)($_POST['pt_ronde_mode'] ?? 'aucune');
+        if (!isset(ptModesRonde()[$mode])) $mode = 'aucune';
+        $db->prepare("UPDATE missions SET pt_ronde_freq_min = ?, pt_ronde_mode = ?, pt_whatsapp_groupe = ? WHERE id = ?")
+           ->execute([$mode === 'aucune' ? 0 : $freq, $mode, ptLienGroupeWhatsapp((string)($_POST['pt_whatsapp_groupe'] ?? '')), $id]);
+        // Photo ou validation simple sans point défini : un point unique « Ronde du site »
+        if (in_array($mode, ['photo', 'simple'], true) && !ptPointsSite($id)) {
+            $db->prepare("INSERT INTO pt_points (mission_id, nom, code, ordre) VALUES (?, 'Ronde du site', ?, 1)")->execute([$id, ptGenererCodePoint()]);
+        }
 
         // Affectations : seuls les agents actifs listés ici sont concernés
         if ($agentIds) {
@@ -180,13 +187,21 @@ ptAdminHead($isNew ? 'Nouveau site' : 'Site — ' . $m['nom'], 'sites', $extraHe
             <label class="form-label small fw-semibold" for="rt">Téléphone</label>
             <input class="form-control mb-2" id="rt" name="pt_responsable_tel" value="<?= h((string)$m['pt_responsable_tel']) ?>" placeholder="06 12 34 56 78">
             <label class="form-label small fw-semibold" for="rw"><i class="fa-brands fa-whatsapp text-success"></i> WhatsApp <span class="text-muted fw-normal">(si différent)</span></label>
-            <input class="form-control" id="rw" name="pt_responsable_whatsapp" value="<?= h((string)($m['pt_responsable_whatsapp'] ?? '')) ?>" placeholder="Même numéro si vide">
+            <input class="form-control mb-2" id="rw" name="pt_responsable_whatsapp" value="<?= h((string)($m['pt_responsable_whatsapp'] ?? '')) ?>" placeholder="Même numéro si vide">
+            <label class="form-label small fw-semibold" for="rg"><i class="fa-brands fa-whatsapp text-success"></i> Groupe WhatsApp du site <span class="text-muted fw-normal">(facultatif)</span></label>
+            <input class="form-control" id="rg" name="pt_whatsapp_groupe" value="<?= h((string)($m['pt_whatsapp_groupe'] ?? '')) ?>" placeholder="https://chat.whatsapp.com/…">
+            <div class="small text-muted mt-1">Dans WhatsApp : ouvrez le groupe → nom du groupe → « Inviter via un lien » → copier.</div>
             <div class="small text-muted mt-2">Si vide : contact par défaut <strong><?= h(getParam('pointage_contact_nom', 'Permanence')) ?></strong>
                 <?= h(getParam('pointage_contact_tel', '') ?: '(non renseigné)') ?> — <a href="parametres.php">modifier</a>.</div>
         </div>
         <div class="pta-card">
-            <h2><i class="fa fa-qrcode me-1 text-warning"></i> Rondes</h2>
-            <label class="form-label small fw-semibold" for="freq">Une ronde complète</label>
+            <h2><i class="fa fa-route me-1 text-warning"></i> Rondes</h2>
+            <label class="form-label small fw-semibold" for="rmode">Comment l'agent valide sa ronde</label>
+            <select class="form-select mb-2" id="rmode" name="pt_ronde_mode">
+                <?php $rm = (string)($m['pt_ronde_mode'] ?? 'aucune');
+                foreach (ptModesRonde() as $k => $l): ?><option value="<?= $k ?>" <?= $rm === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
+            </select>
+            <label class="form-label small fw-semibold" for="freq">Fréquence : une ronde complète</label>
             <select class="form-select mb-2" id="freq" name="pt_ronde_freq_min">
                 <?php $fq = (int)($m['pt_ronde_freq_min'] ?? 0);
                 foreach ([0 => 'Pas de fréquence imposée', 30 => 'toutes les 30 min', 45 => 'toutes les 45 min', 60 => 'toutes les heures', 90 => 'toutes les 1 h 30',

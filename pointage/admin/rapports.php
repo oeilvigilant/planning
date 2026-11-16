@@ -29,6 +29,7 @@ foreach ($st->fetchAll() as $s) {
     foreach (['total', 'nuit', 'dimanche', 'ferie'] as $c) { $agents[$k][$c] += $v[$c]; $tot[$c] += $v[$c]; }
     $agents[$k]['n']++; $tot['n']++;
     $agents[$k]['sites'][$s['site_nom']] = ($agents[$k]['sites'][$s['site_nom']] ?? 0) + $v['total'];
+    $agents[$k]['services'][] = ['debut' => $s['debut_retenu'], 'fin' => $s['fin_retenu'], 'site' => $s['site_nom'], 'min' => $v['total'], 'statut' => $s['statut']];
     if ($s['statut'] === 'a_verifier') { $agents[$k]['verif']++; $tot['verif']++; }
     $sitesT[$sk]['total'] += $v['total']; $sitesT[$sk]['n']++; $sitesT[$sk]['agents'][$k] = true;
 }
@@ -39,7 +40,8 @@ if (($_GET['export'] ?? '') === 'pdf') {
     require_once __DIR__ . '/../includes/pdf.php';
     $titreSite = 'Tous les sites';
     if ($fSite) { $s = ptSite($fSite); $titreSite = $s ? $s['nom'] : $titreSite; }
-    ptPdfEnvoyer(ptRapportHeuresPdf($agents, $tot, $du, $au, $titreSite), 'heures_' . $du . '_' . $au . '.pdf');
+    $opts = array_values(array_intersect(['ventilation', 'sites', 'services'], (array)($_GET['o'] ?? ['ventilation', 'sites'])));
+    ptPdfEnvoyer(ptRapportHeuresPdf($agents, $tot, $du, $au, $titreSite, $opts), 'heures_' . $du . '_' . $au . '.pdf');
 }
 if (($_GET['export'] ?? '') === 'csv') {
     ptRequireAdmin('export');
@@ -65,13 +67,26 @@ ptAdminHead('Rapports', 'rapports');
     <div><h1>Rapports d'heures</h1><div class="text-muted small">Heures retenues (après tolérance et corrections), du <?= date('d/m/Y', strtotime($du)) ?> au <?= date('d/m/Y', strtotime($au)) ?></div></div>
     <div class="d-flex gap-2">
         <?php if (ptAdminCan('export')): ?>
-            <a class="btn btn-sm btn-pta" href="?<?= h($qs) ?>&export=pdf"><i class="fa fa-file-pdf me-1"></i>PDF</a>
+            <button class="btn btn-sm btn-pta" type="button" data-bs-toggle="collapse" data-bs-target="#pdfH"><i class="fa fa-file-pdf me-1"></i>PDF…</button>
             <a class="btn btn-sm btn-outline-secondary" href="?<?= h($qs) ?>&export=csv"><i class="fa fa-file-csv me-1"></i>Excel (CSV)</a>
         <?php endif; ?>
         <button class="btn btn-sm btn-outline-secondary" onclick="window.print()"><i class="fa fa-print me-1"></i>Imprimer</button>
     </div>
 </div>
 
+<form class="collapse pta-card py-3 d-print-none" id="pdfH" method="get">
+    <input type="hidden" name="du" value="<?= h($du) ?>"><input type="hidden" name="au" value="<?= h($au) ?>">
+    <?php if ($fSite): ?><input type="hidden" name="site" value="<?= $fSite ?>"><?php endif; ?>
+    <?php if ($seulValides): ?><input type="hidden" name="valides" value="1"><?php endif; ?>
+    <input type="hidden" name="export" value="pdf">
+    <div class="small fw-semibold mb-2">Contenu du PDF (les heures totales par agent sont toujours incluses)</div>
+    <div class="d-flex flex-wrap gap-3 small">
+        <label class="form-check"><input class="form-check-input" type="checkbox" name="o[]" value="ventilation" checked><span class="form-check-label">Nuit / dimanche / férié</span></label>
+        <label class="form-check"><input class="form-check-input" type="checkbox" name="o[]" value="sites" checked><span class="form-check-label">Détail par site</span></label>
+        <label class="form-check"><input class="form-check-input" type="checkbox" name="o[]" value="services"><span class="form-check-label">Liste de toutes les vacations</span></label>
+    </div>
+    <button class="btn btn-sm btn-pta mt-2"><i class="fa fa-download me-1"></i>Générer le PDF</button>
+</form>
 <form class="pta-card py-3 row g-2 align-items-end d-print-none" method="get">
     <div class="col-6 col-md-2"><label class="form-label small mb-1">Du</label><input class="form-control form-control-sm" type="date" name="du" value="<?= h($du) ?>"></div>
     <div class="col-6 col-md-2"><label class="form-label small mb-1">Au</label><input class="form-control form-control-sm" type="date" name="au" value="<?= h($au) ?>"></div>

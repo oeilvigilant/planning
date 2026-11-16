@@ -11,6 +11,16 @@ function ptPointsSite(int $missionId, bool $actifsSeulement = true): array {
     return $st->fetchAll();
 }
 
+/** Modes de ronde, réglables site par site. */
+function ptModesRonde(): array {
+    return [
+        'aucune' => 'Pas de ronde sur ce site',
+        'simple' => 'Validation simple : l\'agent coche chaque point',
+        'photo'  => 'Photo à chaque point (preuve visuelle)',
+        'qr'     => 'Scan d\'un QR code collé à chaque point (preuve la plus forte)',
+    ];
+}
+
 function ptGenererCodePoint(): string {
     $alpha = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // sans 0/O/1/I : lisible si saisi à la main
     $c = '';
@@ -34,7 +44,9 @@ function ptEnregistrerPassage(array $agent, array $p, ?int $now = null): array {
     $code = strtoupper(trim((string)($p['code'] ?? '')));
     // Le QR contient une URL : on n'en garde que le code
     if (preg_match('/[?&]C=([A-Z0-9]{16})/', $code, $m)) $code = $m[1];
-    if (!preg_match('/^[A-Z0-9]{16}$/', $code)) return ptErr(400, 'Ce QR code n\'est pas un point de ronde.');
+    $pointId = (int)($p['point_id'] ?? 0);
+    if ($code === '' && !$pointId) return ptErr(400, 'Point de ronde non précisé.');
+    if ($code !== '' && !preg_match('/^[A-Z0-9]{16}$/', $code)) return ptErr(400, 'Ce QR code n\'est pas un point de ronde.');
     $uuid = (string)($p['uuid'] ?? '');
     if ($uuid !== '' && !preg_match('/^[0-9a-f-]{36}$/i', $uuid)) $uuid = '';
 
@@ -44,10 +56,19 @@ function ptEnregistrerPassage(array $agent, array $p, ?int $now = null): array {
         if ($st->fetchColumn()) return ['http' => 200, 'ok' => true, 'deja' => true, 'message' => 'Passage déjà enregistré.'];
     }
 
-    $st = $db->prepare("SELECT pt.*, m.nom AS site_nom, m.actif AS site_actif FROM pt_points pt JOIN missions m ON m.id = pt.mission_id WHERE pt.code = ?");
-    $st->execute([$code]);
+    $sql = "SELECT pt.*, m.nom AS site_nom, m.actif AS site_actif, m.pt_ronde_mode AS mode FROM pt_points pt JOIN missions m ON m.id = pt.mission_id WHERE ";
+    $st = $db->prepare($sql . ($code !== '' ? "pt.code = ?" : "pt.id = ?"));
+    $st->execute([$code !== '' ? $code : $pointId]);
     $pt = $st->fetch();
     if (!$pt || !(int)$pt['actif'] || !(int)$pt['site_actif']) return ptErr(404, 'Point de ronde inconnu ou désactivé.');
+    $mode = $pt['mode'] ?: 'qr';
+    if ($mode === 'aucune') return ptErr(403, 'Les rondes ne sont pas activées sur ce site.');
+    // En mode QR, la preuve est le scan : un simple clic sur le point ne suffit pas
+    if ($mode === 'qr' && $code === '') return ptErr(422, 'Sur ce site, scannez le QR code du point.');
+    $photo = null;
+    if (!empty($p['photo'])) $photo = ptEnregistrerPhoto((string)$p['photo'], 'r' . $agentId);
+    if ($mode === 'photo' && !$photo) return ptErr(422, 'Prenez une photo du point pour le valider.', ['photo_requise' => true]);
+    $methode = $code !== '' ? 'qr' : ($photo ? 'photo' : 'simple');
 
     $ids = array_map('intval', array_column(ptSitesAgent($agentId), 'id'));
     $ouvert = ptServiceOuvert($agentId);
@@ -69,13 +90,14 @@ function ptEnregistrerPassage(array $agent, array $p, ?int $now = null): array {
     $lng = isset($p['lng']) && is_numeric($p['lng']) ? (float)$p['lng'] : null;
     if ($lat === null || $lng === null || abs($lat) > 90 || abs($lng) > 180) $lat = $lng = null;
 
-    $db->prepare("INSERT INTO pt_passages (uuid, point_id, mission_id, agent_id, service_id, scanne_le, lat, lng, precision_m, hors_ligne, note)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+    $db->prepare("INSERT INTO pt_passages (uuid, point_id, mission_id, agent_id, service_id, scanne_le, lat, lng, precision_m, hors_ligne, note, methode, photo)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
        ->execute([$uuid ?: null, $pt['id'], $pt['mission_id'], $agentId,
                   ($ouvert && (int)$ouvert['mission_id'] === (int)$pt['mission_id']) ? $ouvert['id'] : null,
                   date('Y-m-d H:i:s', $ts), $lat, $lng,
                   isset($p['precision']) && is_numeric($p['precision']) ? (int)round($p['precision']) : null,
-                  !empty($p['hors_ligne']) ? 1 : 0, mb_substr(trim((string)($p['note'] ?? '')), 0, 255) ?: null]);
+                  !empty($p['hors_ligne']) ? 1 : 0, mb_substr(trim((string)($p['note'] ?? '')), 0, 255) ?: null,
+                  $methode, $photo]);
 
     $etat = ptEtatRonde((int)$pt['mission_id'], $agentId, $ts);
     $msg = '✔ ' . $pt['nom'] . ' — ' . date('H\hi', $ts) . '. ';

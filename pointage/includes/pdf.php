@@ -55,8 +55,25 @@ function ptPdfStyle(): string {
     </style>';
 }
 
-/** Rapport client d'une période (mêmes données que le portail). */
-function ptRapportClientPdf(array $p, string $du, string $au): string {
+/** Sections disponibles du rapport client. */
+function ptSectionsRapport(): array {
+    return ['heures' => 'Heures par agent', 'detail' => 'Détail des vacations', 'rondes' => 'Rondes (passages aux points)',
+            'incidents' => 'Incidents', 'main_courante' => 'Main courante', 'signature' => 'Bloc de signature du client'];
+}
+
+/** Sections demandées (GET/POST 's[]'), limitées aux droits du portail ; toutes par défaut. */
+function ptSectionsDemandees(array $p, $demande): array {
+    $all = array_keys(ptSectionsRapport());
+    $s = is_array($demande) && $demande ? array_values(array_intersect($all, $demande)) : $all;
+    if (empty($p['voir_heures'])) $s = array_diff($s, ['heures', 'detail']);
+    if (empty($p['voir_evenements'])) $s = array_diff($s, ['incidents', 'main_courante']);
+    return array_values($s);
+}
+
+/** Rapport client d'une période (mêmes données que le portail), sections au choix. */
+function ptRapportClientPdf(array $p, string $du, string $au, ?array $sections = null): string {
+    $sections = $sections ?? ptSectionsDemandees($p, null);
+    $avec = function ($s) use ($sections) { return in_array($s, $sections, true); };
     $db = getDB();
     $in = implode(',', array_map('intval', $p['mission_ids']));
     $sites = $db->query("SELECT id, nom FROM missions WHERE id IN ($in) ORDER BY nom")->fetchAll();
@@ -75,12 +92,12 @@ function ptRapportClientPdf(array $p, string $du, string $au): string {
     $st->execute([$du . ' 00:00:00', $au . ' 23:59:59']);
     $rondes = $st->fetchAll();
 
-    $evs = [];
-    if ($p['voir_evenements']) {
+    $evs = []; $mc = [];
+    if (!empty($p['voir_evenements'])) {
         $st = $db->prepare("SELECT e.*, a.prenom, a.nom, m.nom AS site_nom FROM pt_evenements e JOIN agents a ON a.id = e.agent_id LEFT JOIN missions m ON m.id = e.mission_id
-            WHERE e.mission_id IN ($in) AND e.visible_client = 1 AND e.type IN ('incident','sos') AND e.survenu_le BETWEEN ? AND ? ORDER BY e.survenu_le");
+            WHERE e.mission_id IN ($in) AND e.visible_client = 1 AND e.survenu_le BETWEEN ? AND ? ORDER BY e.survenu_le");
         $st->execute([$du . ' 00:00:00', $au . ' 23:59:59']);
-        $evs = $st->fetchAll();
+        foreach ($st->fetchAll() as $e) { if ($e['type'] === 'main_courante') $mc[] = $e; else $evs[] = $e; }
     }
     $st = $db->prepare("SELECT * FROM pt_signatures WHERE portail_id = ? AND periode_du = ? AND periode_au = ? ORDER BY id DESC LIMIT 1");
     $st->execute([$p['id'], $du, $au]);
@@ -103,11 +120,13 @@ function ptRapportClientPdf(array $p, string $du, string $au): string {
     <td><div class="v"><?= count($evs) ?></div>incident(s)</td>
 </tr></table>
 
-<?php if ($p['voir_heures']): ?>
+<?php if ($avec('heures')): ?>
 <h2>Heures par agent</h2>
 <table><tr><th>Agent</th><th class="r">Heures</th></tr>
 <?php foreach ($parAgent as $n => $m): ?><tr><td><?= h($n) ?></td><td class="r"><?= ptFormatDuree($m) ?></td></tr><?php endforeach; ?>
 </table>
+<?php endif; ?>
+<?php if ($avec('detail')): ?>
 <h2>Détail des vacations</h2>
 <table><tr><th>Date</th><th>Agent</th><th>Site</th><th>Horaires</th><th class="r">Durée</th></tr>
 <?php foreach ($services as $s): ?><tr><td><?= date('d/m', strtotime($s['debut_retenu'])) ?></td><td><?= h(ptNomCourt($s['prenom'], $s['nom'])) ?></td><td><?= h($s['site_nom']) ?></td>
@@ -116,7 +135,7 @@ function ptRapportClientPdf(array $p, string $du, string $au): string {
 </table>
 <?php endif; ?>
 
-<?php if ($rondes): ?>
+<?php if ($rondes && $avec('rondes')): ?>
 <h2>Rondes — passages aux points de contrôle</h2>
 <table><tr><th>Site</th><th>Point</th><th class="r">Passages</th><th>Premier</th><th>Dernier</th></tr>
 <?php foreach ($rondes as $r): ?><tr><td><?= h($r['site_nom']) ?></td><td><?= h($r['point_nom']) ?></td><td class="r"><?= (int)$r['n'] ?></td>
@@ -124,8 +143,9 @@ function ptRapportClientPdf(array $p, string $du, string $au): string {
 </table>
 <?php endif; ?>
 
-<?php if ($evs): ?>
+<?php if ($avec('incidents')): ?>
 <h2>Incidents signalés</h2>
+<?php if (!$evs): ?><div class="muted">Aucun incident sur la période.</div><?php endif; ?>
 <table><tr><th>Date</th><th>Site</th><th>Nature</th><th>Description et suite donnée</th></tr>
 <?php foreach ($evs as $e): ?><tr><td><?= date('d/m H\hi', strtotime($e['survenu_le'])) ?></td><td><?= h((string)$e['site_nom']) ?></td>
     <td><?= h($e['type'] === 'sos' ? 'Alerte agent' : (ptCategories('incident')[$e['categorie']] ?? $e['categorie'])) ?></td>
@@ -133,6 +153,17 @@ function ptRapportClientPdf(array $p, string $du, string $au): string {
 </table>
 <?php endif; ?>
 
+<?php if ($avec('main_courante')): ?>
+<h2>Main courante</h2>
+<table><tr><th>Date</th><th>Site</th><th>Entrée</th><th>Agent</th></tr>
+<?php foreach ($mc as $e): ?><tr><td><?= date('d/m H\hi', strtotime($e['survenu_le'])) ?></td><td><?= h((string)$e['site_nom']) ?></td>
+    <td><strong><?= h(ptCategories('main_courante')[$e['categorie']] ?? $e['categorie']) ?></strong> — <?= nl2br(h((string)$e['description'])) ?></td>
+    <td><?= h(ptNomCourt($e['prenom'], $e['nom'])) ?></td></tr><?php endforeach; ?>
+<?php if (!$mc): ?><tr><td colspan="4" class="muted">Aucune entrée sur la période.</td></tr><?php endif; ?>
+</table>
+<?php endif; ?>
+
+<?php if ($avec('signature')): ?>
 <h2>Validation du client</h2>
 <?php if ($sig): ?>
     <div class="sig"><img src="<?= h($sig['signature']) ?>" style="height:22mm"><br>
@@ -141,29 +172,41 @@ function ptRapportClientPdf(array $p, string $du, string $au): string {
 <?php else: ?>
     <div class="sig muted" style="height:22mm">Non signé à la date d'édition. Signature en ligne possible depuis votre portail.</div>
 <?php endif; ?>
+<?php endif; ?>
 </body></html>
 <?php
     return ptPdfDepuisHtml((string)ob_get_clean());
 }
 
 /** Rapport d'heures interne (ventilé nuit / dimanche / férié). */
-function ptRapportHeuresPdf(array $agents, array $tot, string $du, string $au, string $titreSite): string {
+function ptRapportHeuresPdf(array $agents, array $tot, string $du, string $au, string $titreSite, array $opts = ['ventilation', 'sites']): string {
+    $v = in_array('ventilation', $opts, true); $sitesOn = in_array('sites', $opts, true); $svc = in_array('services', $opts, true);
     ob_start(); ?>
 <html><head><meta charset="UTF-8"><?= ptPdfStyle() ?></head><body>
 <div class="marque"><?= h(mb_strtoupper(ptMarque())) ?></div>
 <h1>Rapport d'heures</h1>
 <div>Du <?= date('d/m/Y', strtotime($du)) ?> au <?= date('d/m/Y', strtotime($au)) ?> · <?= h($titreSite) ?> · <span class="muted">édité le <?= date('d/m/Y H:i') ?></span></div>
 <table class="kpis" style="margin-top:4mm"><tr>
-    <td><div class="v"><?= ptFormatDuree($tot['total']) ?></div>total</td><td><div class="v"><?= ptFormatDuree($tot['nuit']) ?></div>dont nuit</td>
-    <td><div class="v"><?= ptFormatDuree($tot['dimanche']) ?></div>dont dimanche</td><td><div class="v"><?= ptFormatDuree($tot['ferie']) ?></div>dont férié</td>
+    <td><div class="v"><?= ptFormatDuree($tot['total']) ?></div>total</td>
+    <?php if ($v): ?><td><div class="v"><?= ptFormatDuree($tot['nuit']) ?></div>dont nuit</td>
+    <td><div class="v"><?= ptFormatDuree($tot['dimanche']) ?></div>dont dimanche</td><td><div class="v"><?= ptFormatDuree($tot['ferie']) ?></div>dont férié</td><?php endif; ?>
 </tr></table>
 <h2>Par agent</h2>
-<table><tr><th>Matricule</th><th>Agent</th><th class="r">Services</th><th class="r">Total</th><th class="r">Nuit</th><th class="r">Dimanche</th><th class="r">Férié</th><th>Sites</th></tr>
+<table><tr><th>Matricule</th><th>Agent</th><th class="r">Services</th><th class="r">Total</th>
+    <?php if ($v): ?><th class="r">Nuit</th><th class="r">Dimanche</th><th class="r">Férié</th><?php endif; ?><?php if ($sitesOn): ?><th>Sites</th><?php endif; ?></tr>
 <?php foreach ($agents as $a): ?><tr><td><?= h((string)$a['matricule']) ?></td><td><?= h($a['nom']) ?><?= $a['verif'] ? ' <span class="muted">(' . $a['verif'] . ' à vérifier)</span>' : '' ?></td>
-    <td class="r"><?= $a['n'] ?></td><td class="r"><strong><?= ptFormatDuree($a['total']) ?></strong></td><td class="r"><?= ptFormatDuree($a['nuit']) ?></td>
-    <td class="r"><?= ptFormatDuree($a['dimanche']) ?></td><td class="r"><?= ptFormatDuree($a['ferie']) ?></td>
-    <td><?php foreach ($a['sites'] as $sn => $m) echo h($sn) . ' : ' . ptFormatDuree($m) . '<br>'; ?></td></tr><?php endforeach; ?>
+    <td class="r"><?= $a['n'] ?></td><td class="r"><strong><?= ptFormatDuree($a['total']) ?></strong></td>
+    <?php if ($v): ?><td class="r"><?= ptFormatDuree($a['nuit']) ?></td><td class="r"><?= ptFormatDuree($a['dimanche']) ?></td><td class="r"><?= ptFormatDuree($a['ferie']) ?></td><?php endif; ?>
+    <?php if ($sitesOn): ?><td><?php foreach ($a['sites'] as $sn => $m) echo h($sn) . ' : ' . ptFormatDuree($m) . '<br>'; ?></td><?php endif; ?></tr><?php endforeach; ?>
 </table>
+<?php if ($svc): foreach ($agents as $a): ?>
+<h2><?= h($a['nom']) ?> — <?= ptFormatDuree($a['total']) ?></h2>
+<table><tr><th>Date</th><th>Site</th><th>Horaires</th><th class="r">Durée</th><th>Statut</th></tr>
+<?php foreach ($a['services'] ?? [] as $s): ?><tr><td><?= date('d/m/Y', strtotime($s['debut'])) ?></td><td><?= h($s['site']) ?></td>
+    <td><?= date('H\hi', strtotime($s['debut'])) ?> → <?= date('H\hi', strtotime($s['fin'])) ?></td><td class="r"><?= ptFormatDuree($s['min']) ?></td>
+    <td><?= ['valide' => 'Validé', 'ok' => 'Conforme', 'a_verifier' => 'À vérifier'][$s['statut']] ?? $s['statut'] ?></td></tr><?php endforeach; ?>
+</table>
+<?php endforeach; endif; ?>
 </body></html>
 <?php
     return ptPdfDepuisHtml((string)ob_get_clean(), 'landscape');

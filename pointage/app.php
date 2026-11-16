@@ -141,6 +141,9 @@ ptHead('Accueil');
     <?php else: ?>
         <span class="pt-action disabled"><i class="fa-brands fa-whatsapp"></i>WhatsApp<br><span class="pt-small">Non renseigné</span></span>
     <?php endif; ?>
+    <?php $groupe = ptGroupeWhatsapp($site); if ($groupe): ?>
+    <a class="pt-action" target="_blank" rel="noopener" href="<?= h($groupe) ?>" style="grid-column:1 / -1"><i class="fa-brands fa-whatsapp" style="color:#25d366"></i>Groupe WhatsApp<?= $site ? ' — ' . h($site['nom']) : '' ?></a>
+    <?php endif; ?>
     <a class="pt-action" href="<?= h(ptUrl('evenement.php')) ?>"><i class="fa fa-triangle-exclamation"></i>Signaler<br><span class="pt-muted pt-small">Incident, photo</span></a>
     <a class="pt-action" href="<?= h(ptUrl('evenement.php?type=main_courante')) ?>"><i class="fa fa-book"></i>Main courante<br><span class="pt-muted pt-small">Rondes, passation</span></a>
 </div>
@@ -148,8 +151,8 @@ ptHead('Accueil');
 <?php
 $siteRonde = $site ? (int)$site['id'] : 0;
 $nbPoints = 0;
-if ($siteRonde) { $nbPoints = count(ptPointsSite($siteRonde)); }
-elseif ($sites) { foreach ($sites as $s) $nbPoints += count(ptPointsSite((int)$s['id'])); }
+if ($siteRonde) { $nbPoints = ($site['pt_ronde_mode'] ?? 'aucune') !== 'aucune' ? count(ptPointsSite($siteRonde)) : 0; }
+elseif ($sites) { foreach ($sites as $s) if (($s['pt_ronde_mode'] ?? 'aucune') !== 'aucune') $nbPoints += count(ptPointsSite((int)$s['id'])); }
 if ($nbPoints):
     $etatR = $siteRonde ? ptEtatRonde($siteRonde, $agentId) : null; ?>
 <a class="pt-btn pt-btn-ghost" href="<?= h(ptUrl('ronde.php')) ?>" style="margin-bottom:14px;border-color:var(--pt-gold)">
